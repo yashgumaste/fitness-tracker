@@ -2934,6 +2934,17 @@ Reply ONLY with valid JSON (no markdown):
   const waterCfg={on:false,start:'09:00',end:'21:00',every:90,...(prefs.water||{})};
   const lastDrink=Math.max(0,...Object.values(waterLog).flat().map(x=>x.ts||0));
   const [waterPlan,setWaterPlan]=useState(null);
+  // Move reminders (sitting too long)
+  const moveCfg={on:false,mins:60,start:'09:00',end:'21:00',...(prefs.move||{})};
+  const [movePlan,setMovePlan]=useState(null);
+  useEffect(()=>{
+    if(!storageReady||!window.LMNative?.planMove)return;
+    let gone=false;window.LMNative.planMove(moveCfg).then(r=>{if(gone)return;setMovePlan(r);
+      if(moveCfg.on&&!r.ok&&r.reason!=='web'){setPrefs(p=>({...p,move:{...moveCfg,on:false}}));
+        showToast(r.reason==='nosensor'?'This phone has no step sensor, so move reminders can’t work':r.reason==='notifications'?'Allow notifications to get move reminders':'Allow “Physical activity” to get move reminders','var(--warn)');}});
+    return()=>{gone=true;};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[storageReady,moveCfg.on,moveCfg.mins,moveCfg.start,moveCfg.end]);
   useEffect(()=>{
     if(!storageReady||!window.LMNative)return;
     let gone=false;const run=()=>window.LMNative.planWater(waterCfg,lastDrink).then(r=>{if(!gone)setWaterPlan(r);}).catch(e=>console.warn(e));
@@ -3691,6 +3702,27 @@ Reply ONLY with valid JSON (no markdown):
       </div>
     </>);
   }
+  function renderMoveSettings(){
+    const c=moveCfg;const setM=f=>setPrefs(p=>({...p,move:{...c,...f}}));
+    const native=window.LMNative?.isNative;
+    return(<>
+      <div className="x-card" style={{display:'flex',flexDirection:'column',gap:12}}>
+        <div className="x-sub">If you’ve barely moved for a while, the app sends a nudge to take a short walk. It uses your phone’s step counter, even when the app is closed.</div>
+        <Seg items={[['off','Off'],['on','On']]} value={c.on?'on':'off'} onChange={v=>setM({on:v==='on'})}/>
+        {c.on&&<>
+          <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Remind me after sitting for</div>
+          <div className="x-chips">{[[30,'30 min'],[45,'45 min'],[60,'1 h'],[90,'1 h 30'],[120,'2 h']].map(([m,l])=><button key={m} className={`x-chip${+c.mins===m?' on':''}`} onClick={()=>setM({mins:m})}>{l}</button>)}</div>
+          <div className="x-grid2">
+            <label className="x-lab">From<input type="time" className="x-field" value={c.start} onChange={e=>e.target.value&&setM({start:e.target.value})}/></label>
+            <label className="x-lab">Until<input type="time" className="x-field" value={c.end} onChange={e=>e.target.value&&setM({end:e.target.value})}/></label>
+          </div>
+          <div className="x-sub">“Barely moved” means fewer than 60 steps. You get at most one nudge per sitting. Android may delay a check by a few minutes to save battery, and steps only count while the phone is with you.
+            {!native?' Works in the Android app.':''}</div>
+          {native&&<button className="x-btn outline" onClick={()=>window.LMNative.testMove().then(ok=>showToast(ok?'Test nudge sent':'Notifications are blocked','var(--ok)'))}>Send a test nudge</button>}
+        </>}
+      </div>
+    </>);
+  }
   function renderSettingsX(){
     const G={...DEFAULT_GOALS,...(prefs.goals||{})};
     const gd=goalDraft||Object.fromEntries(Object.entries(G).map(([k,v])=>[k,String(v)]));
@@ -3714,6 +3746,7 @@ Reply ONLY with valid JSON (no markdown):
       ['goals','🎯','Goals',`${fmtN(G.calMin)}–${fmtN(G.calMax)} kcal · ${G.protein} g protein · ${G.steps/1000}k steps`,'amber'],
       ['ai','✨','AI',prov==='claude'?'Claude (your key)':'Free (Gemini)','pri'],
       ['reminders','💧','Water reminders',waterCfg.on?`Every ${waterCfg.every} min, ${fmt12(waterCfg.start)}–${fmt12(waterCfg.end)}`:'Off','sky'],
+      ['move','🚶','Move reminders',moveCfg.on?`After ${moveCfg.mins>=60?(moveCfg.mins/60)+' h':moveCfg.mins+' min'} still, ${fmt12(moveCfg.start)}–${fmt12(moveCfg.end)}`:'Off','mint'],
       ['health','❤️','Health Connect',window.LMNative?.isNative?(hcOn?'Connected':'Not connected'):'Android app only','pink'],
       ['look','🎨','Theme & colour',`${{system:'Follows phone',light:'Light',dark:'Dark'}[themeMode]} · ${(ACCENTS.find(([h])=>h.toLowerCase()===accent.toLowerCase())||[0,'Custom'])[1]}`,'mint'],
       ['data','💾','Data & backup',`${dietEntries.length} meals · save to Drive or restore`,'amber'],
@@ -3783,6 +3816,7 @@ Reply ONLY with valid JSON (no markdown):
     }
     if(settingsPage==='ai')content=<div className="x-wrap" style={{paddingTop:0}}>{renderAISettings()}</div>;
     if(settingsPage==='reminders')content=<div className="x-wrap" style={{paddingTop:0}}>{renderWaterSettings()}</div>;
+    if(settingsPage==='move')content=<div className="x-wrap" style={{paddingTop:0}}>{renderMoveSettings()}</div>;
     if(settingsPage==='health')content=renderHealthSettings();
     if(settingsPage==='look')content=<div className="x-wrap" style={{paddingTop:0}}>
       <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Theme</div>

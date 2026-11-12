@@ -7,9 +7,10 @@ const run=parseInt(process.env.RUN||'1',10);
 // Manifest
 const mf=path.join(app,'src/main/AndroidManifest.xml');
 let m=fs.readFileSync(mf,'utf8');
-for(const perm of ['android.permission.POST_NOTIFICATIONS','android.permission.RECEIVE_BOOT_COMPLETED','android.permission.WAKE_LOCK','android.permission.REQUEST_INSTALL_PACKAGES']){
+for(const perm of ['android.permission.POST_NOTIFICATIONS','android.permission.RECEIVE_BOOT_COMPLETED','android.permission.WAKE_LOCK','android.permission.REQUEST_INSTALL_PACKAGES','android.permission.ACTIVITY_RECOGNITION']){
   if(!m.includes(perm))m=m.replace('</manifest>',`    <uses-permission android:name="${perm}" />\n</manifest>`);
 }
+if(!m.includes('android.hardware.sensor.stepcounter'))m=m.replace('</manifest>','    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />\n</manifest>');
 if(!/windowSoftInputMode/.test(m))m=m.replace(/<activity\b/,'<activity\n            android:windowSoftInputMode="adjustResize"');
 if(!/android:allowBackup/.test(m))m=m.replace(/<application\b/,'<application\n        android:allowBackup="true"');
 else m=m.replace(/android:allowBackup="false"/,'android:allowBackup="true"');
@@ -62,6 +63,7 @@ if(!ag.includes('kotlin-android')){
 dependencies {
     implementation "androidx.health.connect:connect-client:1.1.0"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
+    implementation "androidx.work:work-runtime-ktx:2.10.1"
 }
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(android.compileOptions.targetCompatibility.toString())) }
@@ -76,6 +78,7 @@ const javaDir=path.join(app,'src/main/java/com/yashgumaste/fitnesstracker');
 fs.copyFileSync(path.join(__dirname,'..','native','AppIconPlugin.java'),path.join(javaDir,'AppIconPlugin.java'));
 fs.copyFileSync(path.join(__dirname,'..','native','HealthConnectPlugin.kt'),path.join(javaDir,'HealthConnectPlugin.kt'));
 fs.copyFileSync(path.join(__dirname,'..','native','AppUpdatePlugin.java'),path.join(javaDir,'AppUpdatePlugin.java'));
+fs.copyFileSync(path.join(__dirname,'..','native','MoveReminderPlugin.kt'),path.join(javaDir,'MoveReminderPlugin.kt'));
 const ma=path.join(javaDir,'MainActivity.java');
 let j=fs.readFileSync(ma,'utf8');
 if(!j.includes('AppIconPlugin')){
@@ -86,6 +89,7 @@ if(!j.includes('AppIconPlugin')){
         registerPlugin(AppIconPlugin.class);
         registerPlugin(HealthConnectPlugin.class);
         registerPlugin(AppUpdatePlugin.class);
+        registerPlugin(MoveReminderPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }`);
@@ -106,6 +110,12 @@ const dr=path.join(app,'src/main/res/drawable');fs.mkdirSync(dr,{recursive:true}
 fs.writeFileSync(path.join(dr,'ic_stat_water.xml'),`<vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
   <path android:fillColor="#FFFFFFFF" android:pathData="M12,2.2C12,2.2 5.5,9.6 5.5,14.4C5.5,18.1 8.4,21 12,21C15.6,21 18.5,18.1 18.5,14.4C18.5,9.6 12,2.2 12,2.2Z"/>
+</vector>
+`);
+// Notification icon for move reminders (white walking figure)
+fs.writeFileSync(path.join(dr,'ic_stat_walk.xml'),`<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+  <path android:fillColor="#FFFFFFFF" android:pathData="M13.5,5.5C14.6,5.5 15.5,4.6 15.5,3.5S14.6,1.5 13.5,1.5 11.5,2.4 11.5,3.5 12.4,5.5 13.5,5.5ZM9.8,8.9L7,23H9.1L10.9,15L13,17V23H15V15.5L12.9,13.5L13.5,10.5C14.8,12 16.8,13 19,13V11C17.1,11 15.5,10 14.7,8.6L13.7,7C13.3,6.4 12.7,6 12,6C11.7,6 11.5,6.1 11.2,6.1L6,8.3V13H8V9.6L9.8,8.9Z"/>
 </vector>
 `);
 console.log('android patched · versionCode',run);
