@@ -26,6 +26,11 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const walks={};for(let i=0;i<7;i++){const d=new Date('2026-11-09T12:00:00+05:30');d.setDate(d.getDate()-i);const k=d.toLocaleDateString('en-CA');
       walks[k]={morning:{from:'06:15',to:'06:45',steps:'3400',km:'2.1'},dayTotal:'9000'};}
     localStorage.setItem('lm-walk-v1',JSON.stringify(walks));
+    // phone steps in 10-minute slices for "today": a brisk morning walk, everyday steps, an evening stroll
+    const b=Array(144).fill(0);for(let i=48;i<126;i++)b[i]=(i*37)%9===0?160:40;
+    [[37,700],[38,1120],[39,1100],[40,980],[41,500]].forEach(([i,v])=>b[i]=v);
+    [[110,520],[111,640],[112,600]].forEach(([i,v])=>b[i]=v);
+    localStorage.setItem('lm-steps-v1',JSON.stringify({'2026-11-09':{b,at:Date.now()}}));
     localStorage.setItem('lm-weight-v1',JSON.stringify({'2026-11-06':79.1,'2026-11-09':78.8}));
     localStorage.setItem('kv:anthropic_key','sk-ant-test');
     // fake AI: answers in Claude's or Gemini's format depending on where the app sends it
@@ -79,6 +84,12 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
       await click('.x-item',t);await W();if(!(await p.$('[aria-label="Back to settings"]')))throw new Error(t+' page did not open');
       await p.click('[aria-label="Back to settings"]');await W();}
     await click('.x-item','Goals');await expect('Daily goals');await expect('Goal weight');await p.click('[aria-label="Back to settings"]');});
+  await step('Steps page',async()=>{await tab(0);await p.click('[aria-label="Steps and walks"]');await W(500);
+    await expect('By the hour');await expect('Brisk morning walk');await expect('Evening stroll');await expect('Everyday movement');await expect('kcal burned by moving');
+    for(const v of ['Week','Month','Year']){await click('.x-seg button',v);await expect('Average a day');}
+    await click('.x-seg button','Day');await p.click('[aria-label="Earlier"]');await W();await expect('Back to today');
+    await p.click('[aria-label="Back"]');await W();await expect('Timeline');});
+  await step('Burned counts steps',async()=>{await tab(2);if(!(await has('from steps'))&&!(await has('gym + steps')))throw new Error('Burned does not include steps');});
   await step('Move reminders',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Move reminders');
     await click('.x-seg button','On');await expect('Remind me after sitting for');await click('.x-chip','45 min');await click('.x-seg button','Off');
     await p.click('[aria-label="Back to settings"]');await W();});

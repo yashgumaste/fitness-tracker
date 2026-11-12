@@ -282,6 +282,7 @@
     async granted(){if(!HCP)return{read:[],write:[]};try{return await HCP.granted();}catch(_){return{read:[],write:[]};}},
     async authorize(read,write){if(!HCP)return{read:[],write:[]};return HCP.authorize({read,write});},
     async readSteps(days){if(!HCP)return{days:[]};return HCP.readSteps({days});},
+    async readStepBuckets(end,days){if(!HCP)return{days:[]};return HCP.readStepBuckets({end,days,minutes:10});},
     async upsert(records){if(!HCP||!records.length)return{written:0};return HCP.upsert({records});},
     async remove(type,ids){if(!HCP||!ids.length)return;return HCP.remove({type,ids});}
   };

@@ -14,6 +14,7 @@ import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.Device
 import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.request.AggregateGroupByDurationRequest
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.health.connect.client.units.Energy
@@ -31,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -122,6 +124,36 @@ class HealthConnectPlugin : Plugin() {
                         metrics = setOf(StepsRecord.COUNT_TOTAL),
                         timeRangeFilter = TimeRangeFilter.between(d.atStartOfDay(z).toInstant(), d.plusDays(1).atStartOfDay(z).toInstant())))
                     val o = JSObject(); o.put("date", d.toString()); o.put("steps", res[StepsRecord.COUNT_TOTAL] ?: 0L); out.put(o)
+                }
+                val r = JSObject(); r.put("days", out); call.resolve(r)
+            } catch (e: Exception) { call.reject(e.message ?: "Could not read steps") }
+        }
+    }
+
+    /** Steps in fixed slices (default 10 min) for each day, ending at "end" (YYYY-MM-DD, default today). */
+    @PluginMethod
+    fun readStepBuckets(call: PluginCall) {
+        val days = (call.getInt("days", 1) ?: 1).coerceIn(1, 31)
+        val mins = (call.getInt("minutes", 10) ?: 10).coerceIn(5, 60)
+        val z = ZoneId.systemDefault()
+        val end = try { call.getString("end")?.let { LocalDate.parse(it) } } catch (e: Exception) { null } ?: LocalDate.now(z)
+        scope.launch {
+            try {
+                val per = 1440 / mins; val out = JSArray()
+                for (i in 0 until days) {
+                    val d = end.minusDays(i.toLong())
+                    val from = d.atStartOfDay(z).toInstant(); val to = d.plusDays(1).atStartOfDay(z).toInstant()
+                    val res = client().aggregateGroupByDuration(AggregateGroupByDurationRequest(
+                        metrics = setOf(StepsRecord.COUNT_TOTAL),
+                        timeRangeFilter = TimeRangeFilter.between(from, to),
+                        timeRangeSlicer = Duration.ofMinutes(mins.toLong())))
+                    val slots = LongArray(per)
+                    for (g in res) {
+                        val idx = (Duration.between(from, g.startTime).toMinutes() / mins).toInt()
+                        if (idx in 0 until per) slots[idx] += g.result[StepsRecord.COUNT_TOTAL] ?: 0L
+                    }
+                    val b = JSArray(); for (v in slots) b.put(v)
+                    val o = JSObject(); o.put("date", d.toString()); o.put("minutes", mins); o.put("b", b); out.put(o)
                 }
                 val r = JSObject(); r.put("days", out); call.resolve(r)
             } catch (e: Exception) { call.reject(e.message ?: "Could not read steps") }
