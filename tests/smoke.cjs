@@ -35,7 +35,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
       :{content:[{type:'text',text:t}],usage:{input_tokens:100,output_tokens:50}}});
     window.__aiCalls=[];
     window.fetch=async(u,o)=>{
-      if(/api\.github\.com/.test(String(u)))return{ok:true,status:200,json:async()=>({tag_name:'v99.1',html_url:'https://github.com/x/releases/v99.1',assets:[{name:'FitnessTracker-99.1.apk',browser_download_url:'https://github.com/x/FitnessTracker-99.1.apk'}]})};
+      if(/api\.github\.com/.test(String(u)))return{ok:true,status:200,json:async()=>({tag_name:'v99.1',html_url:'https://github.com/x/releases/v99.1',body:'**What\'s new**\n- Faster logging\n- Brighter charts',assets:[{name:'FitnessTracker-99.1.apk',browser_download_url:'https://github.com/x/FitnessTracker-99.1.apk'}]})};
       const body=o&&o.body?String(o.body):'';gem=/generativelanguage/.test(String(u));window.__aiCalls.push(String(u));
       if(/Split each meal/.test(body))return reply('[]');
       // the free AI sometimes answers in words: first reply prose, the retry wraps JSON in a sentence
@@ -104,7 +104,8 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   await step('Free AI used by default',async()=>{const c=await p.evaluate(()=>window.__aiCalls);if(!c.some(u=>/generativelanguage/.test(u)))throw new Error('AI did not go to Gemini: '+c.join(','));});
   await step('Colour picker',async()=>{await tab(4);await click('.x-item','Theme & colour');await click('.x-btn','Make your own colour');for(const m of ['RGB','HSV','Hex'])await click('.x-seg button',m);await close();});
   await step('Update check',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','About & updates');await click('.x-btn','Check for updates');await W(500);
-    await expect('Download version 99.1');await p.click('[aria-label="Back to settings"]');});
+    await expect('Version 99.1');await expect('Faster logging');await expect('Download & install');await expect('Previous versions');await expect('1.12');
+    await p.click('[aria-label="Back to settings"]');});
   await step('Saved to storage',async()=>{await W(1200);const ok=await p.evaluate(()=>Object.keys(localStorage).some(k=>k.startsWith('fs:')));if(!ok)throw new Error('nothing was saved');});
 
   await b.close();
