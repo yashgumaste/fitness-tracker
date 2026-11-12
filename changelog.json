@@ -1,0 +1,67 @@
+{
+  "unreleased": [
+    {
+      "text": "Updates download and install inside the app, with a progress bar. No browser tab needed.",
+      "img": "docs/whatsnew/update-download.png"
+    },
+    {
+      "text": "See what's new in each version, with pictures, in Settings → About & updates.",
+      "img": "docs/whatsnew/whats-new.png"
+    },
+    {
+      "text": "After an update, the app shows what changed the first time you open it."
+    },
+    {
+      "text": "Previous versions are listed one below another with their changes."
+    }
+  ],
+  "releases": [
+    {
+      "version": "1.13",
+      "date": "2026-11-12",
+      "items": [
+        { "text": "Update downloads use Android's downloader, so they no longer get stuck at 100%." }
+      ]
+    },
+    {
+      "version": "1.12",
+      "date": "2026-11-12",
+      "items": [
+        { "text": "Fixed meal macros failing when the AI replied in words instead of numbers (for example, meals with cabbage)." },
+        { "text": "Works with both the free Gemini AI and Claude." }
+      ]
+    },
+    {
+      "version": "1.11",
+      "date": "2026-11-12",
+      "items": [
+        { "text": "The project is now public. Anyone can download the app from GitHub Releases." },
+        { "text": "The app checks for updates when you open it, and Home shows a banner when a new version is out." },
+        { "text": "Settings → About & updates has a Check for updates button." },
+        { "text": "The coach's bullet-point tips show as a proper list." }
+      ]
+    },
+    {
+      "version": "1.6",
+      "date": "2026-11-12",
+      "items": [
+        { "text": "A first-time setup that collects your name, body, goal, daily targets, AI choice and phone connections. Every page can be skipped." },
+        { "text": "Settings grouped by category: Profile, Body, Goals, AI, Water reminders, Health Connect, Theme & colour, Data & backup." },
+        { "text": "A free AI (Gemini) works out of the box. Claude with your own key is still an option." },
+        { "text": "Health Connect reads your phone's steps, and shares meals, water, walks, workouts, weight and sleep with Google Health." },
+        { "text": "The app icon follows your accent colour." },
+        { "text": "Press back again to exit." },
+        { "text": "Prompts appear when a feature needs details you haven't given yet." },
+        { "text": "Fixed the body-fat formula, which read about 6 points too high." }
+      ]
+    },
+    {
+      "version": "1.3",
+      "date": "2026-11-11",
+      "items": [
+        { "text": "The first Android app: the floating island stays put, the back button works, and water reminders arrive with the app closed." },
+        { "text": "Your data is stored on the phone and kept by Android's own backup." }
+      ]
+    }
+  ]
+}

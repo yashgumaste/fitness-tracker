@@ -31,8 +31,11 @@ jobs:
       - id: c
         name: Anything new since the last release?
         run: |
-          if git tag --points-at HEAD | grep -q '^v'; then echo "changed=false" >> $GITHUB_OUTPUT; echo "No changes — skipping tonight's build"
-          else echo "changed=true" >> $GITHUB_OUTPUT; fi
+          # the changelog commit CI makes after each release doesn't count as a change
+          LAST=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
+          N=$(git log --no-merges --format=%s ${LAST:+$LAST..}HEAD | grep -vc '^Changelog:' || true)
+          if [ "${N:-0}" = "0" ]; then echo "changed=false" >> $GITHUB_OUTPUT; echo "No changes — skipping tonight's build"
+          else echo "changed=true" >> $GITHUB_OUTPUT; echo "$N change(s) since ${LAST:-the start}"; fi
 
   build:
     needs: check
@@ -58,14 +61,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: What's new
-        run: |
-          LAST=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
-          { echo "NOTES<<EOF"; git log --no-merges --pretty='- %s' ${LAST:+$LAST..}HEAD | grep -v '^- CI:' | head -40; echo "EOF"; } >> $GITHUB_ENV
-
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+
+      - name: What's new (changelog.json → this version, release notes)
+        run: node scripts/changelog.cjs stamp "$APP_VERSION"
 
       - uses: actions/setup-java@v5
         with:
@@ -147,9 +148,18 @@ jobs:
           name: Fitness Tracker ${{ env.APP_VERSION }} (nightly beta)
           make_latest: true
           files: FitnessTracker-${{ env.APP_VERSION }}.apk
-          body: |
-            Download **FitnessTracker-${{ env.APP_VERSION }}.apk** below and open it on your phone to install or update.
-            Updates install over the old version and keep your data.
+          body_path: release-notes.md
 
-            **What's new**
-            ${{ env.NOTES }}
+      - name: Save the changelog
+        if: github.event_name != 'workflow_dispatch' || inputs.publish
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add changelog.json
+          git commit -q -m "Changelog: $APP_VERSION" || exit 0
+          for i in 1 2 3; do
+            git pull -q --rebase origin main && git push -q origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null; sleep 5
+          done
+          exit 1

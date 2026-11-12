@@ -59,6 +59,31 @@ public class AppUpdatePlugin extends Plugin {
         }
     }
 
+    /** Progress for the in-app bar: state = idle | downloading | done | failed, plus bytes. */
+    @PluginMethod
+    public void status(PluginCall call) {
+        JSObject r = new JSObject();
+        if (pending == -1) { r.put("state", "idle"); call.resolve(r); return; }
+        try (Cursor c = dm().query(new DownloadManager.Query().setFilterById(pending))) {
+            if (c != null && c.moveToFirst()) {
+                int st = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+                r.put("done", c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)));
+                r.put("total", c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)));
+                r.put("state", st == DownloadManager.STATUS_SUCCESSFUL ? "done" : st == DownloadManager.STATUS_FAILED ? "failed" : "downloading");
+            } else r.put("state", "failed");
+        } catch (Exception e) { r.put("state", "failed"); }
+        call.resolve(r);
+    }
+
+    /** Opens the installer again for a finished download (if the person backed out of it). */
+    @PluginMethod
+    public void install(PluginCall call) {
+        if (pending == -1) { call.reject("Nothing downloaded"); return; }
+        installed = false;
+        finish(pending);
+        call.resolve();
+    }
+
     private void listen() {
         if (receiver != null) return;
         receiver = new BroadcastReceiver() {

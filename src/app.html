@@ -1639,6 +1639,8 @@ function App(){
   const [setupOpen,setSetupOpen]=useState(false);
   const [update,setUpdate]=useState(null);   // {latest,url} when a newer release is out
   const [updChecking,setUpdChecking]=useState(false);
+  const [dl,setDl]=useState(null);   // in-app download: {state:'downloading'|'done'|'failed', pct}
+  const dlTimer=useRef(null);
   const [setupStep,setSetupStep]=useState(0);
   const [setupDraft,setSetupDraft]=useState({});
   const [settingsPage,setSettingsPage]=useState(null);
@@ -3119,7 +3121,7 @@ Reply ONLY with valid JSON (no markdown):
         </div>
         <div className="x-wrap" style={{marginTop:14}}>
           {isT&&update&&!updSkipped&&<div style={{display:'flex',gap:8,alignItems:'stretch'}}>
-            <div style={{flex:1,display:'flex'}}><Nudge emoji="🎁" text={`Version ${update.latest} is out`} action="Update" onClick={()=>getUpdate(update)}/></div>
+            <div style={{flex:1,display:'flex'}}><Nudge emoji="🎁" text={`Version ${update.latest} is out`} action="See what’s new" onClick={()=>goSettings('app')}/></div>
             <button className="x-ibtn" aria-label="Not now" onClick={()=>{try{localStorage.setItem('lm-update-skip',update.latest);}catch(_){}setUpdate({...update});}}
               style={{width:44,borderRadius:22,background:'var(--s2)'}}>✕</button></div>}
           {isT&&!prefs.goalsSet&&<Nudge emoji="🎯" text="Your calorie and protein goals are still the defaults" action="Personalise" onClick={()=>goSettings('goals')}/>}
@@ -3819,18 +3821,45 @@ Reply ONLY with valid JSON (no markdown):
           </div>
     </div>;
     if(settingsPage==='app')content=<div className="x-wrap" style={{paddingTop:0}}>
+          {update&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:14,background:'var(--pri-c)',color:'var(--on-pri-c)'}}>
+            <div style={{display:'flex',alignItems:'center',gap:12}}>
+              <Shape kind="cookie9" size={52} fill="var(--pri)" color="var(--on-pri)" font={24}>🎁</Shape>
+              <div style={{flex:1,minWidth:0}}><div className="x-eyebrow" style={{color:'inherit',opacity:.75}}>Update ready</div><h2 style={{margin:0}}>Version {update.latest}</h2></div>
+            </div>
+            {whatsNew(update.items)}
+            {(!dl||dl.state==='failed')&&<>
+              {dl&&<div style={{fontWeight:700}}>The download didn’t finish. Check your internet and try again.</div>}
+              <button className="x-btn" style={{background:'var(--pri)',color:'var(--on-pri)'}} onClick={()=>getUpdate(update)}>⬇ {dl?'Try again':'Download & install'}</button></>}
+            {dl&&dl.state==='downloading'&&<div style={{display:'flex',flexDirection:'column',gap:8}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontWeight:700}}><span>Downloading…</span><span className="x-num">{dl.pct}%</span></div>
+              <WavyBar value={dl.pct} max={100} color="var(--pri)" track="rgba(0,0,0,.18)"/></div>}
+            {dl&&dl.state==='done'&&<>
+              <div style={{fontWeight:700}}>Downloaded ✓ — tap Install on the next screen. Your data stays.</div>
+              <button className="x-btn" style={{background:'var(--pri)',color:'var(--on-pri)'}} onClick={()=>window.LMNative.installUpdate()}>Install now</button></>}
+            {!dl&&<div style={{fontSize:13,opacity:.8}}>The first time, Android may ask you to allow Fitness Tracker to install apps.</div>}
+          </div>}
           <div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
             <div style={{display:'flex',alignItems:'baseline',gap:8}}><b style={{flex:1}}>Version</b><span className="x-sub">{window.LMNative?.version}</span></div>
-            {update&&<button className="x-btn" onClick={()=>getUpdate(update)}>🎁 Download version {update.latest}</button>}
             <button className="x-btn tonal" disabled={updChecking} onClick={async()=>{
               if(!window.LMNative?.checkUpdate){window.LMNative.openUrl(window.LMNative.releasesUrl);return;}
               setUpdChecking(true);const u=await window.LMNative.checkUpdate(true);setUpdChecking(false);
               if(!u)showToast('Couldn’t reach GitHub — check your internet','var(--warn)');
               else if(u.newer){setUpdate(u);try{localStorage.removeItem('lm-update-skip');}catch(_){}}
               else showToast('You have the latest version','var(--ok)');}}>{updChecking?'Checking…':'🔄 Check for updates'}</button>
-            <button className="x-btn ghost" onClick={()=>window.LMNative.openUrl(window.LMNative.releasesUrl)}>All releases & what’s new</button>
             <div className="x-sub">The app checks by itself when you open it. Updates install over this version and keep your data.</div>
           </div>
+          {curRel&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div><div className="x-eyebrow">What’s new in this version</div><h2 style={{margin:'4px 0 0'}}>{curRel.version} <span className="x-sub" style={{fontSize:14,fontWeight:500}}>· {fmtRelDate(curRel.date)}</span></h2></div>
+            {whatsNew(curRel.items)}
+          </div>}
+          {prevRels.length>0&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:16}}>
+            <div className="x-eyebrow">Previous versions</div>
+            {prevRels.map((r,i)=><div key={r.version} style={{display:'flex',flexDirection:'column',gap:8,paddingTop:i?14:0,borderTop:i?'1px solid var(--line)':'none'}}>
+              <div style={{display:'flex',alignItems:'baseline',gap:8}}><b style={{fontSize:18}}>{r.version}</b><span className="x-sub">{fmtRelDate(r.date)}</span></div>
+              {whatsNew(r.items,false)}
+            </div>)}
+            <button className="x-btn ghost" onClick={()=>window.LMNative.openUrl(window.LMNative.releasesUrl)}>All releases on GitHub</button>
+          </div>}
       <button className="x-btn outline" onClick={()=>startSetup('welcome')}>🔁 Run the setup again</button>
     </div>;
     return(
@@ -4307,6 +4336,12 @@ Reply ONLY with valid JSON (no markdown):
       lead=<Shape kind="flower" size={52} fill="var(--pri-c)" font={22}>🎨</Shape>;
       body=<ColorPicker initial={prefs.accent||'#00FFFF'} onCancel={close} onApply={hex=>{setPrefs(p=>({...p,accent:hex}));showToast('Colour applied','var(--ok)');close();}}/>;
     }
+    else if(s.type==='whatsnew'&&curRel){
+      title='What’s new in '+curRel.version;sub='You’re up to date · '+fmtRelDate(curRel.date);
+      lead=<Shape kind="cookie12" size={52} fill="var(--pri-c)" color="var(--pri)" font={24}>🎉</Shape>;
+      body=whatsNew(curRel.items);
+      foot=<button className="x-btn" onClick={close}>Got it</button>;
+    }
     else if(s.type==='import'){
       title='Import a backup';sub='Only new entries are added — nothing is overwritten';
       lead=<Shape kind="cookie12" size={52} fill="var(--pri-c)" color="var(--pri)" font={24}>⬆</Shape>;
@@ -4665,8 +4700,37 @@ Reply ONLY with valid JSON (no markdown):
     run();window.addEventListener('lm-resume',run);return()=>window.removeEventListener('lm-resume',run);
   },[]);
   const updSkipped=update&&(()=>{try{return localStorage.getItem('lm-update-skip')===update.latest;}catch(_){return false;}})();
-  const getUpdate=async u=>{const how=await window.LMNative.downloadUpdate(u);
-    showToast(how==='native'?'Downloading '+u.latest+'… the installer opens when it’s done':'Download '+u.latest+' from the page, then open it to install','var(--ok)');};
+  const getUpdate=async u=>{
+    const how=await window.LMNative.downloadUpdate(u);
+    if(how!=='native'){showToast('Download '+u.latest+' from the page, then open it to install','var(--ok)');return;}
+    setDl({state:'downloading',pct:0});clearInterval(dlTimer.current);
+    dlTimer.current=setInterval(async()=>{const st=await window.LMNative.updateStatus();
+      if(st.state==='downloading')setDl({state:'downloading',pct:st.total>0?Math.min(99,Math.round(100*st.done/st.total)):0});
+      else{clearInterval(dlTimer.current);setDl(st.state==='done'?{state:'done',pct:100}:{state:'failed'});}},500);
+  };
+  useEffect(()=>()=>clearInterval(dlTimer.current),[]);
+  // What's new: the changelog is built into the app; pictures load from GitHub
+  const CL=window.LM_CHANGELOG||{releases:[]};
+  const appVer=window.LMNative?.version||'';
+  const curRel=(CL.releases||[]).find(r=>r.version===appVer);
+  const prevRels=(CL.releases||[]).filter(r=>r.version!==appVer);
+  const imgUrl=i=>i.img?(/^https?:/.test(i.img)?i.img:(window.LMNative?.rawBase||'')+i.img):null;
+  const fmtRelDate=d=>{try{return new Date(d+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});}catch(_){return d;}};
+  const whatsNew=(items,pics=true)=><div style={{display:'flex',flexDirection:'column',gap:12}}>
+    {(items||[]).map((it,i)=><div key={i} style={{display:'flex',flexDirection:'column',gap:8}}>
+      <div style={{display:'flex',gap:10,alignItems:'flex-start'}}><span style={{color:'var(--pri)',fontWeight:900,lineHeight:1.45}}>•</span><span style={{lineHeight:1.45}}>{it.text}</span></div>
+      {pics&&imgUrl(it)&&<img src={imgUrl(it)} alt="" loading="lazy" onError={e=>{e.currentTarget.style.display='none';}}
+        style={{width:'min(100%,260px)',alignSelf:'center',borderRadius:24,border:'1px solid var(--line)',background:'var(--s2)'}}/>}
+    </div>)}
+    {!(items||[]).length&&<div className="x-sub">Small fixes and improvements.</div>}
+  </div>;
+  // First open after an update: show what changed, once
+  const seenRef=useRef(false);
+  useEffect(()=>{
+    if(!storageReady||seenRef.current||!/^\d/.test(appVer))return;seenRef.current=true;
+    let seen=null;try{seen=localStorage.getItem('lm-seen-version');localStorage.setItem('lm-seen-version',appVer);}catch(_){}
+    if(seen!==appVer&&(seen||prefs.setupDone)&&curRel&&!setupOpen)setTimeout(()=>openSheet('whatsnew'),600);
+  },[storageReady]);
   useEffect(()=>{if(storageReady&&!prefs.setupDone&&!setupOpen)startSetup('welcome');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[storageReady]);

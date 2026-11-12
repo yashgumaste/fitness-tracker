@@ -202,7 +202,8 @@
       const r=await fetch(`https://api.github.com/repos/${REPO}/releases/latest`,{headers:{Accept:'application/vnd.github+json'}});
       if(!r.ok)return null;const j=await r.json();const latest=String(j.tag_name||'').replace(/^v/,'');if(!latest)return null;
       const apk=(j.assets||[]).find(a=>/\.apk$/i.test(a.name));
-      const info={at:Date.now(),latest,url:apk?apk.browser_download_url:j.html_url,page:j.html_url,newer:newerThan(latest,cur)};
+      const newer=newerThan(latest,cur);
+      const info={at:Date.now(),latest,url:apk?apk.browser_download_url:j.html_url,page:j.html_url,newer,items:newer?await notesFor(latest,j.body):[]};
       try{localStorage.setItem('lm-update',JSON.stringify(info));}catch(_){}
       return force||info.newer?info:null;
     }catch(_){return null;}
@@ -216,6 +217,17 @@
   async function downloadUpdate(u){
     if(AppUpdate){try{await AppUpdate.download({url:u.url,name:'FitnessTracker-'+u.latest+'.apk'});return 'native';}catch(e){console.warn('update',e);}}
     openUrl(u.page||u.url);return 'browser';
+  }
+  async function updateStatus(){if(!AppUpdate)return{state:'idle'};try{return await AppUpdate.status();}catch(_){return{state:'failed'};}}
+  async function installUpdate(){if(AppUpdate)await AppUpdate.install();}
+
+  /* What's new for a version: from the changelog on GitHub, else the release notes' bullet lines */
+  const RAW='https://raw.githubusercontent.com/'+REPO+'/main/';
+  async function notesFor(version,body){
+    try{const r=await fetch(RAW+'changelog.json',{cache:'no-store'});if(r.ok){const c=await r.json();
+      const rel=(c.releases||[]).find(x=>x.version===version);
+      if(rel)return rel.items.map(i=>({text:i.text,img:i.img?RAW+i.img:null}));}}catch(_){}
+    return String(body||'').split('\n').filter(l=>/^\s*- /.test(l)).map(l=>({text:l.replace(/^\s*- /,'').trim()}));
   }
 
   /* ── Back button: close a sheet / go home / leave ── */
@@ -264,6 +276,6 @@
   window.LMNative={hc,provider,setProvider:p=>{try{localStorage.setItem('lm-ai-provider',p);}catch(_){}},hasFreeKey,
     setGeminiKey:async k=>{gemKeyCache=k||null;await kv.set('gemini_key',k||null);},hasGeminiKey:async()=>!!(await kv.get('gemini_key')),
 isNative,kv,ask,usage,MODELS,setKey:async k=>{keyCache=k||null;await kv.set('anthropic_key',k||null);},hasKey:async()=>!!(await apiKey()),
-    planWater,testNotification,shareBackup,openUrl,bars,setIcon,checkUpdate,downloadUpdate,version:'__APP_VERSION__',
+    planWater,testNotification,shareBackup,openUrl,bars,setIcon,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
     releasesUrl:'https://github.com/'+REPO+'/releases/latest'};
 })();
