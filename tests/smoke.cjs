@@ -75,10 +75,13 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   for(const v of ['Day','Week','Month','Year'])
     await step('Fitness history '+v,async()=>{await click('.x-seg button','History');await click('.x-seg button',v);await expect('Workouts');});
   await step('Progress',async()=>{await tab(3);await expect('Trends');await expect('Body');});
-  await step('Settings',async()=>{await tab(4);for(const t of ['Profile','Body','Goals','AI','Water reminders','Health Connect','Theme & colour','Data & backup','About & updates']){
+  await step('Settings',async()=>{await tab(4);for(const t of ['Profile','Body','Goals','AI','Water reminders','Move reminders','Health Connect','Theme & colour','Data & backup','About & updates']){
       await click('.x-item',t);await W();if(!(await p.$('[aria-label="Back to settings"]')))throw new Error(t+' page did not open');
       await p.click('[aria-label="Back to settings"]');await W();}
     await click('.x-item','Goals');await expect('Daily goals');await expect('Goal weight');await p.click('[aria-label="Back to settings"]');});
+  await step('Move reminders',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Move reminders');
+    await click('.x-seg button','On');await expect('Remind me after sitting for');await click('.x-chip','45 min');await click('.x-seg button','Off');
+    await p.click('[aria-label="Back to settings"]');await W();});
   await step('Log food with AI',async()=>{await tab(0);await p.evaluate(()=>document.querySelector('.dock-add').click());await W();
     await click('.x-sheet button','Food');await p.fill('.x-sheet textarea','2 boiled eggs');await click('.x-sheet-foot button','Log it');await W(800);
     await tab(1);await expect('2 boiled eggs');await expect('140 kcal');});

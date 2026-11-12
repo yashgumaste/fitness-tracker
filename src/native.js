@@ -191,6 +191,19 @@
   /* ── Open a web page (updates, API console) ── */
   function openUrl(url){if(Browser)Browser.open({url});else window.open(url,'_blank');}
 
+  /* ── Move reminders: a background check of the phone's step counter (native plugin) ── */
+  const Move=plug('MoveReminder');
+  const hm=t=>{const [h,m]=String(t||'0:0').split(':').map(Number);return (h||0)*60+(m||0);};
+  async function planMove(cfg){
+    if(!Move)return{ok:false,reason:'web'};
+    try{
+      if(cfg.on&&LN){const perm=await LN.checkPermissions();if(perm.display!=='granted'){const p=await LN.requestPermissions();if(p.display!=='granted')return{ok:false,reason:'notifications'};}}
+      const r=await Move.configure({on:!!cfg.on,mins:+cfg.mins||60,from:hm(cfg.start),to:hm(cfg.end)});
+      return r.on||!cfg.on?{ok:true}:{ok:false,reason:r.reason||'denied'};
+    }catch(e){return{ok:false,reason:'error'};}
+  }
+  async function testMove(){if(!Move)return false;try{return (await Move.test()).ok;}catch(_){return false;}}
+
   /* ── Updates: ask GitHub for the latest release (public repo, no login needed) ── */
   const REPO='yashgumaste/fitness-tracker';
   const newerThan=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);
@@ -276,6 +289,6 @@
   window.LMNative={hc,provider,setProvider:p=>{try{localStorage.setItem('lm-ai-provider',p);}catch(_){}},hasFreeKey,
     setGeminiKey:async k=>{gemKeyCache=k||null;await kv.set('gemini_key',k||null);},hasGeminiKey:async()=>!!(await kv.get('gemini_key')),
 isNative,kv,ask,usage,MODELS,setKey:async k=>{keyCache=k||null;await kv.set('anthropic_key',k||null);},hasKey:async()=>!!(await apiKey()),
-    planWater,testNotification,shareBackup,openUrl,bars,setIcon,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
+    planWater,testNotification,planMove,testMove,shareBackup,openUrl,bars,setIcon,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
     releasesUrl:'https://github.com/'+REPO+'/releases/latest'};
 })();
