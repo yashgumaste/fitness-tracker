@@ -100,7 +100,8 @@
     const tier=(JSON.parse(localStorage.getItem('lm-ai-models')||'{}'))[kind]||(kind==='fast'?'fast':'smart');
     const M=MODELS[tier]||MODELS.smart;
     const send=async withExtra=>{
-      const body={model:M.id,max_tokens:maxTokens,messages:[{role:'user',content:prompt}],...(withExtra?M.extra:{})};
+      const body={model:M.id,max_tokens:maxTokens,messages:[{role:'user',content:prompt}],
+        ...(json?{system:'You are a nutrition data API. Reply with only the JSON the user asks for: no words, notes or markdown before or after it.'}:{}),...(withExtra?M.extra:{})};
       return fetch('https://api.anthropic.com/v1/messages',{method:'POST',
         headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
         body:JSON.stringify(body)});
