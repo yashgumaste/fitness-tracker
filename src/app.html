@@ -172,6 +172,20 @@ textarea.x-field{resize:none;line-height:1.45;}
 .x-belly button{border:none;min-height:54px;border-radius:14px;background:var(--s3);color:var(--fg2);font-weight:750;font-size:12px;line-height:1.15;padding:4px;}
 .x-belly button.on{background:var(--pink);color:#2a0020;border-radius:24px;}
 
+/* water: a drop falls into the glass, splashes, the level rises */
+@keyframes lm-drop{0%{transform:translateY(-44px) scale(.7);opacity:0}12%{opacity:1}82%{opacity:1}100%{transform:translateY(var(--fall)) scale(1,1.15);opacity:0}}
+@keyframes lm-splash-l{0%{transform:translate(0,0);opacity:0}10%{opacity:1}100%{transform:translate(-9px,-11px);opacity:0}}
+@keyframes lm-splash-r{0%{transform:translate(0,0);opacity:0}10%{opacity:1}100%{transform:translate(9px,-10px);opacity:0}}
+@keyframes lm-ripple{0%{transform:scale(.2,.2);opacity:.9}100%{transform:scale(1.5,1);opacity:0}}
+@keyframes lm-slosh{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+@keyframes lm-bump{0%{transform:scale(1)}35%{transform:scale(1.18)}65%{transform:scale(.95)}100%{transform:scale(1)}}
+.lm-drop{animation:lm-drop .46s cubic-bezier(.55,0,1,.6) both}
+.lm-splash-l{animation:lm-splash-l .42s ease-out both;transform-box:fill-box}
+.lm-splash-r{animation:lm-splash-r .42s ease-out both;transform-box:fill-box}
+.lm-ripple{animation:lm-ripple .55s ease-out both;transform-box:fill-box;transform-origin:center}
+.lm-slosh{animation:lm-slosh .9s ease-in-out both}
+.lm-bump{animation:lm-bump .5s cubic-bezier(.3,1.5,.5,1)}
+@media (prefers-reduced-motion:reduce){.lm-drop,.lm-splash-l,.lm-splash-r,.lm-ripple{animation:none!important;opacity:0}.lm-slosh,.lm-bump{animation:none!important}}
 </style>
 <link rel="stylesheet" href="vendor/fonts.css">
 <style>
@@ -799,14 +813,38 @@ const WATER_KEY='lm-water-v1';  // {date:[{ts,ml}]}
 const WATER_GOAL={ml:3000};
 const DRINKS=[['☕','Cup',150],['🥛','Glass',250],['🍶','Bottle',500],['🧴','Big bottle',750],['💧','1 litre',1000]];
 const fmtL=ml=>ml>=1000?(ml/1000).toFixed(ml%1000?2:0).replace(/0$/,'').replace(/\.$/,'')+' L':ml+' ml';
-// A glass that fills with a wavy water line (static SVG — no animation layers)
-function WaterGlass({pct=0,size=60,color='var(--sky)',glass='var(--on-sky-c)'}){
-  const p=Math.max(0,Math.min(1,pct)),W=60,H=84,top=6,bot=80,y=bot-(bot-top-4)*p;
-  let wave=`M0 ${y}`;for(let x=0;x<=W;x+=2)wave+=` L${x} ${(y+2.4*Math.sin(x/W*2*Math.PI*1.5)).toFixed(2)}`;wave+=` L${W} ${H} L0 ${H}Z`;
-  const cid='wg'+Math.round(p*1000)+size;
-  return(<svg viewBox={`0 0 ${W} ${H}`} width={size*W/H} height={size} aria-hidden="true" style={{display:'block',flex:'none'}}>
+// A glass that fills with a wavy water line. When dropKey changes, drops fall in, splash, and the level rises.
+let wgSeq=0;
+function WaterGlass({pct=0,size=60,color='var(--sky)',glass='var(--on-sky-c)',dropKey,drops=1,bumpKey}){
+  const W=60,H=84,top=6,bot=80,span=bot-top-4;
+  const target=Math.max(0,Math.min(1,pct));
+  const [shown,setShown]=useState(target);const [fx,setFx]=useState(null);
+  const lastKey=useRef(dropKey);const cid=useRef('wg'+(++wgSeq)).current;
+  useEffect(()=>{
+    if(dropKey===lastKey.current||dropKey==null){lastKey.current=dropKey;setShown(target);return;}
+    lastKey.current=dropKey;setFx({k:dropKey,from:shown});
+    const t1=setTimeout(()=>setShown(target),400),t2=setTimeout(()=>setFx(null),400+180*(drops-1)+700);
+    return()=>{clearTimeout(t1);clearTimeout(t2);};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[dropKey,target]);
+  // wave drawn for an empty glass, then lifted to the level (so the rise can animate)
+  let wave=`M-20 ${bot}`;for(let x=-20;x<=W+20;x+=2)wave+=` L${x} ${(bot+2.4*Math.sin(x/W*2*Math.PI*1.5)).toFixed(2)}`;wave+=` L${W+20} ${H+40} L-20 ${H+40}Z`;
+  const lift=span*shown,surf=bot-span*(fx?fx.from:shown);
+  return(<svg viewBox={`0 0 ${W} ${H}`} width={size*W/H} height={size} aria-hidden="true"
+      className={bumpKey?'lm-bump':undefined} key={bumpKey||'g'} style={{display:'block',flex:'none',overflow:'visible'}}>
     <defs><clipPath id={cid}><path d="M6 6 L54 6 L48 78 Q47 81 44 81 L16 81 Q13 81 12 78 Z"/></clipPath></defs>
-    {p>0&&<path d={wave} clipPath={`url(#${cid})`} style={{fill:color}}/>}
+    <g clipPath={`url(#${cid})`}>
+      <g style={{transform:`translateY(${-lift}px)`,transition:'transform .6s cubic-bezier(.3,1.35,.5,1)',opacity:shown>0||fx?1:0}}>
+        <path d={wave} className={fx?'lm-slosh':undefined} key={fx?fx.k:'w'} style={{fill:color}}/>
+      </g>
+    </g>
+    {fx&&Array.from({length:drops}).map((_,i)=><g key={fx.k+'-'+i}>
+      <path d="M30 2 C30 2 24.5 10 24.5 13.6 A5.5 5.5 0 0 0 35.5 13.6 C35.5 10 30 2 30 2Z" className="lm-drop"
+        style={{fill:color,'--fall':`${surf-16}px`,animationDelay:`${i*.18}s`}}/>
+      <ellipse cx="30" cy={surf} rx="10" ry="2.6" className="lm-ripple" style={{fill:'none',stroke:color,strokeWidth:1.6,animationDelay:`${.4+i*.18}s`}}/>
+      <circle cx="26" cy={surf-1} r="1.8" className="lm-splash-l" style={{fill:color,animationDelay:`${.4+i*.18}s`}}/>
+      <circle cx="34" cy={surf-1} r="1.8" className="lm-splash-r" style={{fill:color,animationDelay:`${.4+i*.18}s`}}/>
+    </g>)}
     <path d="M6 6 L54 6 L48 78 Q47 81 44 81 L16 81 Q13 81 12 78 Z" fill="none" style={{stroke:glass}} strokeWidth="4" strokeLinejoin="round"/>
   </svg>);
 }
@@ -2840,9 +2878,9 @@ Reply ONLY with valid JSON (no markdown):
   const waterMl=day=>(waterLog[day]||[]).reduce((a,x)=>a+(+x.ml||0),0);
   const waterDesc=day=>{const ws=[...(waterLog[day]||[])].sort((a,b)=>a.ts-b.ts);if(!ws.length)return '';
     return `${fmtL(waterMl(day))} of ${fmtL(WATER_GOAL.ml)} goal — ${ws.map(x=>`${fmt12(hmOf(x.ts))} ${fmtL(x.ml)}`).join(', ')}`;};
-  function addWater(day,ml,hm){const ts=hm?new Date(day+'T'+hm+':00').getTime():day===TODAY?Date.now():new Date(day+'T13:00:00').getTime();
+  function addWater(day,ml,hm,quiet){const ts=hm?new Date(day+'T'+hm+':00').getTime():day===TODAY?Date.now():new Date(day+'T13:00:00').getTime();
     setWaterLog(p=>{const ex=p[day]||[];let t=ts;while(ex.some(x=>x.ts===t))t++;return {...p,[day]:[...ex,{ts:t,ml}]};});
-    const tot=waterMl(day)+ml;showToast(`💧 +${fmtL(ml)} · ${fmtL(tot)} of ${fmtL(WATER_GOAL.ml)}`,'var(--sky)');}
+    const tot=waterMl(day)+ml;if(!quiet)showToast(`💧 +${fmtL(ml)} · ${fmtL(tot)} of ${fmtL(WATER_GOAL.ml)}`,'var(--sky)');}
   // Everything logged on a day, in time order (meal times from logging; batch-logged meals use typical times)
   function buildTimeline(day){
     const items=[];
@@ -2926,10 +2964,46 @@ Reply ONLY with valid JSON (no markdown):
   useEffect(()=>{window.__lmBack=()=>backRef.current();window.__lmToast=m=>showToast(m,'var(--fg3)');return()=>{window.__lmBack=null;window.__lmToast=null;};},[]);
   // "Log 250 ml" on a reminder notification
   const waterActRef=useRef(null);
-  waterActRef.current=ml=>addWater(localDate(new Date()),ml);
-  useEffect(()=>{window.__lmWater=ml=>waterActRef.current(ml);
-    const q=window.__lmWaterQueue||[];window.__lmWaterQueue=[];q.forEach(ml=>waterActRef.current(ml));
-    return()=>{window.__lmWater=null;};},[]);
+  const [waterFx,setWaterFx]=useState(null);   // {n, ml, day, bump}: animates the small glass
+  const [bigWater,setBigWater]=useState(null); // the big glass after logging from a notification
+  const bigRef=useRef(null);
+  const tapWater=(day,ml)=>{addWater(day,ml);setWaterFx({n:Date.now(),ml,day});};
+  waterActRef.current=ml=>{
+    const day=localDate(new Date()),before=waterMl(day),goal=WATER_GOAL.ml;
+    addWater(day,ml,null,true);
+    setSheet(null);setTab('home');setHomeDay(null);
+    setBigWater({n:Date.now(),ml,from:before/goal,to:(before+ml)/goal,total:before+ml,phase:'in'});
+  };
+  useEffect(()=>{
+    if(!bigWater||bigWater.phase!=='in')return;const n=bigWater.n,ml=bigWater.ml;
+    const t0=setTimeout(()=>{document.getElementById('lm-water-glass')?.scrollIntoView({block:'center'});
+      setBigWater(b=>b&&b.n===n?{...b,phase:'fill'}:b);},350);
+    const t1=setTimeout(()=>{const a=bigRef.current?.getBoundingClientRect(),t=document.getElementById('lm-water-glass')?.getBoundingClientRect();
+      setBigWater(b=>{if(!b||b.n!==n)return b;
+        if(!a||!t||!t.width)return{...b,phase:'out'};
+        return{...b,phase:'shrink',dx:t.left+t.width/2-(a.left+a.width/2),dy:t.top+t.height/2-(a.top+a.height/2),s:t.height/a.height};});},2100);
+    const t2=setTimeout(()=>{setBigWater(b=>b&&b.n===n?null:b);setWaterFx({n:Date.now(),ml,day:localDate(new Date()),bump:true});},2800);
+    return()=>{clearTimeout(t0);clearTimeout(t1);clearTimeout(t2);};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[bigWater&&bigWater.n]);
+  const renderBigWater=()=>{const b=bigWater;if(!b)return null;const gone=b.phase==='shrink'||b.phase==='out';
+    return(<div aria-live="polite" style={{position:'fixed',inset:0,zIndex:300,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:22,
+        background:gone?'rgba(0,0,0,0)':'rgba(0,0,0,.62)',transition:'background .55s',pointerEvents:'none'}}>
+      <div ref={bigRef} style={{transform:b.phase==='shrink'?`translate(${b.dx}px,${b.dy}px) scale(${b.s})`:b.phase==='in'?'scale(.6)':'scale(1)',
+          opacity:b.phase==='fill'?1:b.phase==='shrink'?0:0,
+          transition:b.phase==='shrink'?'transform .65s cubic-bezier(.55,0,.25,1), opacity .15s linear .55s':'transform .45s cubic-bezier(.3,1.4,.5,1), opacity .3s'}}>
+        <WaterGlass pct={b.phase==='in'?b.from:b.to} size={210} dropKey={b.phase==='in'?undefined:b.n} drops={b.ml>=500?2:1} glass="var(--fg)"/>
+      </div>
+      <div style={{textAlign:'center',opacity:b.phase==='fill'?1:0,transform:gone?'translateY(12px)':'none',transition:'opacity .3s, transform .3s'}}>
+        <div className="x-num" style={{fontSize:46,color:'var(--sky)'}}>+{b.ml} ml</div>
+        <div style={{fontWeight:700,fontSize:17,color:'var(--fg)'}}>{fmtL(b.total)} today{b.total>=WATER_GOAL.ml?' · goal reached 🎉':''}</div>
+      </div>
+    </div>);};
+  // notification "Log 250 ml": wait until saved data has loaded, so the drink is added to it (not to an empty day)
+  useEffect(()=>{if(!storageReady)return;window.__lmWater=ml=>waterActRef.current(ml);
+    const q=window.__lmWaterQueue||[];window.__lmWaterQueue=[];
+    if(q.length)setTimeout(()=>q.forEach(ml=>waterActRef.current(ml)),400);
+    return()=>{window.__lmWater=null;};},[storageReady]);
   // Re-plan water reminders when settings change, when you drink, and when the app comes back
   const waterCfg={on:false,start:'09:00',end:'21:00',every:90,...(prefs.water||{})};
   const lastDrink=Math.max(0,...Object.values(waterLog).flat().map(x=>x.ts||0));
@@ -3088,7 +3162,9 @@ Reply ONLY with valid JSON (no markdown):
     return(
       <div className="x-card" style={{background:'var(--sky-c)',color:'var(--on-sky-c)',borderRadius:'18px 40px 18px 40px',display:'flex',gap:14,alignItems:'center',padding:'14px 16px'}}>
         <button onClick={()=>openSheet('water',{date:day},{amt:300})} aria-label="Open water log" style={{border:'none',background:'transparent',padding:0,display:'flex',alignItems:'center',gap:12,flex:1,minWidth:0,textAlign:'left',color:'inherit'}}>
-          <WaterGlass pct={tot/goal} size={64}/>
+          <span id={day===TODAY&&tab==='home'?'lm-water-glass':undefined} style={{display:'flex'}}>
+            <WaterGlass pct={tot/goal} size={64} dropKey={waterFx&&waterFx.day===day&&!waterFx.bump?waterFx.n:undefined}
+              drops={waterFx&&waterFx.ml>=500?2:1} bumpKey={waterFx&&waterFx.day===day&&waterFx.bump?waterFx.n:undefined}/></span>
           <span style={{minWidth:0}}>
             <span className="x-eyebrow" style={{color:'inherit',display:'block'}}>Water</span>
             <span className="x-num" style={{fontSize:28,color:'var(--fg)'}}>{fmtL(tot)}</span>
@@ -3097,7 +3173,7 @@ Reply ONLY with valid JSON (no markdown):
         </button>
         <div style={{display:'flex',flexDirection:'column',gap:6}}>
           {[[250,'🥛'],[500,'🍶']].map(([ml,em])=>(
-            <button key={ml} className="x-btn sm" onClick={()=>addWater(day,ml)} style={{background:'var(--sky)',color:'var(--bg)',minWidth:88}}>{em} +{ml}</button>))}
+            <button key={ml} className="x-btn sm" onClick={()=>tapWater(day,ml)} style={{background:'var(--sky)',color:'var(--bg)',minWidth:88}}>{em} +{ml}</button>))}
         </div>
       </div>);
   }
@@ -4779,6 +4855,7 @@ Reply ONLY with valid JSON (no markdown):
     <div style={{minHeight:'100dvh',background:'var(--bg)',color:'var(--text-primary)',display:'flex',flexDirection:'column',position:'relative'}}>
       {toast&&<div className="x-snack" role="status" style={sheet?{top:'calc(12px + env(safe-area-inset-top,0px))',bottom:'auto'}:null}><i style={{background:toast.color}}/>{toast.msg}</div>}
       {setupOpen&&!sheet&&renderSetup()}
+      {renderBigWater()}
       <div style={{display:sheet||setupOpen?'none':'flex',flexDirection:'column',flex:1}}>
       {tab==='diet'&&<div>{head('Food',dateLong(TODAY))}<div style={{padding:'0 16px 12px'}}><Seg items={[['today','Today'],['history','History']]} value={pillPreview?.dietView||dietView} onChange={setDietView}/></div></div>}
       {tab==='fitness'&&<div>{head('Fitness',fitView==='day'?'Plan · walks · workout':'Your history')}<div style={{padding:'0 16px 12px'}}><Seg items={[['day','Today'],['calendar','History']]} value={pillPreview?.fitView||fitView} onChange={setFitView}/></div></div>}

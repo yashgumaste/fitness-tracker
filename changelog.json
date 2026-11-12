@@ -17,6 +17,10 @@
     {
       "text": "Move reminders: if you've barely moved for a while (you choose 30 min to 2 h, and the hours), you get a nudge to take a short walk. Turn it on in Settings → Move reminders.",
       "img": "docs/whatsnew/move-reminders.png"
+    },
+    {
+      "text": "Water: a drop falls into the glass when you tap +250 or +500. When you log from a reminder notification, a big glass fills in the middle of the screen and then shrinks into the small one.",
+      "img": "docs/whatsnew/water-drop.gif"
     }
   ],
   "releases": [
