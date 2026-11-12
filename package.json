@@ -1,0 +1,31 @@
+{
+  "name": "fitness-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Yash's diet and fitness tracker \u2014 Android app",
+  "scripts": {
+    "build:web": "node scripts/build-web.cjs",
+    "test": "node tests/smoke.cjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "latest",
+    "@capacitor/app": "latest",
+    "@capacitor/browser": "latest",
+    "@capacitor/core": "latest",
+    "@capacitor/filesystem": "latest",
+    "@capacitor/local-notifications": "latest",
+    "@capacitor/preferences": "latest",
+    "@capacitor/share": "latest",
+    "@capacitor/status-bar": "latest",
+    "@fontsource-variable/roboto-flex": "latest",
+    "@fontsource-variable/roboto-serif": "latest",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "latest",
+    "@capacitor/cli": "latest",
+    "esbuild": "latest",
+    "playwright": "latest"
+  }
+}
