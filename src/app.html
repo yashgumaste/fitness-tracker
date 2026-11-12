@@ -1008,9 +1008,17 @@ function getWeekNum(s){const a=new Date(PLAN_START+'T00:00:00'),b=new Date(s+'T0
 function daysBetween(a,b){return Math.round((new Date(b).setHours(0,0,0,0)-new Date(a).setHours(0,0,0,0))/86400000);}
 
 // AI runs through the Claude API with your own key (see native.js). 'fast' = meal maths, 'smart' = coaching.
-async function callAI(prompt,maxTokens=400,kind='smart'){
-  const t=await window.LMNative.ask(prompt,maxTokens,kind);
-  return (t||'').replace(/```json|```/g,'').trim();
+async function callAI(prompt,maxTokens=400,kind='smart',json=false){
+  const clean=t=>(t||'').replace(/```json|```/g,'').trim();
+  const t=clean(await window.LMNative.ask(prompt,maxTokens,kind,json));
+  if(!json)return t;
+  // pull the JSON out even if the model wrapped it in a sentence; ask once more if there is none
+  const pick=s=>{const i=s.search(/[\[{]/);if(i<0)return null;const j=s.lastIndexOf(s[i]==='{'?'}':']');if(j<i)return null;
+    const c=s.slice(i,j+1);try{JSON.parse(c);return c;}catch(_){return null;}};
+  let c=pick(t);if(c)return c;
+  c=pick(clean(await window.LMNative.ask(prompt+'\n\nYour previous reply was not valid JSON. Reply with ONLY the JSON — no words before or after it.',maxTokens,kind,json)));
+  if(c)return c;
+  throw new Error('The AI didn’t send back macros — tap Calculate macros to try again');
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -2081,7 +2089,7 @@ async function handleDietAdd(text,at){
     const draft={id:Date.now(),food,mealType,timestamp:now,day:getDayKey(now),...(at?{timeSet:true}:{})};
     setIsLogging(true);
     try{
-      const raw=await callAI(buildMacroPrompt(mealType,food),700,'fast');
+      const raw=await callAI(buildMacroPrompt(mealType,food),700,'fast',true);
       const parsed=JSON.parse(raw);
       const items=parsed.items||[];
       draft.items=items;
@@ -2111,7 +2119,7 @@ async function handleDietAdd(text,at){
     setEditLoading(true);
     let updates={food:editText.trim(),mealType:editMT,items:[]};
     try{
-      const raw=await callAI(buildMacroPrompt(editMT,editText.trim()),600,'fast');
+      const raw=await callAI(buildMacroPrompt(editMT,editText.trim()),600,'fast',true);
       const parsed=JSON.parse(raw);const items=parsed.items||[];
       updates={...updates,...parsed,items,
         protein:Math.round(items.reduce((s,i)=>s+(i.protein||0),0))||null,
@@ -2129,7 +2137,7 @@ async function handleDietAdd(text,at){
     const draft=at?{id:Date.now(),food:text,mealType:meal,timestamp:new Date(at).toISOString(),timeSet:true}
       :{id:Date.now(),food:text,mealType:meal,timestamp:pastMealTs(dayKey,meal),approxTime:true};
     try{
-      const raw=await callAI(buildMacroPrompt(meal,text),600,'fast');
+      const raw=await callAI(buildMacroPrompt(meal,text),600,'fast',true);
       const parsed=JSON.parse(raw);const items=parsed.items||[];
       Object.assign(draft,{items,emoji:parsed.emoji||'🍽️',carbHeavy:parsed.carbHeavy||false,gasRisk:parsed.gasRisk||false,
         proteinScore:parsed.proteinScore||'low',note:parsed.note||'',
@@ -2147,7 +2155,7 @@ async function handleDietAdd(text,at){
     setNewDayLoading(true);
     const draft={id:Date.now(),food:text,mealType:meal,timestamp:pastMealTs(date,meal),approxTime:true};
     try{
-      const raw=await callAI(buildMacroPrompt(meal,text),600,'fast');
+      const raw=await callAI(buildMacroPrompt(meal,text),600,'fast',true);
       const parsed=JSON.parse(raw);const items=parsed.items||[];
       Object.assign(draft,{items,emoji:parsed.emoji||'🍽️',carbHeavy:parsed.carbHeavy||false,gasRisk:parsed.gasRisk||false,
         proteinScore:parsed.proteinScore||'low',note:parsed.note||'',
@@ -2164,7 +2172,7 @@ async function handleDietAdd(text,at){
     const e=dietEntries.find(en=>en.id===id);if(!e)return;
     setCalcingEntries(p=>new Set([...p,id]));
     try{
-      const raw=await callAI(buildMacroPrompt(e.mealType,e.food),600,'fast');
+      const raw=await callAI(buildMacroPrompt(e.mealType,e.food),600,'fast',true);
       const parsed=JSON.parse(raw);const items=parsed.items||[];
       if(!items.length)throw new Error('No items');
       setDietEntries(p=>p.map(en=>en.id===id?{...en,...parsed,items,needsSplit:false,
@@ -2185,7 +2193,7 @@ async function handleDietAdd(text,at){
     if(!unsplit.length){setSplittingDays(p=>({...p,[dayKey]:false}));return;}
     const mealList=unsplit.map((e,i)=>`${i+1}. [id:${e.id}] "${e.food}"`).join('\n');
     try{
-      const raw=await callAI(`Split each meal into food components with macros.\n${mealList}\nReply ONLY with JSON array:\n[{"id":<meal_id>,"items":[{"name":"<food>","calories":<n>,"protein":<n>,"carbs":<n>,"fat":<n>}]}]`,1200,'fast');
+      const raw=await callAI(`Split each meal into food components with macros.\n${mealList}\nReply ONLY with JSON array:\n[{"id":<meal_id>,"items":[{"name":"<food>","calories":<n>,"protein":<n>,"carbs":<n>,"fat":<n>}]}]`,1200,'fast',true);
       const results=JSON.parse(raw);
       setDietEntries(p=>p.map(en=>{
         const match=results.find(r=>r.id===en.id||r.id===String(en.id));
@@ -2644,7 +2652,7 @@ Give a JSON response ONLY (no markdown):
   "recovery_tip": "<practical recovery tip for tonight/tomorrow based on what was trained>"
 }`;
 
-      const raw=await callAI(prompt,500);
+      const raw=await callAI(prompt,500,'smart',true);
       const parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());
       setDayInsight(prev=>({...prev,[date]:{...parsed,_walks:wm.length>0}}));
     }catch(err){
@@ -2801,7 +2809,7 @@ Reply ONLY with valid JSON (no markdown):
   "priority": "<the single most critical action this week, max 20 words>"
 }`;
 
-      const raw=await callAI(prompt,900);
+      const raw=await callAI(prompt,900,'smart',true);
       const parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());
       setAiAnalysis(parsed);
     }catch(err){

@@ -66,7 +66,7 @@
   async function geminiKey(){if(gemKeyCache===undefined)gemKeyCache=await kv.get('gemini_key');return gemKeyCache||(hasFreeKey()?FREE_GEMINI_KEY:null);}
   const GEMINI={fast:'gemini-flash-lite-latest',smart:'gemini-flash-latest'};
 
-  async function askGemini(prompt,maxTokens,kind){
+  async function askGemini(prompt,maxTokens,kind,json){
     const key=await geminiKey();
     if(!key)throw new Error('The free AI is not set up in this build — add a Gemini key or switch to Claude in Settings → AI');
     const model=GEMINI[kind==='fast'?'fast':'smart'];
@@ -74,7 +74,7 @@
       headers:{'content-type':'application/json','x-goog-api-key':key},
       body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],
         // room for the model's own reasoning plus the answer
-        generationConfig:{maxOutputTokens:maxTokens*3+1024,...(thinking?{thinkingConfig:thinking}:{})}})});
+        generationConfig:{maxOutputTokens:maxTokens*3+1024,...(json?{responseMimeType:'application/json'}:{}),...(thinking?{thinkingConfig:thinking}:{})}})});
     let r;
     try{r=await send({thinkingLevel:'low'});}catch(e){throw new Error('No internet connection — try again');}
     if(r.status===400)r=await send({thinkingBudget:0});
@@ -93,8 +93,8 @@
     return text;
   }
 
-  async function ask(prompt,maxTokens,kind){
-    if(provider()==='gemini')return askGemini(prompt,maxTokens,kind);
+  async function ask(prompt,maxTokens,kind,json){
+    if(provider()==='gemini')return askGemini(prompt,maxTokens,kind,json);
     const key=await apiKey();
     if(!key)throw new Error('Add your Claude API key in Settings → AI, or switch to the free AI');
     const tier=(JSON.parse(localStorage.getItem('lm-ai-models')||'{}'))[kind]||(kind==='fast'?'fast':'smart');
