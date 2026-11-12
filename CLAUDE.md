@@ -6,3 +6,4 @@
 - **Never commit signing keys.** The release key is in the repository secrets (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`). The free Gemini key is in `GEMINI_FREE_KEY`.
 - **Version numbers** are `1.<run number + 10>`, continuing from the old private repo, so updates always install over older versions.
 - **Local check before committing:** build `www/` with `node scripts/build-web.cjs` (`ESBUILD_PATH`/`VENDOR_DIR` if node_modules is missing), then run `node tests/smoke.cjs` (`PW_PATH`/`CHROME` for a local Playwright).
+- **Architecture:** the app is HTML (React in `src/app.html`) inside Capacitor, with native Kotlin/Java plugins in `native/` for what the web can't do. Yash wants a full Kotlin rewrite kept in mind if it becomes necessary (performance, home-screen widgets, a watch app, Play Store polish). Until then, add native pieces as plugins rather than rewriting, and keep app logic easy to port: data in plain JSON per key, calculations in small pure functions.
