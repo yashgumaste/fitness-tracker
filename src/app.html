@@ -178,6 +178,8 @@ textarea.x-field{resize:none;line-height:1.45;}
 @keyframes lm-splash-r{0%{transform:translate(0,0);opacity:0}10%{opacity:1}100%{transform:translate(9px,-10px);opacity:0}}
 @keyframes lm-ripple{0%{transform:scale(.2,.2);opacity:.9}100%{transform:scale(1.5,1);opacity:0}}
 @keyframes lm-slosh{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+@keyframes lm-grow{from{transform:scaleY(0)}}
+.lm-grow{transform-box:fill-box;transform-origin:50% 100%;animation:lm-grow .55s cubic-bezier(.3,1.3,.5,1) both}
 @keyframes lm-bump{0%{transform:scale(1)}35%{transform:scale(1.18)}65%{transform:scale(.95)}100%{transform:scale(1)}}
 .lm-drop{animation:lm-drop .46s cubic-bezier(.55,0,1,.6) both}
 .lm-splash-l{animation:lm-splash-l .42s ease-out both;transform-box:fill-box}
@@ -185,7 +187,7 @@ textarea.x-field{resize:none;line-height:1.45;}
 .lm-ripple{animation:lm-ripple .55s ease-out both;transform-box:fill-box;transform-origin:center}
 .lm-slosh{animation:lm-slosh .9s ease-in-out both}
 .lm-bump{animation:lm-bump .5s cubic-bezier(.3,1.5,.5,1)}
-@media (prefers-reduced-motion:reduce){.lm-drop,.lm-splash-l,.lm-splash-r,.lm-ripple{animation:none!important;opacity:0}.lm-slosh,.lm-bump{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.lm-drop,.lm-splash-l,.lm-splash-r,.lm-ripple{animation:none!important;opacity:0}.lm-slosh,.lm-bump,.lm-grow{animation:none!important}}
 </style>
 <link rel="stylesheet" href="vendor/fonts.css">
 <style>
@@ -906,6 +908,44 @@ function walkSummary(day){
   if(t.best)parts.push(`Whole day: ${t.best.toLocaleString('en-IN')} / ${WALK_GOAL.day.toLocaleString('en-IN')} steps`);
   return parts.join('; ');
 }
+
+// ── Steps through the day (Health Connect, 10-minute slices) and walks found in them ──
+const STEPS_KEY='lm-steps-v1';   // {date:{b:[144 step counts, one per 10 min], at:ms}}
+const SLICE=10;
+const hm2m=t=>{const [h,m]=String(t||'0:0').split(':').map(Number);return (h||0)*60+(m||0);};
+const m2hm=m=>`${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(Math.round(m%60)).padStart(2,'0')}`;
+// MET while moving, by kind (calories = (MET − 1) × kg × hours: only what movement adds on top of resting)
+const WALK_MET={run:8.5,brisk:4.5,walk:3.5,stroll:2.8};
+const KCAL_PER_STEP_KG=0.00045;   // everyday steps outside walks ≈ 0.036 kcal per step at 80 kg
+function partOfDay(min){const h=min/60;return h<4?['Late-night','🌌']:h<12?['Morning','🌅']:h<16?['Afternoon','☀️']:h<21?['Evening','🌇']:['Night','🌙'];}
+const walkKind=cad=>cad>=140?'run':cad>=105?'brisk':cad>=75?'walk':'stroll';
+function walkName(kind,start){const p=partOfDay(start)[0];
+  return kind==='run'?`${p} run`:kind==='brisk'?`Brisk ${p.toLowerCase()} walk`:kind==='stroll'?`${p} stroll`:`${p} walk`;}
+// A walk = a run of busy slices (≥45 steps a minute), one quieter slice allowed inside, ≥1,000 steps in all
+function detectWalks(b){
+  if(!Array.isArray(b))return [];
+  const busy=x=>x>=450,out=[];
+  for(let i=0;i<b.length;){
+    if(!busy(b[i])){i++;continue;}
+    let j=i;
+    while(j+1<b.length&&(busy(b[j+1])||(j+2<b.length&&busy(b[j+2])&&b[j+1]>=150)))j++;
+    const seg=b.slice(i,j+1),steps=seg.reduce((a,x)=>a+x,0),peak=Math.max(...seg);
+    if(steps>=1000){
+      const cad=Math.max(50,peak/SLICE);   // steps a minute while actually walking (the fullest slice)
+      const start=i*SLICE+Math.round(SLICE*(1-Math.min(1,b[i]/peak)));
+      const end=Math.max(start+5,(j+1)*SLICE-Math.round(SLICE*(1-Math.min(1,b[j]/peak))));
+      const min=Math.max(5,Math.min(end-start,Math.round(steps/cad)));
+      const kind=walkKind(cad);
+      out.push({id:'hc-'+start,src:'hc',start,end,min,steps,cadence:Math.round(cad),kind,name:walkName(kind,start),emoji:partOfDay(start)[1]});
+    }
+    i=j+1;
+  }
+  return out;
+}
+// steps per hour (24) from 10-minute slices
+const hourly=b=>Array.from({length:24},(_,h)=>(b||[]).slice(h*6,h*6+6).reduce((a,x)=>a+(+x||0),0));
+const fmtClock=m=>{m=Math.round(m)%1440;const h=Math.floor(m/60),mi=m%60;return `${h%12||12}:${String(mi).padStart(2,'0')} ${h>=12?'PM':'AM'}`;};
+const fmtSpan=(a,b)=>{const A=fmtClock(a),B=fmtClock(b);const ap=A.slice(-2)===B.slice(-2);return `${ap?A.slice(0,-3):A}–${B}`;};
 
 // US Navy body fat formula for men
 // US Navy tape method, metric form (all measurements in cm)
@@ -1789,6 +1829,7 @@ function App(){
   const [symptomLog,setSymptomLog]=useState({});
   const [sleepLog,setSleepLog]=useState({}); // see SLEEP_KEY
   const [waterLog,setWaterLog]=useState({}); // see WATER_KEY
+  const [stepsLog,setStepsLog]=useState({});  // {date:{b:[144 ten-minute step counts],at}} from Health Connect
   const [walkLog,setWalkLog]=useState({});   // {date:{morning:{from,to,steps,km},night:{…},dayTotal}}
   function deleteWalk(date,slot){ // slot=null → whole-day phone steps
     setWalkLog(p=>{const day={...(p[date]||{})};
@@ -1859,6 +1900,8 @@ function App(){
         if(rsl)setSleepLog(JSON.parse(rsl));
         const rwa=localStorage.getItem(WATER_KEY);
         if(rwa)setWaterLog(JSON.parse(rwa));
+        const rst=localStorage.getItem(STEPS_KEY);
+        if(rst)setStepsLog(JSON.parse(rst));
         const rp=localStorage.getItem(PREFS_KEY);
         if(rp)setPrefs(p=>({...p,...JSON.parse(rp)}));
       }catch(_){}
@@ -1878,7 +1921,7 @@ function App(){
           const read=async k=>{
             try{const s=await db.doc(base+'/'+k).get();return s.exists?s.data().v:null;}catch(_){readFailed=true;return null;}
           };
-          const [dd,df,dw,ds,db2,di,dk,dp,dsl,dwa]=await Promise.all([read(DIET_KEY),read(FIT_KEY),read(WEIGHT_KEY),read(SYMPTOM_KEY),read(BODY_KEY),read('lm-diet-index'),read(WALK_KEY),read(PREFS_KEY),read(SLEEP_KEY),read(WATER_KEY)]);
+          const [dd,df,dw,ds,db2,di,dk,dp,dsl,dwa,dst]=await Promise.all([read(DIET_KEY),read(FIT_KEY),read(WEIGHT_KEY),read(SYMPTOM_KEY),read(BODY_KEY),read('lm-diet-index'),read(WALK_KEY),read(PREFS_KEY),read(SLEEP_KEY),read(WATER_KEY),read(STEPS_KEY)]);
           // Food: monthly documents + old single document + this device's copy, MERGED by entry id
           // (never let an empty copy replace a fuller one)
           const months=di?JSON.parse(di):[];
@@ -1899,6 +1942,7 @@ function App(){
           if(dk)setWalkLog(JSON.parse(dk));
           if(dsl)setSleepLog(JSON.parse(dsl));
           if(dwa)setWaterLog(JSON.parse(dwa));
+          if(dst)setStepsLog(JSON.parse(dst));
           if(dp)setPrefs(p=>({...p,...JSON.parse(dp)}));
           // If any cloud read failed, don't write to the cloud this session — a partial load must never overwrite saved data
           if(readFailed){dbRef.current=null;showToast('⚠ Could not read some saved data — new changes will not overwrite it','var(--warn)');}
@@ -1915,6 +1959,7 @@ function App(){
   useEffect(()=>{if(storageReady)scheduleSave(WEIGHT_KEY,weightLog);},[weightLog,storageReady]);
   useEffect(()=>{if(storageReady)scheduleSave(SYMPTOM_KEY,symptomLog);},[symptomLog,storageReady]);
   useEffect(()=>{if(storageReady)scheduleSave(WALK_KEY,walkLog);},[walkLog,storageReady]);
+  useEffect(()=>{if(storageReady)scheduleSave(STEPS_KEY,stepsLog);},[stepsLog,storageReady]);
   useEffect(()=>{if(storageReady)scheduleSave(SLEEP_KEY,sleepLog);},[sleepLog,storageReady]);
   useEffect(()=>{if(storageReady)scheduleSave(WATER_KEY,waterLog);},[waterLog,storageReady]);
   useEffect(()=>{if(storageReady)scheduleSave(PREFS_KEY,prefs);},[prefs,storageReady]);
@@ -2101,7 +2146,7 @@ function App(){
   },[]);
 
   /* ─── TAB SWITCH ─── */
-  function switchTab(t){setTab(t);setAnimKey(k=>k+1);}
+  function switchTab(t){setTab(t);setAnimKey(k=>k+1);setStepsPage(null);}
   // New page → start at the top (the page itself scrolls now)
   useEffect(()=>{window.scrollTo(0,0);},[tab,dietView,fitView]);
 
@@ -2344,7 +2389,7 @@ USER CONTEXT:
 TODAY'S MEALS:
 ${todayLog}
 Total: ${rnd(todayMacros.cal)}kcal, ${rnd(todayMacros.pro)}g protein
-${walkSummary(walkLog[TODAY])?`WALKS TODAY (goal 2 paced walks of ~3,400 steps / 2 km / 30 min, 10,000 steps a day): ${walkSummary(walkLog[TODAY])}\n`:''}${sleepText(sleepLog[TODAY])?`SLEEP LAST NIGHT (goal 7–9 h): ${sleepText(sleepLog[TODAY])}\n`:''}${waterMl(TODAY)?`WATER SO FAR TODAY (with times): ${waterDesc(TODAY)}\n`:''}
+${moveSummary(TODAY)?`MOVEMENT TODAY (goal ${fmtN(WALK_GOAL.day)} steps a day; walks found from the phone's steps or added by hand): ${moveSummary(TODAY)}\n`:''}${sleepText(sleepLog[TODAY])?`SLEEP LAST NIGHT (goal 7–9 h): ${sleepText(sleepLog[TODAY])}\n`:''}${waterMl(TODAY)?`WATER SO FAR TODAY (with times): ${waterDesc(TODAY)}\n`:''}
 YESTERDAY'S MEALS:
 ${ydLog}
 ${ydGasRisk.length>0?`Yesterday had gas-risk foods: ${ydGasRisk.join(', ')} — may still be causing discomfort today`:''}
@@ -2384,7 +2429,7 @@ Be specific, mention actual food names, be direct.`;
       if(hasSevere){
         prompt=`Gut health recovery coach. User had ${(symptomLog[dk]||[]).some(s=>s.id==='loose')?'loose motion':(symptomLog[dk]||[]).some(s=>s.id==='pain')?'stomach pain':'nausea'} on ${dk}.\nMeals that day:\n${log}\nSymptoms: ${syms||'none'}\n${painSince?TIMING_RULE+'\n':''}\n3 sentences: 1. Most likely food trigger from this day's log. 2. What to eat for recovery. 3. What to avoid. Be specific, name actual foods.`;
       } else {
-        prompt=`Nutrition coach. Review this day's eating:\n${log}\nTotal: ${rnd(macros.cal)}kcal, ${rnd(macros.pro)}g protein, ${rnd(macros.carbs)}g carbs.\nSymptoms logged: ${syms||'none'}\n${sleepText(sleepLog[dk])?'Sleep the night before: '+sleepText(sleepLog[dk])+'\n':''}${waterMl(dk)?'Water (with times): '+waterDesc(dk)+'\n':''}${walkSummary(walkLog[dk])?'Walks: '+walkSummary(walkLog[dk])+' (goal 10,000 steps/day)\n':''}${painSince?TIMING_RULE+'\n':''}${(symptomLog[dk]||[]).some(s=>ILLNESS_IDS.includes(s.id))?'Illness signs were logged (fever/cold/aches): weigh infection, poor sleep and stress against food, and favour rest, fluids and light meals.\n':''}Goal: fat loss, 1700-1850 kcal, 100g protein, Indian diet.\n3 sentences: 1. How well this day aligned with fat loss goal. 2. Biggest gap or win. 3. One specific improvement.`;
+        prompt=`Nutrition coach. Review this day's eating:\n${log}\nTotal: ${rnd(macros.cal)}kcal, ${rnd(macros.pro)}g protein, ${rnd(macros.carbs)}g carbs.\nSymptoms logged: ${syms||'none'}\n${sleepText(sleepLog[dk])?'Sleep the night before: '+sleepText(sleepLog[dk])+'\n':''}${waterMl(dk)?'Water (with times): '+waterDesc(dk)+'\n':''}${moveSummary(dk)?'Walks: '+moveSummary(dk)+' (goal 10,000 steps/day)\n':''}${painSince?TIMING_RULE+'\n':''}${(symptomLog[dk]||[]).some(s=>ILLNESS_IDS.includes(s.id))?'Illness signs were logged (fever/cold/aches): weigh infection, poor sleep and stress against food, and favour rest, fluids and light meals.\n':''}Goal: fat loss, 1700-1850 kcal, 100g protein, Indian diet.\n3 sentences: 1. How well this day aligned with fat loss goal. 2. Biggest gap or win. 3. One specific improvement.`;
       }
       const text=await callAI(prompt,400);
       setDayInsights(p=>({...p,[dk]:{text:text||'No insight.',loading:false}}));
@@ -2648,16 +2693,17 @@ Be specific, mention actual food names, be direct.`;
         :'Not logged yet';
 
       // Walks for this day + last-7-day averages for comparison
-      const wm=WALK_SLOTS.map(sl=>({sl,w:walkLog[date]?.[sl.id]})).filter(x=>x.w&&(x.w.steps||x.w.km||x.w.from)).map(x=>({...x,m:walkMetrics(x.w)}));
-      const walkLine=({sl,w,m})=>`${sl.label}: ${w.from&&w.to?`${w.from}-${w.to} (${m.min} min)`:'time not logged'}`+
-        `${m.steps?`, ${m.steps} steps`:''}${m.km?`, ${m.km.toFixed(2)} km${w.km?'':' (estimated from steps)'}`:''}`+
-        `${m.pace?`, pace ${fmtPace(m.pace)} min/km, speed ${m.speed.toFixed(1)} km/h`:''}${m.cadence?`, cadence ${Math.round(m.cadence)} steps/min`:''}${m.stride&&w.km?`, stride ${Math.round(m.stride*100)} cm`:''}`;
+      const asM=w=>{const pace=w.min&&w.km?w.min/w.km:null;return{min:w.min,steps:w.steps,km:w.km,pace,speed:pace?60/pace:null,cadence:w.cadence};};
+      const wm=moveDay(date).walks.map(w=>({w,m:asM(w)}));
+      const walkLine=({w,m})=>`${w.name}${w.src==='hc'?' (from phone steps)':''}: ${w.end?`${m2hm(w.start)}-${m2hm(w.end)} (${m.min} min)`:'time not logged'}`+
+        `${m.steps?`, ${m.steps} steps`:''}${m.km?`, ${m.km.toFixed(2)} km`:''}`+
+        `${m.pace?`, pace ${fmtPace(m.pace)} min/km, speed ${m.speed.toFixed(1)} km/h`:''}${m.cadence?`, cadence ${Math.round(m.cadence)} steps/min`:''}, ~${w.kcal} kcal`;
       const prevDays=Array.from({length:7},(_,i)=>calAddDays(date,-(i+1)));
-      const prev=prevDays.flatMap(d=>WALK_SLOTS.map(sl=>walkMetrics(walkLog[d]?.[sl.id]))).filter(m=>m&&m.pace);
+      const prev=prevDays.flatMap(d=>moveDay(d).walks.map(asM)).filter(m=>m&&m.pace);
       const avg=f=>prev.length?prev.reduce((a,m)=>a+(m[f]||0),0)/prev.filter(m=>m[f]).length:null;
-      const dayTot=walkDayTotals(walkLog[date]);
+      const dayTot=moveDay(date);
       const walksStr=wm.length
-        ?wm.map(walkLine).join('\n')+`\nDay total: ${dayTot.best} / ${WALK_GOAL.day} steps${dayTot.dayTotal?' (phone count)':' (walks only)'}`+
+        ?wm.map(walkLine).join('\n')+`\nDay total: ${dayTot.steps} / ${WALK_GOAL.day} steps (${dayTot.src==='hc'?'phone count':'walks only'}), ~${dayTot.kcal} kcal burned by moving`+
           (prev.length?`\nLast 7 days (${prev.length} timed walks): avg pace ${fmtPace(avg('pace'))} min/km, avg speed ${avg('speed').toFixed(1)} km/h${avg('cadence')?`, avg cadence ${Math.round(avg('cadence'))} steps/min`:''}`:'\nNo earlier timed walks to compare with.')
         :'No walks logged';
 
@@ -2872,7 +2918,54 @@ Reply ONLY with valid JSON (no markdown):
   const dayLabel=k=>k===TODAY?'Today':k===calAddDays(TODAY,-1)?'Yesterday':new Date(k+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
   const KIND={meal:['var(--amber-c)','var(--amber)'],walk:['var(--mint-c)','var(--mint)'],workout:['var(--pri-c)','var(--pri)'],weight:['var(--violet-c)','var(--violet)'],feel:['var(--pink-c)','var(--pink)'],sleep:['var(--night-c)','var(--night)'],water:['var(--sky-c)','var(--sky)']};
 
-  const walkCovers=day=>{const t=walkDayTotals(walkLog[day]);return t.min>=10||WALK_SLOTS.some(sl=>(parseInt(walkLog[day]?.[sl.id]?.steps)||0)>=1500);};
+  // Everything about a day's movement: walks found in the phone's steps + walks you added, all steps, distance and calories
+  const moveCache=useRef({});
+  function moveDay(date){
+    const kg=parseFloat(weightLog[date])||latestWeight?.w||+bodyMeasure.weightKg||75;
+    const kmStep=bodySaved&&+bodyMeasure.heightCm?bodyMeasure.heightCm*0.415/100000:KM_PER_STEP;
+    const sb=stepsLog[date]?.b,wl=walkLog[date];
+    const ck=JSON.stringify([kg,kmStep,stepsLog[date]?.at,wl]);const c=moveCache.current[date];if(c&&c.k===ck)return c.v;
+    const det=sb?detectWalks(sb):[];
+    const kcalOf=w=>Math.round(w.min?(WALK_MET[w.kind]-1)*kg*w.min/60:(w.km||w.steps*kmStep)*kg*0.5);
+    det.forEach(w=>{w.km=w.steps*kmStep;w.kcal=kcalOf(w);});
+    // walks you added yourself, unless the phone already found the same walk
+    const added=WALK_SLOTS.map(sl=>({sl,w:wl?.[sl.id]})).filter(x=>x.w&&(x.w.steps||x.w.km||x.w.from)).map(({sl,w})=>{
+      const m=walkMetrics(w),start=w.from?hm2m(w.from):(sl.id==='morning'?7*60:20*60),cad=m.cadence||null,kind=cad?walkKind(cad):'walk';
+      const x={id:'man-'+sl.id,src:'manual',slot:sl.id,start,end:w.from&&w.to?start+m.min:null,min:m.min||0,steps:m.steps||0,km:m.km||(m.steps||0)*kmStep,
+        cadence:cad?Math.round(cad):null,kind,name:w.from?walkName(kind,start):`${sl.label} walk`,emoji:partOfDay(start)[1],timed:!!w.from};
+      x.kcal=kcalOf(x);return x;})
+      .filter(x=>!det.some(d=>x.timed?(x.start<d.end&&(x.end||x.start+30)>d.start):true));
+    const walks=[...det,...added].sort((a,b)=>a.start-b.start);
+    const t=walkDayTotals(wl),sliceSum=sb?sb.reduce((a,x)=>a+(+x||0),0):0;
+    const steps=Math.max(t.best,sliceSum);
+    const walkSteps=walks.reduce((a,w)=>a+w.steps,0),other=Math.max(0,steps-walkSteps);
+    const walkKcal=walks.reduce((a,w)=>a+w.kcal,0),otherKcal=Math.round(other*kg*KCAL_PER_STEP_KG);
+    const km=Math.max(steps*kmStep,walks.reduce((a,w)=>a+w.km,0));
+    const v={walks,steps,walkSteps,other,km,walkMin:walks.reduce((a,w)=>a+(w.min||0),0),walkKcal,otherKcal,kcal:walkKcal+otherKcal,
+      hours:sb?hourly(sb):null,src:sb?'hc':steps?'manual':null,at:stepsLog[date]?.at||null,kg};
+    moveCache.current[date]={k:ck,v};return v;
+  }
+  // One line per walk for the coach
+  const moveSummary=date=>{const mv=moveDay(date);if(!mv.steps&&!mv.walks.length)return '';
+    return [...mv.walks.map(w=>`${w.name}${w.end?` ${fmtSpan(w.start,w.end)}`:''}${w.min?` (${w.min} min)`:''}, ${fmtN(w.steps)} steps, ${w.km.toFixed(1)} km${w.cadence?`, ${w.cadence} steps/min`:''}, ~${w.kcal} kcal`),
+      `Whole day: ${fmtN(mv.steps)} / ${fmtN(WALK_GOAL.day)} steps, ${mv.km.toFixed(1)} km, ~${mv.kcal} kcal burned by moving (walks ${mv.walkKcal}, everyday steps ${mv.otherKcal})`].join('; ');};
+  // ── Steps page (Day / Week / Month / Year) ──
+  const [stepsPage,setStepsPage]=useState(null);   // {view:'day'|'week'|'month'|'year', date, sel}
+  const openStepsPage=date=>{setStepsPage({view:'day',date:date||TODAY,sel:null});window.scrollTo(0,0);};
+  const mergeBuckets=days=>{if(!days||!days.length)return;
+    setStepsLog(p=>{const n={...p},cut=calAddDays(TODAY,-40);
+      for(const x of days)if(x&&x.date&&Array.isArray(x.b))n[x.date]={b:x.b.map(v=>+v||0),at:Date.now()};
+      Object.keys(n).forEach(k=>{if(k<cut)delete n[k];});return n;});};
+  // Viewing a day: fetch its hour-by-hour steps if we don't have them (or today's are over 5 minutes old)
+  useEffect(()=>{
+    if(!stepsPage||stepsPage.view!=='day')return;const H=window.LMNative?.hc;
+    if(!H||!window.LMNative.isNative||!hcState?.read?.includes('Steps')||!H.readStepBuckets)return;
+    const d=stepsPage.date,have=stepsLog[d];if(d>TODAY||d<calAddDays(TODAY,-29))return;
+    if(have&&(d!==TODAY||Date.now()-have.at<5*60000))return;
+    H.readStepBuckets(d,1).then(r=>mergeBuckets(r.days)).catch(()=>{});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[stepsPage&&stepsPage.view,stepsPage&&stepsPage.date,hcState]);
+  const walkCovers=day=>{const mv=moveDay(day);return mv.walkMin>=10||mv.walks.some(w=>w.steps>=1500);};
   const viaWalk=(day,ex)=>isWalkCardio(ex)&&walkCovers(day)&&!fitLogs[day]?.[ex.id]?.done;
   const exDoneOn=(day,ex)=>!!fitLogs[day]?.[ex.id]?.done||(isWalkCardio(ex)&&walkCovers(day));
   const waterMl=day=>(waterLog[day]||[]).reduce((a,x)=>a+(+x.ml||0),0);
@@ -2888,10 +2981,9 @@ Reply ONLY with valid JSON (no markdown):
     (dietGrouped[day]||[]).forEach(e=>{const {ts,approx}=mealTime(e);const m=entryMacros(e);
       items.push({kind:'meal',id:'m'+e.id,ts,approx,entry:e,emoji:e.emoji||MEAL_ICONS[e.mealType]||'🍽️',title:e.food,
         meta:`${e.mealType} · ${fmtN(m.cal)} kcal · ${fmtN(m.pro)} g protein`});});
-    WALK_SLOTS.forEach(sl=>{const w=walkLog[day]?.[sl.id];if(!w||!(w.steps||w.km||w.from))return;
-      const m=walkMetrics(w);
-      items.push({kind:'walk',id:'w'+sl.id,ts:w.from?at(w.from):at(sl.id==='morning'?'07:00':'20:00'),approx:!w.from,slot:sl.id,w,emoji:'🚶',
-        title:`${sl.label} walk`,meta:[m.min?`${m.min} min`:null,m.steps?`${fmtN(m.steps)} steps`:null,m.km?`${m.km.toFixed(2)} km`:null,m.pace?`${fmtPace(m.pace)} /km`:null].filter(Boolean).join(' · ')});});
+    moveDay(day).walks.forEach(w=>{
+      items.push({kind:'walk',id:'w'+w.id,ts:at(m2hm(w.start)),approx:w.src==='manual'&&!w.timed,slot:w.slot,src:w.src,emoji:w.kind==='run'?'🏃':'🚶',
+        title:w.name,meta:[w.end?fmtSpan(w.start,w.end):null,w.min?`${w.min} min`:null,`${fmtN(w.steps)} steps`,`${w.km.toFixed(1)} km`,`~${w.kcal} kcal`].filter(Boolean).join(' · ')});});
     const fl=fitLogs[day];
     if(fl){
       const info=getDayInfo(day);
@@ -2958,6 +3050,7 @@ Reply ONLY with valid JSON (no markdown):
   // Android back button: close the open sheet, else go back to Home, else leave the app
   const backRef=useRef(null);
   backRef.current=()=>{if(sheet){closeSheet();return true;}
+    if(stepsPage){setStepsPage(null);return true;}
     if(setupOpen){if(setupStep>0){setSetupStep(n=>n-1);return true;}return false;}
     if(tab==='settings'&&settingsPage){setSettingsPage(null);return true;}
     if(tab!=='home'){setTab('home');setHomeDay(null);return true;}return false;};
@@ -3044,7 +3137,7 @@ Reply ONLY with valid JSON (no markdown):
   }
   function openItem(it,day){
     if(it.kind==='meal')openMeal(it.entry.id);
-    else if(it.kind==='walk')openWalk(day,it.slot);
+    else if(it.kind==='walk'){if(it.src==='hc')openStepsPage(day);else openWalk(day,it.slot);}
     else if(it.kind==='weight')openWeight(day);
     else if(it.kind==='feel')openFeel(day,it.entry.id);
     else if(it.kind==='sleep')openSleep(day);
@@ -3177,12 +3270,140 @@ Reply ONLY with valid JSON (no markdown):
         </div>
       </div>);
   }
+  /* ═══ STEPS ═══ */
+  function renderWalkRow(date,w){
+    return(<button key={w.id} className="x-card" onClick={()=>w.src==='manual'?openWalk(date,w.slot):openStepsPage(date)}
+        style={{display:'flex',gap:12,alignItems:'center',textAlign:'left',color:'var(--on-mint-c)',background:'var(--mint-c)',borderRadius:'18px 34px 18px 34px',padding:'12px 14px'}}>
+      <Shape kind={w.kind==='run'?'cookie6':'sunny'} size={48} fill="var(--mint)" color="#000" font={22}>{w.kind==='run'?'🏃':w.emoji}</Shape>
+      <span style={{flex:1,minWidth:0}}>
+        <b style={{display:'block',fontSize:16,color:'var(--fg)',lineHeight:1.25}}>{w.name}</b>
+        <span style={{display:'block',fontSize:13,fontWeight:700}}>{w.end?fmtSpan(w.start,w.end):'Time not set'}{w.min?` · ${w.min} min`:''}</span>
+        <span style={{display:'block',fontSize:12.5,fontWeight:650,opacity:.9}}>{fmtN(w.steps)} steps · {w.km.toFixed(1)} km{w.cadence?` · ${w.cadence} steps/min`:''}</span>
+      </span>
+      <span style={{textAlign:'right',flex:'none'}}>
+        <b className="x-num" style={{fontSize:22,color:'var(--fg)',display:'block'}}>{w.kcal}</b>
+        <span style={{fontSize:11,fontWeight:750}}>kcal</span>
+        {w.src==='manual'&&<span style={{display:'block',fontSize:10.5,fontWeight:750,opacity:.8,marginTop:2}}>added by you</span>}
+      </span>
+    </button>);
+  }
+  function renderStepsPage(){
+    const sp=stepsPage,v=sp.view,set=f=>setStepsPage(p=>({...p,...f}));
+    const goal=WALK_GOAL.day,k=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':String(Math.round(n));
+    const hcOn=!!hcState?.read?.includes('Steps'),native=!!window.LMNative?.isNative;
+    const navRow=(title,sub,prev,next,canNext,back)=>(<>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <button className="x-ibtn" aria-label="Earlier" onClick={prev}><Ico d={ICON.left} size={24}/></button>
+        <div style={{flex:1,textAlign:'center',minWidth:0}}><div style={{fontWeight:820,fontSize:16}}>{title}</div>{sub&&<div className="x-sub" style={{fontSize:12}}>{sub}</div>}</div>
+        <button className="x-ibtn" aria-label="Later" onClick={next} disabled={!canNext} style={{opacity:canNext?1:.35}}><Ico d={ICON.right} size={24}/></button>
+      </div>
+      {back}</>);
+    let body;
+    if(v==='day'){
+      const date=sp.date,isT=date===TODAY,mv=moveDay(date);
+      const nowH=isT?new Date().getHours():-1,sel=sp.sel;
+      const selTxt=sel!=null&&mv.hours?`${fmtClock(sel*60).replace(':00','')} – ${fmtClock(sel*60+60).replace(':00','')} · ${fmtN(mv.hours[sel])} steps`:null;
+      const ago=mv.at?Math.max(0,Math.round((Date.now()-mv.at)/60000)):null;
+      body=<>
+        {navRow(isT?'Today':dateLong(date),null,()=>set({date:calAddDays(date,-1),sel:null}),()=>set({date:calAddDays(date,1),sel:null}),date<TODAY,
+          !isT&&<button className="x-btn sm outline" onClick={()=>set({date:TODAY,sel:null})} style={{alignSelf:'center'}}>Back to today</button>)}
+        <div className="x-card mint sa" style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap'}}>
+            <span className="x-num" style={{fontSize:52,color:'var(--fg)',lineHeight:1}}>{fmtN(mv.steps)}</span>
+            <span style={{fontWeight:750}}>of {fmtN(goal)} steps{mv.steps>=goal?' ✓':''}</span></div>
+          <WavyBar value={mv.steps} max={goal} color="var(--mint)" track="rgba(0,0,0,.3)" h={14}/>
+          <div className="x-grid3" style={{gap:8}}>
+            {[['Distance',mv.km.toFixed(1),'km'],['Walking',mv.walkMin||'—',mv.walkMin?'min':''],['Burned',mv.kcal?'~'+fmtN(mv.kcal):'—','kcal']].map(([l,a,b])=>
+              <div key={l} style={{background:'rgba(0,0,0,.22)',borderRadius:18,padding:'10px 12px'}}>
+                <div style={{fontSize:11.5,fontWeight:750,opacity:.85}}>{l}</div>
+                <div><b className="x-num" style={{fontSize:20,color:'var(--fg)'}}>{a}</b> <span style={{fontSize:12,fontWeight:700}}>{b}</span></div></div>)}
+          </div>
+        </div>
+        <div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:8}}><h2 className="x-h2" style={{flex:1,margin:0}}>By the hour</h2>
+            <span className="x-sub" style={{fontSize:12.5}}>{selTxt||(mv.hours?'Tap a bar':'')}</span></div>
+          {mv.hours?<HourChart key={date} hours={mv.hours} walks={mv.walks.filter(w=>w.src==='hc')} now={nowH} sel={sel} onSel={h=>set({sel:h})}/>
+            :<div className="x-sub" style={{padding:'18px 4px',lineHeight:1.5}}>{native&&!hcOn?'Connect Health Connect to see your steps hour by hour, and walks will show up by themselves.':
+              date<calAddDays(TODAY,-29)?'Hour-by-hour steps are kept for the last 30 days.':'No hour-by-hour steps for this day.'}</div>}
+          {mv.hours&&<div style={{display:'flex',gap:14,flexWrap:'wrap',fontSize:12,fontWeight:700,color:'var(--fg2)'}}>
+            {[['var(--mint)','Walks'],['var(--pri-c)','Everyday movement'],...(isT?[['var(--pri)','This hour']]:[])].map(([c,l])=>
+              <span key={l} style={{display:'flex',alignItems:'center',gap:6}}><i style={{width:10,height:10,borderRadius:5,background:c,display:'inline-block'}}/>{l}</span>)}</div>}
+        </div>
+        {native&&!hcOn&&!mv.hours&&<Nudge emoji="❤️" text="Get steps by the hour from your phone" action="Connect" onClick={()=>goSettings('health')}/>}
+        <div className="x-sec"><h2 className="x-h2">Walks</h2><span className="x-sub">{mv.walks.length?`${mv.walks.length} · ${mv.walkMin} min`:''}</span></div>
+        {mv.walks.length?<div style={{display:'flex',flexDirection:'column',gap:10}}>{mv.walks.map(w=>renderWalkRow(date,w))}</div>
+          :<div className="x-card" style={{color:'var(--fg2)'}}>{mv.src==='hc'?`No walks found ${isT?'yet today':'this day'}. A walk shows up here once you’ve walked steadily for about 10 minutes.`:'No walks yet.'}</div>}
+        {mv.steps>0&&<div className="x-card" style={{display:'flex',gap:12,alignItems:'center'}}>
+          <Shape kind="cookie12" size={44} fill="var(--pri-c)" color="var(--on-pri-c)" font={20}>🏠</Shape>
+          <span style={{flex:1,minWidth:0}}><b style={{display:'block'}}>Everyday movement</b>
+            <span className="x-sub" style={{fontSize:13}}>{fmtN(mv.other)} steps outside walks</span></span>
+          <span style={{textAlign:'right'}}><b className="x-num" style={{fontSize:20}}>{mv.otherKcal}</b><span style={{display:'block',fontSize:11,fontWeight:750,color:'var(--fg2)'}}>kcal</span></span></div>}
+        {mv.kcal>0&&<div className="x-sub" style={{fontSize:12.5,lineHeight:1.5,padding:'0 4px'}}>
+          About {fmtN(mv.kcal)} kcal burned by moving — walks {fmtN(mv.walkKcal)} + everyday steps {fmtN(mv.otherKcal)}, worked out for {Math.round(mv.kg)} kg. It counts only what moving adds on top of resting.</div>}
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',justifyContent:'center'}}>
+          <button className="x-btn sm outline" onClick={()=>openWalk(date)}>＋ Add a walk yourself</button>
+          {!mv.hours&&<button className="x-btn sm ghost" onClick={()=>openSteps(date)}>Edit the day’s total</button>}
+        </div>
+        {mv.src==='hc'&&<div className="x-sub" style={{textAlign:'center',fontSize:12}}>From Health Connect{ago!=null?` · updated ${ago<1?'just now':ago<60?ago+' min ago':Math.round(ago/60)+' h ago'}`:''}</div>}
+      </>;
+    }else{
+      const a=sp.date;let days=[],items=[],title,prev,next,canNext;
+      if(v==='week'){const ws=calStartOfWeek(a);days=Array.from({length:7},(_,i)=>calAddDays(ws,i));
+        title=`${new Date(days[0]+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'})} – ${new Date(days[6]+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'})}`;
+        prev=()=>set({date:calAddDays(ws,-7)});next=()=>set({date:calAddDays(ws,7)});canNext=days[6]<TODAY;
+        items=days.map(d=>({key:d,v:d<=TODAY?moveDay(d).steps:0,label:new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'narrow'}),show:true,today:d===TODAY,future:d>TODAY}));}
+      else if(v==='month'){const ms=calStartOfMonth(a),n=calDaysInMonth(a);days=Array.from({length:n},(_,i)=>calAddDays(ms,i));
+        title=new Date(ms+'T00:00:00').toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+        const dt=new Date(ms+'T00:00:00');const mo=(o)=>{const x=new Date(dt.getFullYear(),dt.getMonth()+o,1);return localDate(x);};
+        prev=()=>set({date:mo(-1)});next=()=>set({date:mo(1)});canNext=days[n-1]<TODAY;
+        items=days.map((d,i)=>({key:d,v:d<=TODAY?moveDay(d).steps:0,label:String(i+1),show:[0,7,14,21,28].includes(i),today:d===TODAY,future:d>TODAY}));}
+      else{const y=+a.slice(0,4);title=String(y);prev=()=>set({date:`${y-1}-01-01`});next=()=>set({date:`${y+1}-01-01`});canNext=`${y}-12-31`<TODAY;
+        for(let d=`${y}-01-01`;d.startsWith(String(y));d=calAddDays(d,1))days.push(d);
+        items=Array.from({length:12},(_,m)=>{const md=days.filter(d=>+d.slice(5,7)===m+1&&d<=TODAY);const st=md.map(d=>moveDay(d).steps).filter(x=>x>0);
+          const key=`${y}-${String(m+1).padStart(2,'0')}-01`;
+          return{key,v:st.length?st.reduce((p,q)=>p+q,0)/st.length:0,label:new Date(key+'T00:00:00').toLocaleDateString('en-IN',{month:'narrow'}),show:true,
+            today:TODAY.slice(0,7)===key.slice(0,7),future:key>TODAY};});}
+      const past=days.filter(d=>d<=TODAY),mvs=past.map(moveDay),withSteps=mvs.filter(m=>m.steps>0);
+      const total=withSteps.reduce((p,m)=>p+m.steps,0),avg=withSteps.length?total/withSteps.length:0,hit=withSteps.filter(m=>m.steps>=goal).length;
+      const km=mvs.reduce((p,m)=>p+m.km,0),kcal=mvs.reduce((p,m)=>p+m.kcal,0),walksN=mvs.reduce((p,m)=>p+m.walks.length,0);
+      const best=withSteps.length?past[mvs.indexOf(withSteps.reduce((p,m)=>m.steps>p.steps?m:p))]:null;
+      body=<>
+        {navRow(title,null,prev,next,canNext)}
+        <div className="x-card mint sa" style={{display:'flex',flexDirection:'column',gap:6}}>
+          <div className="x-eyebrow" style={{color:'var(--on-mint-c)'}}>{v==='year'?'Average a day':'Average a day'}</div>
+          <div style={{display:'flex',alignItems:'baseline',gap:8}}><span className="x-num" style={{fontSize:48,color:'var(--fg)',lineHeight:1}}>{fmtN(avg)}</span>
+            <span style={{fontWeight:750}}>steps</span></div>
+          <div style={{fontWeight:700,fontSize:13.5}}>{withSteps.length?`${hit} of ${withSteps.length} day${withSteps.length===1?'':'s'} at your ${k(goal)} goal`:'No steps yet'}</div>
+        </div>
+        <div className="x-card"><PeriodBars key={v+title} items={items} goal={goal} onPick={it=>v==='year'?set({view:'month',date:it.key}):it.key<=TODAY&&set({view:'day',date:it.key,sel:null})}/>
+          <div className="x-sub" style={{fontSize:12,textAlign:'center',marginTop:6}}>{v==='year'?'Average steps a day, by month · tap a month':'Tap a day to see it hour by hour'}</div></div>
+        <div className="x-grid2">
+          <div className="x-stat"><small>Total</small><b style={{color:'var(--pri)'}}>{k(total)}</b><i>steps</i></div>
+          <div className="x-stat"><small>Distance</small><b style={{color:'var(--mint)'}}>{km.toFixed(km>=100?0:1)} km</b><i>{walksN} walk{walksN===1?'':'s'}</i></div>
+          <div className="x-stat"><small>Burned</small><b style={{color:'var(--amber)'}}>{kcal?'~'+k(kcal):'—'}</b><i>kcal by moving</i></div>
+          <div className="x-stat" onClick={()=>best&&set({view:'day',date:best,sel:null})} style={{cursor:best?'pointer':'default'}}><small>Best day</small>
+            <b style={{color:'var(--violet)'}}>{best?k(moveDay(best).steps):'—'}</b><i>{best?dayLabel(best):''}</i></div>
+        </div>
+      </>;
+    }
+    return(<div>
+      <div className="x-head" style={{alignItems:'center',justifyContent:'flex-start'}}>
+        <button className="x-ibtn" aria-label="Back" onClick={()=>setStepsPage(null)}><Ico d={ICON.left} size={24}/></button>
+        <Shape kind="cookie9" size={44} fill="var(--mint-c)" color="var(--on-mint-c)" font={20}>👟</Shape>
+        <h1 style={{fontSize:28}}>Steps</h1>
+      </div>
+      <div className="x-wrap" style={{paddingTop:0}}>
+        <Seg items={[['day','Day'],['week','Week'],['month','Month'],['year','Year']]} value={v} onChange={x=>set({view:x,sel:null})}/>
+        {body}
+      </div>
+    </div>);
+  }
   /* ═══ HOME ═══ */
   function renderHomeX(){
     const day=homeDay||TODAY,isT=day===TODAY;
     const m=macrosOf(day);
-    const tot=walkDayTotals(walkLog[day]);
-    const walksN=WALK_SLOTS.filter(sl=>{const w=walkLog[day]?.[sl.id];return w&&(w.steps||w.km||w.from);}).length;
+    const mv=moveDay(day),tot={best:mv.steps,km:mv.km};
+    const walksN=mv.walks.length;
     const {info,sug}=daySug(day);const fl=fitLogs[day]||{};
     const exs=sug?.exercises||[];const exDone=exs.filter(ex=>exDoneOn(day,ex)).length;
     const [ac,cont,onc]=tone(info?.type);
@@ -3197,7 +3418,7 @@ Reply ONLY with valid JSON (no markdown):
           !isT&&<button className="x-btn sm tonal" onClick={()=>setHomeDay(null)}>Today</button>)}
         <div className="x-days" role="tablist" aria-label="Pick a day">
           {week.map(d=>{const mm=macrosOf(d);const dt=new Date(d+'T00:00:00');const on=d===day;
-            const food=mm.cal>=GOALS.calories.min&&mm.cal<=GOALS.calories.max;const steps=walkDayTotals(walkLog[d]).best>=WALK_GOAL.day;const gym=!!fitLogs[d]?._dayComplete;
+            const food=mm.cal>=GOALS.calories.min&&mm.cal<=GOALS.calories.max;const steps=moveDay(d).steps>=WALK_GOAL.day;const gym=!!fitLogs[d]?._dayComplete;
             return(
             <button key={d} className={`x-day${on?' on':''}`} onClick={()=>setHomeDay(d===TODAY?null:d)} aria-selected={on}>
               <small>{dt.toLocaleDateString('en-IN',{weekday:'narrow'})}</small>
@@ -3214,13 +3435,13 @@ Reply ONLY with valid JSON (no markdown):
           {isT&&!prefs.goalsSet&&<Nudge emoji="🎯" text="Your calorie and protein goals are still the defaults" action="Personalise" onClick={()=>goSettings('goals')}/>}
           {renderFuel(m,()=>{setTab('diet');setDietView(isT?'today':'history');})}
           <div className="x-grid2">
-            <button className="x-card mint sb" onClick={()=>goWorkout(day)} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8,padding:'16px 10px'}}>
+            <button className="x-card mint sb" onClick={()=>openStepsPage(day)} aria-label="Steps and walks" style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8,padding:'16px 10px'}}>
               <span className="x-eyebrow" style={{color:'var(--on-mint-c)',alignSelf:'flex-start',paddingLeft:6}}>Move</span>
               <WavyRing value={tot.best} max={WALK_GOAL.day} size={124} color="var(--mint)" track="rgba(0,0,0,.32)">
                 <span className="x-num" style={{fontSize:24,color:'var(--fg)',display:'block'}}>{tot.best>=10000?(tot.best/1000).toFixed(1)+'k':fmtN(tot.best)}</span>
                 <span style={{fontSize:11,fontWeight:750}}>of {fmtN(WALK_GOAL.day)}</span>
               </WavyRing>
-              <span style={{fontSize:13,fontWeight:750}}>{tot.km.toFixed(1)} km · {walksN} walk{walksN===1?'':'s'}</span>
+              <span style={{fontSize:13,fontWeight:750}}>{tot.km.toFixed(1)} km · {walksN} walk{walksN===1?'':'s'}{mv.kcal?` · ${fmtN(mv.kcal)} kcal`:''}</span>
             </button>
             <button className="x-card" onClick={()=>goWorkout(day)} style={{background:cont,color:onc,borderRadius:'18px 40px 18px 40px',display:'flex',flexDirection:'column',gap:8,padding:'16px'}}>
               <span className="x-eyebrow" style={{color:onc}}>Train</span>
@@ -3366,8 +3587,8 @@ Reply ONLY with valid JSON (no markdown):
           <div className="t-reading" style={{color:'var(--fg2)'}}>{ins.summary}</div>
           {ins.walk_insight&&<div className="x-card mint" style={{padding:'12px 14px',borderRadius:20}}>
             <div className="x-eyebrow" style={{color:'var(--on-mint-c)',marginBottom:6}}>🚶 Walks</div>
-            <div className="x-chips" style={{marginBottom:6}}>{WALK_SLOTS.map(sl=>{const mm=walkMetrics(walkLog[date]?.[sl.id]);if(!mm||!(mm.pace||mm.steps))return null;
-              return <span key={sl.id} className="x-tag" style={{background:'var(--bg)',color:'var(--on-mint-c)'}}>{sl.emoji} {mm.pace?`${fmtPace(mm.pace)}/km · ${mm.speed.toFixed(1)} km/h`:''}{mm.cadence?` · ${Math.round(mm.cadence)} spm`:''}{!mm.pace&&mm.steps?`${fmtN(mm.steps)} steps`:''}</span>;})}</div>
+            <div className="x-chips" style={{marginBottom:6}}>{moveDay(date).walks.map(w=>
+              <span key={w.id} className="x-tag" style={{background:'var(--bg)',color:'var(--on-mint-c)'}}>{w.emoji} {w.name} · {fmtN(w.steps)} steps{w.cadence?` · ${w.cadence} spm`:''}</span>)}</div>
             <div className="t-reading" style={{color:'var(--fg)'}}>{ins.walk_insight}</div></div>}
           {[['🏆 Top win',ins.top_win,'pri'],['🎯 Next session',ins.focus_next,'amber'],['🌙 Recovery',ins.recovery_tip,'violet']].map(([l,t,c])=>t&&(
             <div key={l} className={`x-card ${c}`} style={{padding:'12px 14px',borderRadius:20}}>
@@ -3384,9 +3605,9 @@ Reply ONLY with valid JSON (no markdown):
     const [ac,cont,onc]=tone(info?.type);
     const exs=sug?.exercises||[];const exDone=exs.filter(ex=>exDoneOn(date,ex)).length;
     const shift=n=>{const s=calAddDays(date,n);if(s>calAddDays(TODAY,7))return;setSelectedDate(s);setNoteText((fitLogs[s]?._note)||'');};
-    const wt=weightLog[date];const day=walkLog[date]||{};const tot=walkDayTotals(day);
+    const wt=weightLog[date];const mv=moveDay(date);const tot={best:mv.steps};
     const exKcal=exs.reduce((t,ex)=>{const l=dl[ex.id]||{};return t+(l.done?calcCal(ex.id,l.sets||ex.sets,l.reps||ex.reps).kcal:0);},0); // walk-covered items are counted in walk kcal, not here
-    const walkKcal=Math.round(tot.km*(parseFloat(wt)||latestWeight?.w||79)*0.5);
+    const walkKcal=mv.kcal;   // walks + everyday steps
     const customs=dl._custom||[];
     const dm=macrosOf(date);
     let hint=null;
@@ -3427,24 +3648,16 @@ Reply ONLY with valid JSON (no markdown):
 
         <div className="x-grid3">
           <button className="x-stat" onClick={()=>openWeight(date)} style={{border:'none',textAlign:'left',color:'var(--fg)'}}><small>Weight</small><b style={{color:'var(--violet)'}}>{wt||'—'}</b><i>{wt?'kg':'+ log'}</i></button>
-          <button className="x-stat" onClick={()=>openSteps(date)} style={{border:'none',textAlign:'left',color:'var(--fg)'}}><small>Steps</small><b style={{color:tot.best>=WALK_GOAL.day?'var(--mint)':'var(--pri)'}}>{tot.best?(tot.best/1000).toFixed(1)+'k':'—'}</b><i>{day.dayTotal?'phone total':'+ phone total'}</i></button>
-          <div className="x-stat"><small>Burned</small><b style={{color:'var(--amber)'}}>{exKcal+walkKcal||'—'}</b><i>kcal est.</i></div>
+          <button className="x-stat" onClick={()=>openStepsPage(date)} style={{border:'none',textAlign:'left',color:'var(--fg)'}}><small>Steps</small><b style={{color:tot.best>=WALK_GOAL.day?'var(--mint)':'var(--pri)'}}>{tot.best?(tot.best/1000).toFixed(1)+'k':'—'}</b><i>{mv.src==='hc'?'from phone':tot.best?'by the hour →':'+ add'}</i></button>
+          <div className="x-stat"><small>Burned</small><b style={{color:'var(--amber)'}}>{exKcal+walkKcal||'—'}</b><i>{exKcal&&walkKcal?'gym + steps':walkKcal?'from steps':'kcal est.'}</i></div>
         </div>
 
-        <div className="x-sec"><h2 className="x-h2">Walks</h2><span className="x-sub">{fmtN(tot.best)} / {fmtN(WALK_GOAL.day)} steps</span></div>
-        <div className="x-grid2">
-          {WALK_SLOTS.map((sl,i)=>{const w=day[sl.id];const has=w&&(w.steps||w.km||w.from);const mm=walkMetrics(w);
-            return(
-            <button key={sl.id} className={`x-card ${has?'mint':''}`} onClick={()=>openWalk(date,sl.id)} style={{borderRadius:i?'18px 36px 18px 36px':'36px 18px 36px 18px',display:'flex',flexDirection:'column',gap:6,minHeight:132}}>
-              <Shape kind="sunny" size={42} fill={has?'rgba(0,0,0,.3)':'var(--s3)'} font={20}>{sl.emoji}</Shape>
-              <span style={{fontWeight:820,fontSize:16,color:'var(--fg)'}}>{sl.label}</span>
-              {has?<>
-                <span style={{fontSize:13,fontWeight:700}}>{w.from&&w.to?`${w.from}–${w.to} · ${mm.min} min`:'Time not set'}</span>
-                <span style={{fontSize:13,fontWeight:700}}>{mm.steps?fmtN(mm.steps)+' steps':''}{mm.km?` · ${mm.km.toFixed(1)} km`:''}</span>
-                {mm.pace&&<span style={{fontSize:12,fontWeight:650,opacity:.9}}>{fmtPace(mm.pace)}/km · {mm.speed.toFixed(1)} km/h</span>}
-              </>:<span className="x-sub">+ Log · target {fmtN(WALK_GOAL.steps)} steps</span>}
-            </button>);})}
-        </div>
+        <div className="x-sec"><h2 className="x-h2">Walks</h2><button className="x-btn sm tonal" onClick={()=>openStepsPage(date)}>Steps by hour</button></div>
+        {mv.walks.length?<div style={{display:'flex',flexDirection:'column',gap:10}}>{mv.walks.map(w=>renderWalkRow(date,w))}</div>
+          :<button className="x-card" onClick={()=>openStepsPage(date)} style={{textAlign:'left',color:'var(--fg)',display:'flex',gap:12,alignItems:'center'}}>
+            <Shape kind="sunny" size={42} fill="var(--s3)" font={20}>🚶</Shape>
+            <span style={{flex:1}}><b style={{display:'block'}}>No walks {isT?'yet today':'this day'}</b>
+              <span className="x-sub">{mv.src==='hc'?'Walks show up here by themselves from your phone’s steps.':'Connect Health Connect and walks show up here by themselves.'}</span></span></button>}
 
         {exs.length>0&&<>
           <div className="x-sec"><h2 className="x-h2">Workout</h2><span className="x-sub">{exDone}/{exs.length}</span></div>
@@ -3503,23 +3716,23 @@ Reply ONLY with valid JSON (no markdown):
     else{const ms=calStartOfMonth(calAnchor);days=Array.from({length:calDaysInMonth(calAnchor)},(_,i)=>calAddDays(ms,i));
       label=new Date(calAnchor+'T00:00:00').toLocaleDateString('en-IN',{month:'long',year:'numeric'});}
     const doneOf=d=>!!fitLogs[d]?._dayComplete;
-    const stepsOf=d=>walkDayTotals(walkLog[d]).best;
+    const stepsOf=d=>moveDay(d).steps;
     const sess=days.filter(doneOf);
     const planned=days.filter(d=>getDayInfo(d)?.type!=='rest'&&d<=TODAY&&d>=PLAN_START).length;
     const wts=days.filter(d=>weightLog[d]).map(d=>parseFloat(weightLog[d]));
     const sd=days.filter(d=>stepsOf(d)>0);const stepSum=sd.reduce((a,d)=>a+stepsOf(d),0);
     const hit=sd.filter(d=>stepsOf(d)>=WALK_GOAL.day).length;
-    const km=days.reduce((a,d)=>a+walkDayTotals(walkLog[d]).km,0);
+    const km=days.reduce((a,d)=>a+moveDay(d).km,0);
     const gymK=sess.reduce((a,d)=>a+({upper:280,lower:320,full_core:350,run_easy:220,run_tempo:280,cardio_core:250}[getDayInfo(d)?.type]||250),0);
-    const walkK=Math.round(km*(latestWeight?.w||79)*0.5);
+    const walkK=days.reduce((a,d)=>a+moveDay(d).kcal,0);   // walks + everyday steps
     const goDay=d=>{setSelectedDate(d);setFitView('day');setNoteText((fitLogs[d]?._note)||'');};
     const k=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':String(n);
     const stats=(
       <div className="x-grid2">
         <div className="x-stat"><small>Workouts</small><b style={{color:'var(--mint)'}}>{sess.length}</b><i>of {planned} planned</i></div>
         <div className="x-stat"><small>Steps</small><b style={{color:'var(--pri)'}}>{k(stepSum)}</b><i>{sd.length?`avg ${fmtN(stepSum/sd.length)} · ${hit} day${hit===1?'':'s'} ≥ goal`:'none logged'}</i></div>
-        <div className="x-stat"><small>Walked</small><b style={{color:'var(--mint)'}}>{km.toFixed(1)} km</b><i>{days.reduce((a,d)=>a+walkDayTotals(walkLog[d]).min,0)} min</i></div>
-        <div className="x-stat"><small>Burned</small><b style={{color:'var(--amber)'}}>{gymK+walkK?'~'+k(gymK+walkK):'—'}</b><i>gym + walks</i></div>
+        <div className="x-stat"><small>Walked</small><b style={{color:'var(--mint)'}}>{km.toFixed(1)} km</b><i>{days.reduce((a,d)=>a+moveDay(d).walkMin,0)} min of walks</i></div>
+        <div className="x-stat"><small>Burned</small><b style={{color:'var(--amber)'}}>{gymK+walkK?'~'+k(gymK+walkK):'—'}</b><i>gym + steps</i></div>
         {wts.length>0&&<div className="x-stat" style={{gridColumn:'1 / -1'}}><small>Weight</small><b style={{color:'var(--violet)'}}>{(wts.reduce((a,b)=>a+b,0)/wts.length).toFixed(1)} kg</b>
           <i>{wts.length>1?`${wts[wts.length-1]-wts[0]>0?'+':''}${(wts[wts.length-1]-wts[0]).toFixed(1)} kg over the period`:'1 weigh-in'}</i></div>}
       </div>);
@@ -3540,9 +3753,7 @@ Reply ONLY with valid JSON (no markdown):
                 <div style={{fontWeight:700,marginTop:4}}>{doneOf(d)?'✓ Completed':info?.type==='rest'?'Rest & recover':d===TODAY?'Not done yet':d>TODAY?'Upcoming':'Missed'}</div></div>
             </div>
             {stats}
-            {WALK_SLOTS.some(sl=>w[sl.id])&&<div className="x-list">{WALK_SLOTS.map(sl=>{const ww=w[sl.id];if(!ww)return null;const mm=walkMetrics(ww);
-              return <button key={sl.id} className="x-item" onClick={()=>openWalk(d,sl.id)}><Shape kind="sunny" size={40} fill="var(--mint-c)" font={18}>{sl.emoji}</Shape>
-                <span style={{flex:1}}><span className="t" style={{display:'block'}}>{sl.label} walk</span><span className="s">{[ww.from&&ww.to?`${ww.from}–${ww.to}`:null,mm.steps?fmtN(mm.steps)+' steps':null,mm.km?mm.km.toFixed(2)+' km':null].filter(Boolean).join(' · ')}</span></span></button>;})}</div>}
+            {moveDay(d).walks.length>0&&<div style={{display:'flex',flexDirection:'column',gap:10}}>{moveDay(d).walks.map(w=>renderWalkRow(d,w))}</div>}
             {note&&<div className="x-card" style={{fontStyle:'italic',color:'var(--fg2)'}}>“{note}”</div>}
             <button className="x-btn wide tonal" onClick={()=>goDay(d)}>Open this day</button>
           </>);})()}
@@ -3591,7 +3802,7 @@ Reply ONLY with valid JSON (no markdown):
 
         {cv==='year'&&(()=>{const y=calAnchor.slice(0,4);
           const months=Array.from({length:12},(_,i)=>{const mk=`${y}-${String(i+1).padStart(2,'0')}`;const md=days.filter(d=>d.startsWith(mk));const s=md.filter(d=>stepsOf(d)>0);
-            return {mk,steps:s.reduce((a,d)=>a+stepsOf(d),0),avg:s.length?s.reduce((a,d)=>a+stepsOf(d),0)/s.length:0,km:md.reduce((a,d)=>a+walkDayTotals(walkLog[d]).km,0),gym:md.filter(doneOf).length};});
+            return {mk,steps:s.reduce((a,d)=>a+stepsOf(d),0),avg:s.length?s.reduce((a,d)=>a+stepsOf(d),0)/s.length:0,km:md.reduce((a,d)=>a+moveDay(d).km,0),gym:md.filter(doneOf).length};});
           const mx=Math.max(1,...months.map(m=>m.steps));
           return(<>{stats}
             <div className="x-list">{months.filter(m=>m.mk<=TODAY.slice(0,7)).reverse().map(m=>{const empty=!m.steps&&!m.gym;return(
@@ -3618,7 +3829,7 @@ Reply ONLY with valid JSON (no markdown):
     const proS=ser(d=>dietGrouped[d]?.length?rnd(macrosOf(d).pro):null);
     const calS=ser(d=>dietGrouped[d]?.length?rnd(macrosOf(d).cal):null);
     const wS=ser(d=>weightLog[d]?parseFloat(weightLog[d]):null);
-    const stS=ser(d=>walkDayTotals(walkLog[d]).best||null);
+    const stS=ser(d=>moveDay(d).steps||null);
     const waS=ser(d=>waterMl(d)?+(waterMl(d)/1000).toFixed(2):null);
     const slS=ser(d=>sleepMin(sleepLog[d])?+(sleepMin(sleepLog[d])/60).toFixed(2):null);
     const bf=currentBF;
@@ -4714,6 +4925,7 @@ Reply ONLY with valid JSON (no markdown):
       // 1. Steps from the phone → "phone steps" for the last 7 days
       if(hcT.steps&&g.read.includes('Steps')){
         const r=await H.readSteps(7);
+        try{const rb=await H.readStepBuckets(TODAY,7);mergeBuckets(rb.days);}catch(_){}
         setWalkLog(p=>{let n=p,ch=false;
           for(const x of r.days||[]){const cur=p[x.date]||{};
             if(x.steps>0&&(!cur.dayTotal||cur.dayTotalSrc==='hc')&&String(cur.dayTotal)!==String(x.steps)){
@@ -4856,7 +5068,8 @@ Reply ONLY with valid JSON (no markdown):
       {toast&&<div className="x-snack" role="status" style={sheet?{top:'calc(12px + env(safe-area-inset-top,0px))',bottom:'auto'}:null}><i style={{background:toast.color}}/>{toast.msg}</div>}
       {setupOpen&&!sheet&&renderSetup()}
       {renderBigWater()}
-      <div style={{display:sheet||setupOpen?'none':'flex',flexDirection:'column',flex:1}}>
+      {stepsPage&&!sheet&&!setupOpen&&<div className="page-pad" style={{flex:1,display:'flex',flexDirection:'column'}}>{renderStepsPage()}</div>}
+      <div style={{display:sheet||setupOpen||stepsPage?'none':'flex',flexDirection:'column',flex:1}}>
       {tab==='diet'&&<div>{head('Food',dateLong(TODAY))}<div style={{padding:'0 16px 12px'}}><Seg items={[['today','Today'],['history','History']]} value={pillPreview?.dietView||dietView} onChange={setDietView}/></div></div>}
       {tab==='fitness'&&<div>{head('Fitness',fitView==='day'?'Plan · walks · workout':'Your history')}<div style={{padding:'0 16px 12px'}}><Seg items={[['day','Today'],['calendar','History']]} value={pillPreview?.fitView||fitView} onChange={setFitView}/></div></div>}
       {tab==='progress'&&head('Progress','Body, trends and weekly review')}
@@ -5029,6 +5242,46 @@ function Shape({kind='cookie9',size=44,fill='var(--s3)',color,children,style,fon
 }
 
 // Wavy linear progress (M3 Expressive): wavy active track + flat remaining track
+// Steps per hour: pill bars, walks in mint, this hour in the accent; tap a bar for its number
+function HourChart({hours,walks,now,sel,onSel}){
+  const W=336,H=172,top=30,bot=H-24,gap=3,bw=(W-gap*23)/24;
+  const mx=Math.max(600,...hours);
+  const inWalk=new Set();(walks||[]).forEach(w=>{const e=w.end||w.start+(w.min||10);for(let h=Math.floor(w.start/60);h<=Math.floor((e-1)/60);h++)inWalk.add(h);});
+  const top1=Math.max(...hours),peak=top1>0?hours.indexOf(top1):-1,lab=sel!=null?sel:peak;
+  const xOf=h=>h*(bw+gap),hOf=v=>v?Math.max(bw,(bot-top)*v/mx):4;
+  const kfmt=v=>v>=1000?(v/1000).toFixed(v>=10000?0:1)+'k':String(v);
+  return(<svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Steps by hour" style={{display:'block',overflow:'visible'}}>
+    {[.5,1].map(f=><line key={f} x1="0" x2={W} y1={bot-(bot-top)*f} y2={bot-(bot-top)*f} stroke="var(--line)" strokeWidth="1" strokeDasharray="2 6"/>)}
+    {hours.map((v,h)=>{const hh=hOf(v);const fill=h===sel?'var(--fg)':inWalk.has(h)?'var(--mint)':h===now?'var(--pri)':'var(--pri-c)';
+      return(<g key={h} onClick={()=>onSel&&onSel(h===sel?null:h)} style={{cursor:'pointer'}}>
+        <rect x={xOf(h)-gap/2} y={0} width={bw+gap} height={H} fill="transparent"/>
+        <rect x={xOf(h)} y={bot-hh} width={bw} height={hh} rx={bw/2} className="lm-grow" style={{fill,animationDelay:`${h*16}ms`}}/>
+      </g>);})}
+    {lab>=0&&hours[lab]>0&&(()=>{const t=kfmt(hours[lab]),w=t.length*7.5+16,cx=Math.min(W-w/2,Math.max(w/2,xOf(lab)+bw/2)),y=bot-hOf(hours[lab])-26;
+      return(<g style={{pointerEvents:'none'}}><rect x={cx-w/2} y={y} width={w} height={20} rx={10} style={{fill:sel!=null?'var(--fg)':'var(--s3)'}}/>
+        <text x={cx} y={y+14} textAnchor="middle" fontSize="12" fontWeight="800" style={{fill:sel!=null?'var(--bg)':'var(--fg)'}}>{t}</text></g>);})()}
+    {[0,6,12,18].map(h=><text key={h} x={xOf(h)} y={H-6} fontSize="11" fontWeight="700" style={{fill:'var(--fg2)'}}>{h===0?'12 AM':h===12?'12 PM':h<12?h+' AM':(h-12)+' PM'}</text>)}
+    <text x={W} y={H-6} textAnchor="end" fontSize="11" fontWeight="700" style={{fill:'var(--fg2)'}}>12 AM</text>
+  </svg>);
+}
+// Steps per day (or per month): pill bars with a dotted goal line; days at goal in mint
+function PeriodBars({items,goal,onPick}){
+  const W=336,H=176,top=26,bot=H-24,n=items.length,gap=n>14?2:n>8?4:8,bw=(W-gap*(n-1))/n;
+  const mx=Math.max(goal*1.2,...items.map(i=>i.v||0));const gy=bot-(bot-top)*goal/mx;
+  return(<svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Steps per day" style={{display:'block',overflow:'visible'}}>
+    <line x1="0" x2={W} y1={gy} y2={gy} stroke="var(--mint)" strokeWidth="2.5" strokeDasharray="0.1 7" strokeLinecap="round"/>
+
+    {items.map((it,i)=>{const x=i*(bw+gap),v=it.v||0,hh=v?Math.max(Math.min(bw,8),(bot-top)*v/mx):4;
+      const fill=v>=goal?'var(--mint)':it.today?'var(--pri)':'var(--pri-c)';
+      return(<g key={it.key} onClick={()=>it.pickable!==false&&onPick&&onPick(it)} style={{cursor:'pointer',opacity:it.future?.35:1}}>
+        <rect x={x-gap/2} y={0} width={bw+gap} height={H} fill="transparent"/>
+        <rect x={x} y={bot-hh} width={bw} height={hh} rx={Math.min(bw/2,12)} className="lm-grow" style={{fill,animationDelay:`${i*(n>14?8:25)}ms`}}/>
+        {it.show&&<text x={x+bw/2} y={H-6} textAnchor="middle" fontSize="11" fontWeight={it.today?850:700} style={{fill:it.today?'var(--pri)':'var(--fg2)'}}>{it.label}</text>}
+      </g>);})}
+    <g style={{pointerEvents:'none'}}><rect x={W-58} y={gy-11} width={58} height={22} rx={11} style={{fill:'var(--bg)',stroke:'var(--mint)',strokeWidth:1.5}}/>
+      <text x={W-29} y={gy+4} textAnchor="middle" fontSize="11" fontWeight="800" style={{fill:'var(--mint)'}}>goal {goal>=1000?(goal/1000)+'k':goal}</text></g>
+  </svg>);
+}
 function WavyBar({value=0,max=1,color='var(--pri)',track='rgba(255,255,255,.12)',h=14,over=false}){
   const W=300,p=Math.max(0,Math.min(1,max?value/max:0)),x=p*W,mid=h/2,amp=h*.2,wl=22,sw=Math.max(3.5,h*.3);
   let d='';for(let i=0;i<=x;i+=1.5){d+=(i?'L':'M')+i.toFixed(1)+' '+(mid+amp*Math.sin(i/wl*2*Math.PI)).toFixed(2);}

@@ -21,6 +21,17 @@
     {
       "text": "Water: a drop falls into the glass when you tap +250 or +500. When you log from a reminder notification, a big glass fills in the middle of the screen and then shrinks into the small one.",
       "img": "docs/whatsnew/water-drop.gif"
+    },
+    {
+      "text": "Steps by the hour: tap the Move card on Home to see today's steps as a chart, with your walks found and named for you (for example Morning walk, Brisk evening walk, Night stroll). No need to log walks yourself.",
+      "img": "docs/whatsnew/steps-day.png"
+    },
+    {
+      "text": "The Steps page has Day, Week, Month and Year views, with a goal line, your best day and totals.",
+      "img": "docs/whatsnew/steps-week.png"
+    },
+    {
+      "text": "Calories burned now count all your steps, not just logged walks and workouts. Each walk shows its own calories."
     }
   ],
   "releases": [
