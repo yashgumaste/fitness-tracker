@@ -38,6 +38,9 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
       if(/api\.github\.com/.test(String(u)))return{ok:true,status:200,json:async()=>({tag_name:'v99.1',html_url:'https://github.com/x/releases/v99.1',assets:[{name:'FitnessTracker-99.1.apk',browser_download_url:'https://github.com/x/FitnessTracker-99.1.apk'}]})};
       const body=o&&o.body?String(o.body):'';gem=/generativelanguage/.test(String(u));window.__aiCalls.push(String(u));
       if(/Split each meal/.test(body))return reply('[]');
+      // the free AI sometimes answers in words: first reply prose, the retry wraps JSON in a sentence
+      if(/cabbage rice/.test(body)){window.__jsonMode=/responseMimeType/.test(body);
+        return reply(/not valid JSON/.test(body)?'Sure! {"emoji":"🍚","items":[{"name":"cabbage rice","calories":420,"protein":9,"carbs":70,"fat":11}]} Hope that helps.':'Cabbage is on the list, so the gas risk is high.');}
       if(/JSON/.test(body))return reply(JSON.stringify({emoji:'🥚',items:[{name:'boiled egg',calories:140,protein:12,carbs:1,fat:10}]}));
       return reply('**Coach** looks good.');};
   });
@@ -79,6 +82,9 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   await step('Log food with AI',async()=>{await tab(0);await p.evaluate(()=>document.querySelector('.dock-add').click());await W();
     await click('.x-sheet button','Food');await p.fill('.x-sheet textarea','2 boiled eggs');await click('.x-sheet-foot button','Log it');await W(800);
     await tab(1);await expect('2 boiled eggs');await expect('140 kcal');});
+  await step('AI reply in words is handled',async()=>{await tab(0);await p.evaluate(()=>document.querySelector('.dock-add').click());await W();
+    await click('.x-sheet button','Food');await p.fill('.x-sheet textarea','1 plate cabbage rice');await click('.x-sheet-foot button','Log it');await W(1200);
+    await tab(1);await expect('420 kcal');if(!(await p.evaluate(()=>window.__jsonMode)))throw new Error('Gemini was not asked for JSON');});
   await step('Water',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Water');
     await click('.x-sheet button','Glass');await expect('250 ml');await close();});
   await step('Walk',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Walk');
