@@ -208,6 +208,16 @@
     }catch(_){return null;}
   }
 
+  // Download with Android's downloader and open the installer (falls back to the browser)
+  const AppUpdate=plug('AppUpdate');
+  if(AppUpdate)AppUpdate.addListener('update',e=>{const t=window.__lmToast;if(!t)return;
+    if(e.status==='installing')t('Tap Update on the next screen to install');
+    else if(e.status==='failed')t('Download failed — try again, or get it from the Releases page');});
+  async function downloadUpdate(u){
+    if(AppUpdate){try{await AppUpdate.download({url:u.url,name:'FitnessTracker-'+u.latest+'.apk'});return 'native';}catch(e){console.warn('update',e);}}
+    openUrl(u.page||u.url);return 'browser';
+  }
+
   /* ── Back button: close a sheet / go home / leave ── */
   if(AppP){
     let lastBack=0;
@@ -254,6 +264,6 @@
   window.LMNative={hc,provider,setProvider:p=>{try{localStorage.setItem('lm-ai-provider',p);}catch(_){}},hasFreeKey,
     setGeminiKey:async k=>{gemKeyCache=k||null;await kv.set('gemini_key',k||null);},hasGeminiKey:async()=>!!(await kv.get('gemini_key')),
 isNative,kv,ask,usage,MODELS,setKey:async k=>{keyCache=k||null;await kv.set('anthropic_key',k||null);},hasKey:async()=>!!(await apiKey()),
-    planWater,testNotification,shareBackup,openUrl,bars,setIcon,checkUpdate,version:'__APP_VERSION__',
+    planWater,testNotification,shareBackup,openUrl,bars,setIcon,checkUpdate,downloadUpdate,version:'__APP_VERSION__',
     releasesUrl:'https://github.com/'+REPO+'/releases/latest'};
 })();

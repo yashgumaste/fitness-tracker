@@ -4665,7 +4665,8 @@ Reply ONLY with valid JSON (no markdown):
     run();window.addEventListener('lm-resume',run);return()=>window.removeEventListener('lm-resume',run);
   },[]);
   const updSkipped=update&&(()=>{try{return localStorage.getItem('lm-update-skip')===update.latest;}catch(_){return false;}})();
-  const getUpdate=u=>{window.LMNative.openUrl(u.url);showToast('Downloading '+u.latest+' — open it when done to install','var(--ok)');};
+  const getUpdate=async u=>{const how=await window.LMNative.downloadUpdate(u);
+    showToast(how==='native'?'Downloading '+u.latest+'… the installer opens when it’s done':'Download '+u.latest+' from the page, then open it to install','var(--ok)');};
   useEffect(()=>{if(storageReady&&!prefs.setupDone&&!setupOpen)startSetup('welcome');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[storageReady]);

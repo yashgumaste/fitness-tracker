@@ -7,7 +7,7 @@ const run=parseInt(process.env.RUN||'1',10);
 // Manifest
 const mf=path.join(app,'src/main/AndroidManifest.xml');
 let m=fs.readFileSync(mf,'utf8');
-for(const perm of ['android.permission.POST_NOTIFICATIONS','android.permission.RECEIVE_BOOT_COMPLETED','android.permission.WAKE_LOCK']){
+for(const perm of ['android.permission.POST_NOTIFICATIONS','android.permission.RECEIVE_BOOT_COMPLETED','android.permission.WAKE_LOCK','android.permission.REQUEST_INSTALL_PACKAGES']){
   if(!m.includes(perm))m=m.replace('</manifest>',`    <uses-permission android:name="${perm}" />\n</manifest>`);
 }
 if(!/windowSoftInputMode/.test(m))m=m.replace(/<activity\b/,'<activity\n            android:windowSoftInputMode="adjustResize"');
@@ -75,6 +75,7 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 const javaDir=path.join(app,'src/main/java/com/yashgumaste/fitnesstracker');
 fs.copyFileSync(path.join(__dirname,'..','native','AppIconPlugin.java'),path.join(javaDir,'AppIconPlugin.java'));
 fs.copyFileSync(path.join(__dirname,'..','native','HealthConnectPlugin.kt'),path.join(javaDir,'HealthConnectPlugin.kt'));
+fs.copyFileSync(path.join(__dirname,'..','native','AppUpdatePlugin.java'),path.join(javaDir,'AppUpdatePlugin.java'));
 const ma=path.join(javaDir,'MainActivity.java');
 let j=fs.readFileSync(ma,'utf8');
 if(!j.includes('AppIconPlugin')){
@@ -84,6 +85,7 @@ if(!j.includes('AppIconPlugin')){
     public void onCreate(android.os.Bundle savedInstanceState) {
         registerPlugin(AppIconPlugin.class);
         registerPlugin(HealthConnectPlugin.class);
+        registerPlugin(AppUpdatePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }`);
