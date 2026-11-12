@@ -1,0 +1,14 @@
+{
+  "appId": "com.yashgumaste.fitnesstracker",
+  "appName": "Fitness Tracker",
+  "webDir": "www",
+  "backgroundColor": "#000000",
+  "android": {
+    "adjustMarginsForEdgeToEdge": "force",
+    "backgroundColor": "#000000"
+  },
+  "plugins": {
+    "LocalNotifications": { "smallIcon": "ic_stat_water", "iconColor": "#4FC3F7" },
+    "StatusBar": { "overlaysWebView": false, "style": "DARK", "backgroundColor": "#000000" }
+  }
+}

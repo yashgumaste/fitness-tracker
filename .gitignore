@@ -1,0 +1,10 @@
+node_modules/
+www/
+android/
+*.apk
+.DS_Store
+test-results/
+signing/
+*.jks
+*.keystore
+secrets*.txt
