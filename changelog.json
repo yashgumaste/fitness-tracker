@@ -1,31 +1,36 @@
 {
-  "unreleased": [
-    {
-      "text": "While the big glass fills after logging from a reminder, the small glass on the Water card stays hidden until the big one lands in its place."
-    },
-    {
-      "text": "Water reminder buttons (250 ml / 500 ml) now log the drink without opening the app, and the notification changes to show it was logged and your total for today."
-    },
-    {
-      "text": "Tapping the water reminder itself opens the app and asks how much you drank: a glass, a bottle or another amount. Then the big glass fills with that amount.",
-      "img": "docs/whatsnew/water-pick.png"
-    },
-    {
-      "text": "Water and move reminders show the app's icon, with a water or walking picture inside the notification, so they're easy to spot."
-    },
-    {
-      "text": "The app icon now matches your own custom accent colour too. There are 36 icon colours (your 12 presets plus a full colour wheel), and the app picks the closest the way your eye sees colour."
-    },
-    {
-      "text": "Food history: the coloured bar under each day now has a title (Where the calories came from) and labels: protein, carbs and fat with their share and grams. Meal tags spell out protein, carbs and fat instead of P, C and F.",
-      "img": "docs/whatsnew/calorie-split.png"
-    },
-    {
-      "text": "Step charts show the count on every bar. Tap a month in Year to open that month, and a day in Week or Month to see it hour by hour. Progress trend charts write the values on short ranges, and you can tap any point to see its value and date.",
-      "img": "docs/whatsnew/steps-counts.png"
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.18",
+      "date": "2026-11-14",
+      "items": [
+        {
+          "text": "While the big glass fills after logging from a reminder, the small glass on the Water card stays hidden until the big one lands in its place."
+        },
+        {
+          "text": "Water reminder buttons (250 ml / 500 ml) now log the drink without opening the app, and the notification changes to show it was logged and your total for today."
+        },
+        {
+          "text": "Tapping the water reminder itself opens the app and asks how much you drank: a glass, a bottle or another amount. Then the big glass fills with that amount.",
+          "img": "docs/whatsnew/water-pick.png"
+        },
+        {
+          "text": "Water and move reminders show the app's icon, with a water or walking picture inside the notification, so they're easy to spot."
+        },
+        {
+          "text": "The app icon now matches your own custom accent colour too. There are 36 icon colours (your 12 presets plus a full colour wheel), and the app picks the closest the way your eye sees colour."
+        },
+        {
+          "text": "Food history: the coloured bar under each day now has a title (Where the calories came from) and labels: protein, carbs and fat with their share and grams. Meal tags spell out protein, carbs and fat instead of P, C and F.",
+          "img": "docs/whatsnew/calorie-split.png"
+        },
+        {
+          "text": "Step charts show the count on every bar. Tap a month in Year to open that month, and a day in Week or Month to see it hour by hour. Progress trend charts write the values on short ranges, and you can tap any point to see its value and date.",
+          "img": "docs/whatsnew/steps-counts.png"
+        }
+      ]
+    },
     {
       "version": "1.15",
       "date": "2026-11-13",
