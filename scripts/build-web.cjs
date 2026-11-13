@@ -22,7 +22,7 @@ html=html.slice(0,i)+'<script>'+out.code+'</script>'+html.slice(j+9);
 const cl=fs.readFileSync(path.join(root,'changelog.json'),'utf8');JSON.parse(cl);
 html=html.replace('</head>',()=>`<script>window.LM_CHANGELOG=${cl.replace(/</g,'\\u003c')};</script>\n</head>`);
 fs.writeFileSync(path.join(www,'index.html'),html);
-fs.writeFileSync(path.join(www,'native.js'),fs.readFileSync(path.join(root,'src/native.js'),'utf8').replace(/__APP_VERSION__/g,version).replace('__GEMINI_FREE_KEY__',process.env.GEMINI_FREE_KEY||'__GEMINI_FREE_KEY__'));
+fs.writeFileSync(path.join(www,'native.js'),fs.readFileSync(path.join(root,'src/native.js'),'utf8').replace(/__APP_VERSION__/g,version).replace('__ICON_COLORS__',JSON.stringify(require('./app-icons.cjs').ACCENTS)).replace('__GEMINI_FREE_KEY__',process.env.GEMINI_FREE_KEY||'__GEMINI_FREE_KEY__'));
 
 // 2. Vendor: React UMD builds
 const nm=p=>path.join(root,'node_modules',p);
