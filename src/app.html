@@ -3255,7 +3255,7 @@ Reply ONLY with valid JSON (no markdown):
     return(
       <div className="x-card" style={{background:'var(--sky-c)',color:'var(--on-sky-c)',borderRadius:'18px 40px 18px 40px',display:'flex',gap:14,alignItems:'center',padding:'14px 16px'}}>
         <button onClick={()=>openSheet('water',{date:day},{amt:300})} aria-label="Open water log" style={{border:'none',background:'transparent',padding:0,display:'flex',alignItems:'center',gap:12,flex:1,minWidth:0,textAlign:'left',color:'inherit'}}>
-          <span id={day===TODAY&&tab==='home'?'lm-water-glass':undefined} style={{display:'flex'}}>
+          <span id={day===TODAY&&tab==='home'?'lm-water-glass':undefined} style={{display:'flex',visibility:bigWater&&day===TODAY?'hidden':'visible'}}>
             <WaterGlass pct={tot/goal} size={64} dropKey={waterFx&&waterFx.day===day&&!waterFx.bump?waterFx.n:undefined}
               drops={waterFx&&waterFx.ml>=500?2:1} bumpKey={waterFx&&waterFx.day===day&&waterFx.bump?waterFx.n:undefined}/></span>
           <span style={{minWidth:0}}>

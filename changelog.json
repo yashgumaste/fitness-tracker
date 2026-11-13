@@ -1,5 +1,9 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "While the big glass fills after logging from a reminder, the small glass on the Water card stays hidden until the big one lands in its place."
+    }
+  ],
   "releases": [
     {
       "version": "1.15",

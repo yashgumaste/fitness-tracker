@@ -14,6 +14,9 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   const errors=[],steps=[];
   p.on('pageerror',e=>errors.push('page error: '+e.message));
   p.on('console',m=>{if(m.type()==='error'&&!/favicon|ERR_FILE_NOT_FOUND/.test(m.text()))errors.push('console: '+m.text());});
+  // What's new pictures come from GitHub; serve a blank image so the test never depends on the network
+  const blank=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=','base64');
+  await p.route(/raw\.githubusercontent\.com/,r=>r.fulfill({status:200,contentType:'image/png',body:blank}));
   await p.clock.setFixedTime(new Date('2026-11-09T20:30:00+05:30'));
   await p.addInitScript(()=>{
     const at=(d,h)=>new Date(`${d}T${h}:00+05:30`).toISOString();
