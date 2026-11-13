@@ -1167,7 +1167,7 @@ function getDietAdaptedWorkout(scheduledType, dietMacros, fitLogs, dateStr){
   if(lowFuel){
     // Too little food → keep it light, mobility only
     return{type:'cardio_core',label:'Light Session',icon:'🌿',adapted:true,
-      reason:`Low intake (${Math.round(cal)} kcal, ${Math.round(pro)}g P) — lighter session to avoid muscle breakdown`};
+      reason:`Low intake (${Math.round(cal)} kcal, ${Math.round(pro)} g protein) — lighter session to avoid muscle breakdown`};
   }
 
   if(highCarb){
@@ -1182,7 +1182,7 @@ function getDietAdaptedWorkout(scheduledType, dietMacros, fitLogs, dateStr){
     // Great intake → stick to schedule, maybe upgrade cardio to tempo
     if(scheduledType==='run_easy'){
       return{type:'run_tempo',label:'Upgrade: Sprint Intervals',icon:'⚡',adapted:true,
-        reason:`Well fuelled (${Math.round(cal)} kcal, ${Math.round(pro)}g P) — energy supports high-intensity intervals today`};
+        reason:`Well fuelled (${Math.round(cal)} kcal, ${Math.round(pro)} g protein) — energy supports high-intensity intervals today`};
     }
     return{...getDayInfo(dateStr),adapted:true,
       reason:`Well fuelled (${Math.round(pro)}g protein) — stick to the plan and push hard 💪`};
@@ -3277,8 +3277,8 @@ Reply ONLY with valid JSON (no markdown):
           <span style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:7}}>
             {m.cal>0?<>
               <span className="x-tag" style={{background:'var(--pri-c)',color:'var(--on-pri-c)'}}>{fmtN(m.cal)} kcal</span>
-              <span className="x-tag" style={{background:'var(--violet-c)',color:'var(--on-violet-c)'}}>{rnd(m.pro)}g P</span>
-              <span className="x-tag">{rnd(m.carbs)}g C</span><span className="x-tag">{rnd(m.fat)}g F</span>
+              <span className="x-tag" style={{background:'var(--violet-c)',color:'var(--on-violet-c)'}}>{rnd(m.pro)} g protein</span>
+              <span className="x-tag" style={{background:'var(--amber-c)',color:'var(--on-amber-c)'}}>{rnd(m.carbs)} g carbs</span><span className="x-tag" style={{background:'var(--pink-c)',color:'var(--on-pink-c)'}}>{rnd(m.fat)} g fat</span>
             </>:<span className="x-tag" style={{background:'var(--amber-c)',color:'var(--on-amber-c)'}}>Macros pending</span>}
             {e.carbHeavy&&<span className="x-tag" style={{background:'var(--amber-c)',color:'var(--on-amber-c)'}}>Carb-heavy</span>}
             {e.gasRisk&&<span className="x-tag" style={{background:'var(--err-c)',color:'var(--on-err-c)'}}>💨 Gas risk</span>}
@@ -3585,12 +3585,22 @@ Reply ONLY with valid JSON (no markdown):
                 </div>
                 <div style={{textAlign:'right'}}>
                   <div className="x-num" style={{fontSize:24,color:calOk?'var(--mint)':tot.cal>GOALS.calories.max?'var(--err)':'var(--amber)'}}>{fmtN(tot.cal)}</div>
-                  <div style={{fontSize:12,fontWeight:700,color:'var(--fg2)'}}>kcal · <span style={{color:proOk?'var(--violet)':'var(--fg2)'}}>{rnd(tot.pro)} g P</span></div>
+                  <div style={{fontSize:12,fontWeight:700,color:'var(--fg2)'}}>kcal · <span style={{color:proOk?'var(--violet)':'var(--fg2)'}}>{rnd(tot.pro)} g protein</span></div>
                 </div>
               </div>
-              <div style={{display:'flex',gap:3,padding:'0 16px 12px'}} aria-label="Protein, carbs and fat split">
-                {[[pk,'var(--violet)'],[ck,'var(--amber)'],[fk,'var(--pink)']].map(([v,c],i)=>v>0&&<span key={i} style={{flex:v/sum,height:8,borderRadius:4,background:c}}/>)}
-              </div>
+              {tot.cal>0&&<div style={{padding:'0 16px 12px',display:'flex',flexDirection:'column',gap:6}}>
+                <div style={{fontSize:11.5,fontWeight:800,letterSpacing:'.06em',textTransform:'uppercase',color:'var(--fg2)'}}>Where the calories came from</div>
+                <div style={{display:'flex',gap:3}} aria-hidden="true">
+                  {[[pk,'var(--violet)'],[ck,'var(--amber)'],[fk,'var(--pink)']].map(([v,c],i)=>v>0&&<span key={i} style={{flex:v/sum,height:8,borderRadius:4,background:c}}/>)}
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+                  {[['Protein',pk,tot.pro,'var(--violet)'],['Carbs',ck,tot.carbs,'var(--amber)'],['Fat',fk,tot.fat,'var(--pink)']].map(([l,k,g,c])=>
+                    <div key={l} style={{display:'flex',flexDirection:'column',gap:1}}>
+                      <span style={{display:'flex',alignItems:'center',gap:6,fontSize:12.5,fontWeight:800,color:'var(--fg)'}}><i style={{width:10,height:10,borderRadius:5,background:c,display:'inline-block',flex:'none'}}/>{l}</span>
+                      <span style={{fontSize:12.5,fontWeight:700,color:'var(--fg2)',paddingLeft:16}}><b style={{color:c}}>{Math.round(100*k/sum)}%</b> · {rnd(g)} g</span>
+                    </div>)}
+                </div>
+              </div>}
               <div style={{padding:'0 8px 8px'}}>{es.map(renderEntry)}</div>
               {syms.length>0&&<div className="x-chips" style={{padding:'0 16px 10px'}}>
                 {syms.map(e=>{const sx=SYMPTOMS.find(x=>x.id===e.id);return sx?<button key={e.ts} className={`x-chip ${sx.id==='good'?'mint':'pink'}`} onClick={()=>openFeel(dk,e.id)}>{sx.emoji} {sx.label}{COUNT_IDS.includes(sx.id)&&(e.count||1)>1?` ×${e.count}`:''}</button>:null;})}
@@ -4384,7 +4394,7 @@ Reply ONLY with valid JSON (no markdown):
             <div className="x-list">{rows.map((r,i)=>{const p=parseFloat(r.protein)||0;return(
               <div key={i} className="x-item" style={{minHeight:52,alignItems:'flex-start',flexDirection:'column',gap:6}}>
                 <span style={{display:'flex',width:'100%',gap:8}}><span className="t" style={{flex:1,fontSize:14}}>{p>0&&p===topP?'★ ':''}{r.name}{r.gasRisk?' 💨':''}</span><b className="x-num" style={{fontSize:15,color:'var(--pri)'}}>{rnd(r.calories)}</b></span>
-                <span className="x-chips" style={{gap:4}}><span className="x-tag" style={{background:'var(--violet-c)',color:'var(--on-violet-c)'}}>{rnd(r.protein)}g P</span><span className="x-tag">{rnd(r.carbs)}g C</span><span className="x-tag">{rnd(r.fat)}g F</span></span>
+                <span className="x-chips" style={{gap:4}}><span className="x-tag" style={{background:'var(--violet-c)',color:'var(--on-violet-c)'}}>{rnd(r.protein)} g protein</span><span className="x-tag" style={{background:'var(--amber-c)',color:'var(--on-amber-c)'}}>{rnd(r.carbs)} g carbs</span><span className="x-tag" style={{background:'var(--pink-c)',color:'var(--on-pink-c)'}}>{rnd(r.fat)} g fat</span></span>
               </div>);})}</div></>}
           {!rows.length&&!m.cal&&<button className="x-btn tonal wide" style={{marginTop:14}} disabled={calcingEntries.has(e.id)} onClick={()=>calcEntry(e.id)}>{calcingEntries.has(e.id)?'Calculating…':'⚡ Calculate macros'}</button>}
           {(e.carbHeavy||e.gasRisk)&&<div className="x-chips" style={{marginTop:12}}>{e.carbHeavy&&<span className="x-chip amber">Carb-heavy</span>}{e.gasRisk&&<span className="x-chip err">💨 May cause gas</span>}</div>}
