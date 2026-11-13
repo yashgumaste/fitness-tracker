@@ -146,13 +146,23 @@
     }catch(e){console.warn('notifications setup',e);}
     return lnReady;
   }
-  async function planWater(cfg,lastDrinkTs){
-    if(!LN)return{ok:false,reason:'browser'};
-    await lnSetup();
-    const pend=await LN.getPending().catch(()=>({notifications:[]}));
-    const mine=(pend.notifications||[]).filter(n=>n.id>=WATER_BASE&&n.id<WATER_BASE+1000).map(n=>({id:n.id}));
-    if(mine.length)await LN.cancel({notifications:mine}).catch(()=>{});
-    if(!cfg||!cfg.on)return{ok:true,count:0};
+  // Newer builds post water reminders natively (buttons log without opening the app)
+  const WR=plug('WaterReminder');
+  if(WR){
+    WR.addListener('pick',()=>{if(window.__lmWaterPick)window.__lmWaterPick();else window.__lmWaterPickQueued=true;});
+    WR.takePick().then(r=>{if(r&&r.pick){if(window.__lmWaterPick)window.__lmWaterPick();else window.__lmWaterPickQueued=true;}}).catch(()=>{});
+  }
+  async function takeLoggedWater(){if(!WR)return[];try{return (await WR.takeLogged()).drinks||[];}catch(_){return[];}}
+  async function planWater(cfg,lastDrinkTs,todayMl,goal){
+    if(!LN&&!WR)return{ok:false,reason:'browser'};
+    if(LN){
+      await lnSetup();
+      // clear reminders scheduled the old way
+      const pend=await LN.getPending().catch(()=>({notifications:[]}));
+      const mine=(pend.notifications||[]).filter(n=>n.id>=WATER_BASE&&n.id<WATER_BASE+1000).map(n=>({id:n.id}));
+      if(mine.length)await LN.cancel({notifications:mine}).catch(()=>{});
+    }
+    if(!cfg||!cfg.on){if(WR)await WR.cancelAll().catch(()=>{});return{ok:true,count:0};}
     const perm=await LN.checkPermissions();
     if(perm.display!=='granted'){const p=await LN.requestPermissions();if(p.display!=='granted')return{ok:false,reason:'denied'};}
     const [sh,sm]=cfg.start.split(':').map(Number),[eh,em]=cfg.end.split(':').map(Number),every=Math.max(30,+cfg.every||90);
@@ -166,6 +176,11 @@
         out.push(at);
       }
     }
+    if(WR){
+      const d=new Date(),date=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      await WR.schedule({times:out,goal:+goal||3000,todayMl:+todayMl||0,date,gapMin:Math.round(every*0.75),lastDrink:lastDrinkTs||0});
+      return{ok:true,count:out.length,next:out[0]||null};
+    }
     await LN.schedule({notifications:out.map((at,i)=>({id:WATER_BASE+i,title:'💧 Drink water',body:LINES[i%LINES.length],
       channelId:'water',actionTypeId:'WATER',smallIcon:'ic_stat_water',iconColor:'#4FC3F7',schedule:{at:new Date(at),allowWhileIdle:true}}))});
     return{ok:true,count:out.length,next:out[0]||null};
@@ -173,6 +188,7 @@
   async function testNotification(){
     if(!LN)return false;await lnSetup();
     const p=await LN.requestPermissions();if(p.display!=='granted')return false;
+    if(WR){try{return (await WR.test()).ok;}catch(_){}}
     await LN.schedule({notifications:[{id:WATER_BASE+999,title:'💧 Drink water',body:'This is how your reminders will look',channelId:'water',
       actionTypeId:'WATER',smallIcon:'ic_stat_water',iconColor:'#4FC3F7',schedule:{at:new Date(Date.now()+3000),allowWhileIdle:true}}]});
     return true;
@@ -290,6 +306,6 @@
   window.LMNative={hc,provider,setProvider:p=>{try{localStorage.setItem('lm-ai-provider',p);}catch(_){}},hasFreeKey,
     setGeminiKey:async k=>{gemKeyCache=k||null;await kv.set('gemini_key',k||null);},hasGeminiKey:async()=>!!(await kv.get('gemini_key')),
 isNative,kv,ask,usage,MODELS,setKey:async k=>{keyCache=k||null;await kv.set('anthropic_key',k||null);},hasKey:async()=>!!(await apiKey()),
-    planWater,testNotification,planMove,testMove,shareBackup,openUrl,bars,setIcon,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
+    planWater,testNotification,takeLoggedWater,planMove,testMove,shareBackup,openUrl,bars,setIcon,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
     releasesUrl:'https://github.com/'+REPO+'/releases/latest'};
 })();

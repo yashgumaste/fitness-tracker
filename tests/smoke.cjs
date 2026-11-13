@@ -93,6 +93,12 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await click('.x-seg button','Day');await p.click('[aria-label="Earlier"]');await W();await expect('Back to today');
     await p.click('[aria-label="Back"]');await W();await expect('Timeline');});
   await step('Burned counts steps',async()=>{await tab(2);if(!(await has('from steps'))&&!(await has('gym + steps')))throw new Error('Burned does not include steps');});
+  await step('Water reminder tapped: pick an amount',async()=>{await tab(0);await p.evaluate(()=>window.__lmWaterPick());await W(700);
+    await expect('How much did you drink');await p.click('[aria-label="500 ml"]');await W(3600);
+    if(await has('How much did you drink'))throw new Error('picker did not close');});
+  await step('Water logged from notification buttons',async()=>{
+    await p.evaluate(()=>{window.LMNative.takeLoggedWater=async()=>{const r=window.__q||[];window.__q=[];return r;};window.__q=[{ts:Date.now()-60000,ml:250}];window.dispatchEvent(new Event('lm-resume'));});
+    await W(900);await expect('logged from the reminder');});
   await step('Move reminders',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Move reminders');
     await click('.x-seg button','On');await expect('Remind me after sitting for');await click('.x-chip','45 min');await click('.x-seg button','Off');
     await p.click('[aria-label="Back to settings"]');await W();});

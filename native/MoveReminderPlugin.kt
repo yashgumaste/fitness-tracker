@@ -168,9 +168,9 @@ object MoveCheck {
         val open = c.packageManager.getLaunchIntentForPackage(c.packageName)?.apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP }
         val pi = if (open != null) PendingIntent.getActivity(c, 7100, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE) else null
         val sat = if (mins >= 60 && mins % 60 == 0) "${mins / 60} hour${if (mins > 60) "s" else ""}" else "$mins minutes"
-        val icon = c.resources.getIdentifier("ic_stat_walk", "drawable", c.packageName).takeIf { it != 0 } ?: android.R.drawable.ic_dialog_info
         val n = NotificationCompat.Builder(c, CHANNEL)
-            .setSmallIcon(icon)
+            .setSmallIcon(Water.smallIcon(c)).setColor(0xFF5CF2A6.toInt())
+            .setLargeIcon(Water.largeIcon(c, "ic_large_walk"))
             .setContentTitle(if (test) "Test: time to move 🚶" else "Time to move 🚶")
             .setContentText("You've hardly moved in $sat. A 5-minute walk helps.")
             .setAutoCancel(true)

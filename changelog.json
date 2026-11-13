@@ -2,6 +2,16 @@
   "unreleased": [
     {
       "text": "While the big glass fills after logging from a reminder, the small glass on the Water card stays hidden until the big one lands in its place."
+    },
+    {
+      "text": "Water reminder buttons (250 ml / 500 ml) now log the drink without opening the app, and the notification changes to show it was logged and your total for today."
+    },
+    {
+      "text": "Tapping the water reminder itself opens the app and asks how much you drank: a glass, a bottle or another amount. Then the big glass fills with that amount.",
+      "img": "docs/whatsnew/water-pick.png"
+    },
+    {
+      "text": "Water and move reminders show the app's icon, with a water or walking picture inside the notification, so they're easy to spot."
     }
   ],
   "releases": [
