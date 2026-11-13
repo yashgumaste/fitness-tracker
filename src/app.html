@@ -1769,9 +1769,7 @@ function App(){
     root.dataset.theme=isLight?'light':'dark';
     window.LMNative&&window.LMNative.bars(isLight);
     // home-screen icon: the preset closest to the chosen accent
-    if(window.LMNative){const [r,g,b]=hex2rgb(hex);let best='Cyan',bd=1e9;
-      for(const [h,nm] of ACCENTS){const [r2,g2,b2]=hex2rgb(h);const dd=(r-r2)**2+(g-g2)**2+(b-b2)**2;if(dd<bd){bd=dd;best=nm;}}
-      window.LMNative.setIcon(best.toLowerCase());}
+    if(window.LMNative)window.LMNative.setIcon(hex);
     if(isLight){ // light: darken the accent until it reads on white (≥ ~4.5:1), white text on it
       let [h,s,v]=rgb2hsv(...hex2rgb(hex));let c=hsv2rgb(h,s,v);
       while(lum(...c)>0.17&&v>0.15){v-=0.02;c=hsv2rgb(h,s,v);}

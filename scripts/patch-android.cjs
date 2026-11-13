@@ -75,7 +75,9 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 
 // Register the AppIcon plugin in MainActivity
 const javaDir=path.join(app,'src/main/java/com/yashgumaste/fitnesstracker');
-fs.copyFileSync(path.join(__dirname,'..','native','AppIconPlugin.java'),path.join(javaDir,'AppIconPlugin.java'));
+// AppIcon plugin: its list of icon names comes from app-icons.cjs, so the two always match
+fs.writeFileSync(path.join(javaDir,'AppIconPlugin.java'),fs.readFileSync(path.join(__dirname,'..','native','AppIconPlugin.java'),'utf8')
+  .replace(/static final String\[\] NAMES = \{[^}]*\};/,`static final String[] NAMES = {${icons.ACCENTS.map(([n])=>JSON.stringify(n)).join(',')}};`));
 fs.copyFileSync(path.join(__dirname,'..','native','HealthConnectPlugin.kt'),path.join(javaDir,'HealthConnectPlugin.kt'));
 fs.copyFileSync(path.join(__dirname,'..','native','AppUpdatePlugin.java'),path.join(javaDir,'AppUpdatePlugin.java'));
 fs.copyFileSync(path.join(__dirname,'..','native','MoveReminderPlugin.kt'),path.join(javaDir,'MoveReminderPlugin.kt'));

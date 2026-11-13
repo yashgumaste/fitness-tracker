@@ -4,7 +4,10 @@
 const fs=require('fs'),path=require('path');
 
 const ACCENTS=[['cyan','#00FFFF'],['teal','#00E5B0'],['mint','#5CF2A6'],['lime','#B6F36A'],['lemon','#FFE04A'],['amber','#FFC247'],
-  ['coral','#FF8A65'],['rose','#FF6F91'],['pink','#FF6FD1'],['orchid','#D78BFF'],['violet','#B9A2FF'],['sky','#7AB8FF']];
+  ['coral','#FF8A65'],['rose','#FF6F91'],['pink','#FF6FD1'],['orchid','#D78BFF'],['violet','#B9A2FF'],['sky','#7AB8FF'],
+  // a full colour wheel too, so a custom accent (Make your own colour) gets an icon that really matches
+  ...Array.from({length:24},(_,i)=>{const h=i*15,f=n=>{const k=(n+h/30)%12;return Math.round(255*(.5-.5*Math.max(-1,Math.min(k-3,9-k,1))));};
+    return['h'+String(h).padStart(3,'0'),'#'+[f(0),f(8),f(4)].map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase()];})];
 
 // geometry in a 108×108 adaptive-icon canvas (safe zone = central 66)
 const C=54,R=31;
