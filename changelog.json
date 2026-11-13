@@ -19,6 +19,10 @@
     {
       "text": "Food history: the coloured bar under each day now has a title (Where the calories came from) and labels: protein, carbs and fat with their share and grams. Meal tags spell out protein, carbs and fat instead of P, C and F.",
       "img": "docs/whatsnew/calorie-split.png"
+    },
+    {
+      "text": "Step charts show the count on every bar. Tap a month in Year to open that month, and a day in Week or Month to see it hour by hour. Progress trend charts write the values on short ranges, and you can tap any point to see its value and date.",
+      "img": "docs/whatsnew/steps-counts.png"
     }
   ],
   "releases": [
