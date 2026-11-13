@@ -8,7 +8,7 @@
     "backgroundColor": "#000000"
   },
   "plugins": {
-    "LocalNotifications": { "smallIcon": "ic_stat_water", "iconColor": "#4FC3F7" },
+    "LocalNotifications": { "smallIcon": "ic_stat_app", "iconColor": "#4FC3F7" },
     "StatusBar": { "overlaysWebView": false, "style": "DARK", "backgroundColor": "#000000" }
   }
 }

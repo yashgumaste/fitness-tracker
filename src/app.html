@@ -2974,6 +2974,7 @@ Reply ONLY with valid JSON (no markdown):
   function addWater(day,ml,hm,quiet){const ts=hm?new Date(day+'T'+hm+':00').getTime():day===TODAY?Date.now():new Date(day+'T13:00:00').getTime();
     setWaterLog(p=>{const ex=p[day]||[];let t=ts;while(ex.some(x=>x.ts===t))t++;return {...p,[day]:[...ex,{ts:t,ml}]};});
     const tot=waterMl(day)+ml;if(!quiet)showToast(`💧 +${fmtL(ml)} · ${fmtL(tot)} of ${fmtL(WATER_GOAL.ml)}`,'var(--sky)');}
+  function addWaterAt(ts,ml){const day=localDate(new Date(ts));setWaterLog(p=>{const ex=p[day]||[];if(ex.some(x=>x.ts===ts))return p;return {...p,[day]:[...ex,{ts,ml}]};});}
   // Everything logged on a day, in time order (meal times from logging; batch-logged meals use typical times)
   function buildTimeline(day){
     const items=[];
@@ -3049,7 +3050,8 @@ Reply ONLY with valid JSON (no markdown):
   function closeSheet(){setSheet(null);setDraft({});setArm(false);}
   // Android back button: close the open sheet, else go back to Home, else leave the app
   const backRef=useRef(null);
-  backRef.current=()=>{if(sheet){closeSheet();return true;}
+  backRef.current=()=>{if(bigWater&&bigWater.phase==='pick'){setBigWater(null);return true;}
+    if(sheet){closeSheet();return true;}
     if(stepsPage){setStepsPage(null);return true;}
     if(setupOpen){if(setupStep>0){setSetupStep(n=>n-1);return true;}return false;}
     if(tab==='settings'&&settingsPage){setSettingsPage(null);return true;}
@@ -3079,7 +3081,30 @@ Reply ONLY with valid JSON (no markdown):
     return()=>{clearTimeout(t0);clearTimeout(t1);clearTimeout(t2);};
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[bigWater&&bigWater.n]);
-  const renderBigWater=()=>{const b=bigWater;if(!b)return null;const gone=b.phase==='shrink'||b.phase==='out';
+  const renderWaterPick=b=>{const c=+b.custom,ok=c>=20&&c<=3000;
+    return(<div onClick={()=>setBigWater(null)} style={{position:'fixed',inset:0,zIndex:300,background:'rgba(0,0,0,.9)',backdropFilter:'blur(8px)',WebkitBackdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',padding:'24px 16px'}}>
+      <div role="dialog" aria-label="How much did you drink?" onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:380,display:'flex',flexDirection:'column',alignItems:'center',gap:18}}>
+        <WaterGlass pct={b.from} size={170} glass="var(--fg)"/>
+        <div style={{textAlign:'center'}}>
+          <div className="x-num" style={{fontSize:28,color:'var(--fg)'}}>How much did you drink?</div>
+          <div style={{fontWeight:700,color:'var(--fg2)',marginTop:4}}>{fmtL(b.total)} of {fmtL(WATER_GOAL.ml)} so far today</div></div>
+        <div style={{display:'flex',gap:12,width:'100%'}}>
+          {[[250,'🥛','Glass'],[500,'🍶','Bottle']].map(([ml,e,l])=>
+            <button key={ml} onClick={()=>waterActRef.current(ml)} aria-label={`${ml} ml`}
+              style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'14px 8px',border:'none',borderRadius:ml===250?'32px 16px 32px 16px':'16px 32px 16px 32px',background:'var(--sky)',color:'var(--bg)',cursor:'pointer'}}>
+              <span style={{fontSize:30}}>{e}</span><b className="x-num" style={{fontSize:24}}>{ml} ml</b><span style={{fontWeight:700,fontSize:13}}>{l}</span></button>)}
+        </div>
+        {!b.other?<button className="x-btn ghost" style={{color:'var(--sky)'}} onClick={()=>setBigWater(x=>({...x,other:true}))}>Other amount</button>
+          :<div style={{display:'flex',flexDirection:'column',gap:10,width:'100%'}}>
+            <div className="x-chips" style={{justifyContent:'center'}}>{[150,200,330,750,1000].map(ml=><button key={ml} className="x-chip" onClick={()=>waterActRef.current(ml)}>{ml>=1000?'1 L':ml+' ml'}</button>)}</div>
+            <div style={{display:'flex',gap:8}}>
+              <input className="x-field" type="number" inputMode="numeric" placeholder="Amount in ml" value={b.custom} onChange={e=>{const v=e.target.value;setBigWater(x=>({...x,custom:v}));}} style={{flex:1}}/>
+              <button className="x-btn" disabled={!ok} style={{background:'var(--sky)',color:'var(--bg)',opacity:ok?1:.45}} onClick={()=>ok&&waterActRef.current(Math.round(c))}>Log</button></div>
+          </div>}
+        <button className="x-btn ghost" onClick={()=>setBigWater(null)}>Not now</button>
+      </div>
+    </div>);};
+  const renderBigWater=()=>{const b=bigWater;if(!b)return null;if(b.phase==='pick')return renderWaterPick(b);const gone=b.phase==='shrink'||b.phase==='out';
     return(<div aria-live="polite" style={{position:'fixed',inset:0,zIndex:300,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:22,
         background:gone?'rgba(0,0,0,0)':'rgba(0,0,0,.62)',transition:'background .55s',pointerEvents:'none'}}>
       <div ref={bigRef} style={{transform:b.phase==='shrink'?`translate(${b.dx}px,${b.dy}px) scale(${b.s})`:b.phase==='in'?'scale(.6)':'scale(1)',
@@ -3093,6 +3118,13 @@ Reply ONLY with valid JSON (no markdown):
       </div>
     </div>);};
   // notification "Log 250 ml": wait until saved data has loaded, so the drink is added to it (not to an empty day)
+  const waterPickRef=useRef(null);
+  waterPickRef.current=()=>{const day=localDate(new Date()),before=waterMl(day);
+    setSheet(null);setStepsPage(null);setTab('home');setHomeDay(null);
+    setBigWater({n:Date.now(),phase:'pick',from:before/WATER_GOAL.ml,total:before,other:false,custom:''});};
+  useEffect(()=>{if(!storageReady)return;window.__lmWaterPick=()=>setTimeout(()=>waterPickRef.current(),300);
+    if(window.__lmWaterPickQueued){window.__lmWaterPickQueued=false;setTimeout(()=>waterPickRef.current(),600);}
+    return()=>{window.__lmWaterPick=null;};},[storageReady]);
   useEffect(()=>{if(!storageReady)return;window.__lmWater=ml=>waterActRef.current(ml);
     const q=window.__lmWaterQueue||[];window.__lmWaterQueue=[];
     if(q.length)setTimeout(()=>q.forEach(ml=>waterActRef.current(ml)),400);
@@ -3100,6 +3132,8 @@ Reply ONLY with valid JSON (no markdown):
   // Re-plan water reminders when settings change, when you drink, and when the app comes back
   const waterCfg={on:false,start:'09:00',end:'21:00',every:90,...(prefs.water||{})};
   const lastDrink=Math.max(0,...Object.values(waterLog).flat().map(x=>x.ts||0));
+  const lastDrinkRef=useRef(0);lastDrinkRef.current=lastDrink;
+  const waterTodayRef=useRef(0);waterTodayRef.current=waterMl(TODAY);
   const [waterPlan,setWaterPlan]=useState(null);
   // Move reminders (sitting too long)
   const moveCfg={on:false,mins:60,start:'09:00',end:'21:00',...(prefs.move||{})};
@@ -3114,7 +3148,12 @@ Reply ONLY with valid JSON (no markdown):
   },[storageReady,moveCfg.on,moveCfg.mins,moveCfg.start,moveCfg.end]);
   useEffect(()=>{
     if(!storageReady||!window.LMNative)return;
-    let gone=false;const run=()=>window.LMNative.planWater(waterCfg,lastDrink).then(r=>{if(!gone)setWaterPlan(r);}).catch(e=>console.warn(e));
+    let gone=false;const run=async()=>{try{
+      const ds=window.LMNative.takeLoggedWater?await window.LMNative.takeLoggedWater():[];let add=0,last=0;
+      ds.forEach(x=>{addWaterAt(+x.ts,+x.ml);last=Math.max(last,+x.ts);if(localDate(new Date(+x.ts))===TODAY)add+=+x.ml;});
+      if(ds.length)showToast(`💧 ${ds.map(x=>x.ml+' ml').join(' + ')} logged from the reminder`,'var(--sky)');
+      const r=await window.LMNative.planWater(waterCfg,Math.max(lastDrinkRef.current,last),waterTodayRef.current+add,WATER_GOAL.ml);
+      if(!gone)setWaterPlan(r);}catch(e){console.warn(e);}};
     const t=setTimeout(run,600);window.addEventListener('lm-resume',run);
     return()=>{gone=true;clearTimeout(t);window.removeEventListener('lm-resume',run);};
   // eslint-disable-next-line react-hooks/exhaustive-deps

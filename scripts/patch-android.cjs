@@ -79,6 +79,7 @@ fs.copyFileSync(path.join(__dirname,'..','native','AppIconPlugin.java'),path.joi
 fs.copyFileSync(path.join(__dirname,'..','native','HealthConnectPlugin.kt'),path.join(javaDir,'HealthConnectPlugin.kt'));
 fs.copyFileSync(path.join(__dirname,'..','native','AppUpdatePlugin.java'),path.join(javaDir,'AppUpdatePlugin.java'));
 fs.copyFileSync(path.join(__dirname,'..','native','MoveReminderPlugin.kt'),path.join(javaDir,'MoveReminderPlugin.kt'));
+fs.copyFileSync(path.join(__dirname,'..','native','WaterReminderPlugin.kt'),path.join(javaDir,'WaterReminderPlugin.kt'));
 const ma=path.join(javaDir,'MainActivity.java');
 let j=fs.readFileSync(ma,'utf8');
 if(!j.includes('AppIconPlugin')){
@@ -90,6 +91,7 @@ if(!j.includes('AppIconPlugin')){
         registerPlugin(HealthConnectPlugin.class);
         registerPlugin(AppUpdatePlugin.class);
         registerPlugin(MoveReminderPlugin.class);
+        registerPlugin(WaterReminderPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }`);
@@ -118,4 +120,31 @@ fs.writeFileSync(path.join(dr,'ic_stat_walk.xml'),`<vector xmlns:android="http:/
   <path android:fillColor="#FFFFFFFF" android:pathData="M13.5,5.5C14.6,5.5 15.5,4.6 15.5,3.5S14.6,1.5 13.5,1.5 11.5,2.4 11.5,3.5 12.4,5.5 13.5,5.5ZM9.8,8.9L7,23H9.1L10.9,15L13,17V23H15V15.5L12.9,13.5L13.5,10.5C14.8,12 16.8,13 19,13V11C17.1,11 15.5,10 14.7,8.6L13.7,7C13.3,6.4 12.7,6 12,6C11.7,6 11.5,6.1 11.2,6.1L6,8.3V13H8V9.6L9.8,8.9Z"/>
 </vector>
 `);
+// Pictures shown inside notifications (the round image on the right): water and walking
+const DROP='M12,2.2C12,2.2 5.5,9.6 5.5,14.4C5.5,18.1 8.4,21 12,21C15.6,21 18.5,18.1 18.5,14.4C18.5,9.6 12,2.2 12,2.2Z';
+const WALKER='M13.5,5.5C14.6,5.5 15.5,4.6 15.5,3.5S14.6,1.5 13.5,1.5 11.5,2.4 11.5,3.5 12.4,5.5 13.5,5.5ZM9.8,8.9L7,23H9.1L10.9,15L13,17V23H15V15.5L12.9,13.5L13.5,10.5C14.8,12 16.8,13 19,13V11C17.1,11 15.5,10 14.7,8.6L13.7,7C13.3,6.4 12.7,6 12,6C11.7,6 11.5,6.1 11.2,6.1L6,8.3V13H8V9.6L9.8,8.9Z';
+const big=(bg,fg,d)=>`<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96">
+  <path android:fillColor="${bg}" android:pathData="M48,0A48,48 0,1 1,48,96A48,48 0,1 1,48,0Z"/>
+  <group android:translateX="19.2" android:translateY="19.2" android:scaleX="2.4" android:scaleY="2.4">
+    <path android:fillColor="${fg}" android:pathData="${d}"/>
+  </group>
+</vector>
+`;
+fs.writeFileSync(path.join(dr,'ic_large_water.xml'),big('#FF4FC3F7','#FFFFFFFF',DROP));
+fs.writeFileSync(path.join(dr,'ic_large_walk.xml'),big('#FF5CF2A6','#FF00391F',WALKER));
+
+// Water reminders are posted by WaterReminderPlugin: alarm, notification-button and restart receivers
+m=fs.readFileSync(mf,'utf8');
+if(!m.includes('WaterAlarmReceiver')){
+  m=m.replace('</application>',`        <receiver android:name=".WaterAlarmReceiver" android:exported="false" />
+        <receiver android:name=".WaterActionReceiver" android:exported="false" />
+        <receiver android:name=".WaterBootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>`);
+  fs.writeFileSync(mf,m);
+}
 console.log('android patched · versionCode',run);

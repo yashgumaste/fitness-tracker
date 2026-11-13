@@ -28,6 +28,13 @@ function write(res){
   fs.writeFileSync(path.join(res,'values','icon_colors.xml'),'<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <color name="ic_bg_black">#000000</color>\n</resources>\n');
   // themed-icon silhouette: cookie with the dumbbell cut out
   fs.writeFileSync(path.join(dr,'ic_mono.xml'),vec(`  <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="${cookie()}${BELL}"/>\n`));
+  // notification icon: the same silhouette, cropped to the cookie so it fills the small status-bar slot
+  fs.writeFileSync(path.join(dr,'ic_stat_app.xml'),`<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="64" android:viewportHeight="64">
+  <group android:translateX="-22" android:translateY="-22">
+    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="${cookie()}${BELL}"/>
+  </group>
+</vector>
+`);
   for(const [name,hex] of ACCENTS){
     fs.writeFileSync(path.join(dr,`ic_fg_${name}.xml`),vec(`  <path android:fillColor="${hex}" android:pathData="${cookie()}"/>\n  <path android:fillColor="${dark(hex)}" android:pathData="${BELL}"/>\n`));
     fs.writeFileSync(path.join(any,`ic_launcher_${name}.xml`),`<?xml version="1.0" encoding="utf-8"?>
