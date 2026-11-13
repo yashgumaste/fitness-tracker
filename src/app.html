@@ -3326,7 +3326,7 @@ Reply ONLY with valid JSON (no markdown):
   }
   function renderStepsPage(){
     const sp=stepsPage,v=sp.view,set=f=>setStepsPage(p=>({...p,...f}));
-    const goal=WALK_GOAL.day,k=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':String(Math.round(n));
+    const goal=WALK_GOAL.day,k=kfmt;
     const hcOn=!!hcState?.read?.includes('Steps'),native=!!window.LMNative?.isNative;
     const navRow=(title,sub,prev,next,canNext,back)=>(<>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -5289,44 +5289,51 @@ function Shape({kind='cookie9',size=44,fill='var(--s3)',color,children,style,fon
 }
 
 // Wavy linear progress (M3 Expressive): wavy active track + flat remaining track
-// Steps per hour: pill bars, walks in mint, this hour in the accent; tap a bar for its number
+// A bar's number: across the top when the bar is wide enough, otherwise turned on its side
+// (inside the bar when it fits, just above it when the bar is short)
+const kfmt=v=>v>=1e6?(v/1e6).toFixed(1).replace(/\.0$/,'')+'M':v>=1000?(v/1000).toFixed(v>=10000?0:1).replace(/\.0$/,'')+'k':String(Math.round(v));
+function BarValue({x,bw,y0,hh,v,inFill}){
+  if(!v)return null;const t=kfmt(v);
+  if(bw>=30){const fs=11.5;return <text x={x+bw/2} y={y0-5} textAnchor="middle" fontSize={fs} fontWeight="800" style={{fill:'var(--fg)',pointerEvents:'none'}}>{t}</text>;}
+  const fs=Math.min(10,Math.max(8,bw*.9)),len=t.length*fs*.62+6,cx=x+bw/2,inside=hh>=len+4,y=inside?y0+hh-4:y0-3;
+  return <text transform={`rotate(-90 ${cx} ${y})`} x={cx} y={y} textAnchor="start" dominantBaseline="central" fontSize={fs} fontWeight="800"
+    style={{fill:inside?inFill:'var(--fg)',pointerEvents:'none'}}>{t}</text>;
+}
+// Steps per hour: pill bars with each hour's count, walks in mint, this hour in the accent; tap a bar to pick it
 function HourChart({hours,walks,now,sel,onSel}){
   const W=336,H=172,top=30,bot=H-24,gap=3,bw=(W-gap*23)/24;
   const mx=Math.max(600,...hours);
   const inWalk=new Set();(walks||[]).forEach(w=>{const e=w.end||w.start+(w.min||10);for(let h=Math.floor(w.start/60);h<=Math.floor((e-1)/60);h++)inWalk.add(h);});
-  const top1=Math.max(...hours),peak=top1>0?hours.indexOf(top1):-1,lab=sel!=null?sel:peak;
   const xOf=h=>h*(bw+gap),hOf=v=>v?Math.max(bw,(bot-top)*v/mx):4;
-  const kfmt=v=>v>=1000?(v/1000).toFixed(v>=10000?0:1)+'k':String(v);
   return(<svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Steps by hour" style={{display:'block',overflow:'visible'}}>
     {[.5,1].map(f=><line key={f} x1="0" x2={W} y1={bot-(bot-top)*f} y2={bot-(bot-top)*f} stroke="var(--line)" strokeWidth="1" strokeDasharray="2 6"/>)}
     {hours.map((v,h)=>{const hh=hOf(v);const fill=h===sel?'var(--fg)':inWalk.has(h)?'var(--mint)':h===now?'var(--pri)':'var(--pri-c)';
       return(<g key={h} onClick={()=>onSel&&onSel(h===sel?null:h)} style={{cursor:'pointer'}}>
         <rect x={xOf(h)-gap/2} y={0} width={bw+gap} height={H} fill="transparent"/>
         <rect x={xOf(h)} y={bot-hh} width={bw} height={hh} rx={bw/2} className="lm-grow" style={{fill,animationDelay:`${h*16}ms`}}/>
+        <BarValue x={xOf(h)} bw={bw} y0={bot-hh} hh={hh} v={v} inFill={h===sel?'var(--bg)':fill==='var(--pri-c)'?'var(--on-pri-c)':'#000'}/>
       </g>);})}
-    {lab>=0&&hours[lab]>0&&(()=>{const t=kfmt(hours[lab]),w=t.length*7.5+16,cx=Math.min(W-w/2,Math.max(w/2,xOf(lab)+bw/2)),y=bot-hOf(hours[lab])-26;
-      return(<g style={{pointerEvents:'none'}}><rect x={cx-w/2} y={y} width={w} height={20} rx={10} style={{fill:sel!=null?'var(--fg)':'var(--s3)'}}/>
-        <text x={cx} y={y+14} textAnchor="middle" fontSize="12" fontWeight="800" style={{fill:sel!=null?'var(--bg)':'var(--fg)'}}>{t}</text></g>);})()}
     {[0,6,12,18].map(h=><text key={h} x={xOf(h)} y={H-6} fontSize="11" fontWeight="700" style={{fill:'var(--fg2)'}}>{h===0?'12 AM':h===12?'12 PM':h<12?h+' AM':(h-12)+' PM'}</text>)}
     <text x={W} y={H-6} textAnchor="end" fontSize="11" fontWeight="700" style={{fill:'var(--fg2)'}}>12 AM</text>
   </svg>);
 }
 // Steps per day (or per month): pill bars with a dotted goal line; days at goal in mint
 function PeriodBars({items,goal,onPick}){
-  const W=336,H=176,top=26,bot=H-24,n=items.length,gap=n>14?2:n>8?4:8,bw=(W-gap*(n-1))/n;
+  const W=336,PW=W-46,H=176,top=26,bot=H-24,n=items.length,gap=n>14?2:n>8?4:8,bw=(PW-gap*(n-1))/n;
   const mx=Math.max(goal*1.2,...items.map(i=>i.v||0));const gy=bot-(bot-top)*goal/mx;
   return(<svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Steps per day" style={{display:'block',overflow:'visible'}}>
-    <line x1="0" x2={W} y1={gy} y2={gy} stroke="var(--mint)" strokeWidth="2.5" strokeDasharray="0.1 7" strokeLinecap="round"/>
+    <line x1="0" x2={PW} y1={gy} y2={gy} stroke="var(--mint)" strokeWidth="2.5" strokeDasharray="0.1 7" strokeLinecap="round"/>
 
     {items.map((it,i)=>{const x=i*(bw+gap),v=it.v||0,hh=v?Math.max(Math.min(bw,8),(bot-top)*v/mx):4;
       const fill=v>=goal?'var(--mint)':it.today?'var(--pri)':'var(--pri-c)';
       return(<g key={it.key} onClick={()=>it.pickable!==false&&onPick&&onPick(it)} style={{cursor:'pointer',opacity:it.future?.35:1}}>
         <rect x={x-gap/2} y={0} width={bw+gap} height={H} fill="transparent"/>
         <rect x={x} y={bot-hh} width={bw} height={hh} rx={Math.min(bw/2,12)} className="lm-grow" style={{fill,animationDelay:`${i*(n>14?8:25)}ms`}}/>
+        <BarValue x={x} bw={bw} y0={bot-hh} hh={hh} v={Math.round(v)} inFill={fill==='var(--pri-c)'?'var(--on-pri-c)':'#000'}/>
         {it.show&&<text x={x+bw/2} y={H-6} textAnchor="middle" fontSize="11" fontWeight={it.today?850:700} style={{fill:it.today?'var(--pri)':'var(--fg2)'}}>{it.label}</text>}
       </g>);})}
-    <g style={{pointerEvents:'none'}}><rect x={W-58} y={gy-11} width={58} height={22} rx={11} style={{fill:'var(--bg)',stroke:'var(--mint)',strokeWidth:1.5}}/>
-      <text x={W-29} y={gy+4} textAnchor="middle" fontSize="11" fontWeight="800" style={{fill:'var(--mint)'}}>goal {goal>=1000?(goal/1000)+'k':goal}</text></g>
+    <g style={{pointerEvents:'none'}}><rect x={PW+6} y={gy-10} width={40} height={20} rx={10} style={{fill:'var(--bg)',stroke:'var(--mint)',strokeWidth:1.5}}/>
+      <text x={PW+26} y={gy+4} textAnchor="middle" fontSize="10.5" fontWeight="800" style={{fill:'var(--mint)'}}>{goal>=1000?(goal/1000)+'k':goal}</text></g>
   </svg>);
 }
 function WavyBar({value=0,max=1,color='var(--pri)',track='rgba(255,255,255,.12)',h=14,over=false}){
@@ -5363,6 +5370,7 @@ function Seg({items,value,onChange,style}){
 
 // Smooth line chart (Catmull-Rom → bezier), optional goal line and band, dots on real data
 function LineChart({points,height=150,color='var(--pri)',goal,band,fmt=v=>v,emptyMsg='No data yet'}){
+  const [sel,setSel]=useState(null);
   const pts=points.filter(p=>p.y!=null);
   if(pts.length<2)return <div className="x-sub" style={{height,display:'grid',placeItems:'center',color:'var(--fg3)'}}>{emptyMsg}</div>;
   const W=320,H=height,pad=8;
@@ -5370,20 +5378,27 @@ function LineChart({points,height=150,color='var(--pri)',goal,band,fmt=v=>v,empt
   let lo=Math.min(...ys),hi=Math.max(...ys);if(hi-lo<1){hi+=1;lo-=1;}const sp=(hi-lo)*.15;lo-=sp;hi+=sp;
   const n=points.length-1||1;
   const X=i=>pad+(W-2*pad)*i/n,Y=v=>H-pad-(H-2*pad)*(v-lo)/(hi-lo);
-  const P=points.map((p,i)=>p.y==null?null:[X(i),Y(p.y)]).filter(Boolean);
+  const P=points.map((p,i)=>p.y==null?null:[X(i),Y(p.y),i]).filter(Boolean);
+  const dlab=x=>{try{return /^\d{4}-\d{2}-\d{2}$/.test(x)?new Date(x+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'}):String(x??'');}catch(_){return '';}};
+  const few=P.length<=8;   // few points: every value is written on the chart; otherwise tap a point
   let d=`M${P[0][0]} ${P[0][1]}`;
   for(let i=0;i<P.length-1;i++){const p0=P[i-1]||P[i],p1=P[i],p2=P[i+1],p3=P[i+2]||p2;
     d+=` C${p1[0]+(p2[0]-p0[0])/6} ${p1[1]+(p2[1]-p0[1])/6},${p2[0]-(p3[0]-p1[0])/6} ${p2[1]-(p3[1]-p1[1])/6},${p2[0]} ${p2[1]}`;}
   const area=d+` L${P[P.length-1][0]} ${H} L${P[0][0]} ${H} Z`;
   const gid='g'+Math.random().toString(36).slice(2,8);
   return(
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{display:'block',overflow:'visible'}} aria-hidden="true">
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{display:'block',overflow:'visible'}} role="img" aria-label="Trend chart; tap a point for its value">
       <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{stopColor:color,stopOpacity:.28}}/><stop offset="1" style={{stopColor:color,stopOpacity:0}}/></linearGradient></defs>
       {band&&<rect x={0} y={Y(band[1])} width={W} height={Math.max(2,Y(band[0])-Y(band[1]))} rx="6" style={{fill:'var(--mint)',opacity:.12}}/>}
       {goal!=null&&<line x1={0} x2={W} y1={Y(goal)} y2={Y(goal)} style={{stroke:'var(--fg3)'}} strokeWidth="1.5" strokeDasharray="5 5"/>}
       <path d={area} style={{fill:`url(#${gid})`}}/>
       <path d={d} fill="none" style={{stroke:color}} strokeWidth="3.5" strokeLinecap="round"/>
-      {P.map((p,i)=><circle key={i} cx={p[0]} cy={p[1]} r={P.length>20?2:3.5} style={{fill:color}}/>)}
+      {P.map((p,i)=><circle key={i} cx={p[0]} cy={p[1]} r={p[2]===sel?6:P.length>20?2:3.5} style={{fill:p[2]===sel?'var(--fg)':color}}/>)}
+      {few&&P.map(p=>p[2]!==sel&&<text key={'v'+p[2]} x={Math.min(W-14,Math.max(14,p[0]))} y={p[1]-9} textAnchor="middle" style={{fill:'var(--fg)',fontSize:11,fontWeight:800,pointerEvents:'none'}}>{fmt(Math.round(points[p[2]].y*10)/10)}</text>)}
+      {sel!=null&&points[sel]&&points[sel].y!=null&&(()=>{const t=`${fmt(Math.round(points[sel].y*10)/10)} · ${dlab(points[sel].x)}`,w=t.length*6.6+18,cx=Math.min(W-w/2,Math.max(w/2,X(sel))),y=Math.max(0,Y(points[sel].y)-34);
+        return(<g style={{pointerEvents:'none'}}><rect x={cx-w/2} y={y} width={w} height={22} rx={11} style={{fill:'var(--fg)'}}/>
+          <text x={cx} y={y+15} textAnchor="middle" style={{fill:'var(--bg)',fontSize:12,fontWeight:800}}>{t}</text></g>);})()}
+      {points.map((p,i)=>p.y!=null&&<rect key={'h'+i} x={X(i)-(W/(n+1))/2} y={0} width={W/(n+1)} height={H} fill="transparent" style={{cursor:'pointer'}} onClick={()=>setSel(sel===i?null:i)}/>)}
       <text x={W} y={12} textAnchor="end" style={{fill:'var(--fg3)',fontSize:11,fontWeight:700}}>{fmt(Math.round(hi))}</text>
       <text x={W} y={H-2} textAnchor="end" style={{fill:'var(--fg3)',fontSize:11,fontWeight:700}}>{fmt(Math.round(lo))}</text>
     </svg>);

@@ -90,6 +90,13 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   await step('Steps page',async()=>{await tab(0);await p.click('[aria-label="Steps and walks"]');await W(500);
     await expect('By the hour');await expect('Brisk morning walk');await expect('Evening stroll');await expect('Everyday movement');await expect('kcal burned by moving');
     for(const v of ['Week','Month','Year']){await click('.x-seg button',v);await expect('Average a day');}
+    // every bar carries its count; tapping a month in Year opens that month, a day in Month opens that day
+    await click('.x-seg button','Year');const nums=await p.$$eval('svg[aria-label="Steps per day"] text',t=>t.map(x=>x.textContent).filter(x=>/^\d+(\.\d)?k?$/.test(x)).length);
+    if(nums<1)throw new Error('no counts on the year bars');
+    await p.evaluate(()=>{const g=[...document.querySelectorAll('svg[aria-label="Steps per day"] > g')][10];g.dispatchEvent(new MouseEvent('click',{bubbles:true}));});await W(500);
+    if(!(await has('November 2026')))throw new Error('tapping a month did not open it');
+    await p.evaluate(()=>{const g=[...document.querySelectorAll('svg[aria-label="Steps per day"] > g')][8];g.dispatchEvent(new MouseEvent('click',{bubbles:true}));});await W(500);
+    await expect('By the hour');
     await click('.x-seg button','Day');await p.click('[aria-label="Earlier"]');await W();await expect('Back to today');
     await p.click('[aria-label="Back"]');await W();await expect('Timeline');});
   await step('Burned counts steps',async()=>{await tab(2);if(!(await has('from steps'))&&!(await has('gym + steps')))throw new Error('Burned does not include steps');});
