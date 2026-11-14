@@ -1824,8 +1824,8 @@ function App(){
     const root=document.documentElement;
     root.dataset.theme=isLight?'light':'dark';
     window.LMNative&&window.LMNative.bars(isLight);
-    // home-screen icon: the preset closest to the chosen accent
-    if(window.LMNative)window.LMNative.setIcon(hex);
+    // home-screen icon: cyan, or (if turned on in Theme & colour) the preset closest to the chosen accent
+    if(window.LMNative)window.LMNative.setIcon(prefs.iconAccent?hex:'#00FFFF');
     if(isLight){ // light: darken the accent until it reads on white (≥ ~4.5:1), white text on it
       let [h,s,v]=rgb2hsv(...hex2rgb(hex));let c=hsv2rgb(h,s,v);
       while(lum(...c)>0.17&&v>0.15){v-=0.02;c=hsv2rgb(h,s,v);}
@@ -1834,7 +1834,7 @@ function App(){
       root.style.setProperty('--pri',hex);
       root.style.setProperty('--on-pri',lum(...hex2rgb(hex))>0.18?`color-mix(in srgb, ${hex} 12%, #000)`:'#fff');
     }
-  },[prefs.accent,isLight]);
+  },[prefs.accent,prefs.iconAccent,isLight]);
   useEffect(()=>{ // app resumed (or left open past midnight) → re-render so TODAY is current
     const bump=()=>{if(document.visibilityState==='visible')setDayTick(t=>t+1);};
     document.addEventListener('visibilitychange',bump);
@@ -4684,8 +4684,15 @@ Reply ONLY with valid JSON (no markdown):
               <span style={{flex:1,minWidth:40}}><WavyBar value={6} max={10} color="var(--pri)" h={12}/></span>
             </div>
             <button className="x-btn tonal" onClick={()=>openSheet('accent')}>🎨 Make your own colour</button>
-            {window.LMNative?.isNative&&<div className="x-sub">The app icon on your home screen changes to the closest of these colours when you leave the app.</div>}
           </div>
+          <button className="x-card" onClick={()=>setPrefs(p=>({...p,iconAccent:!p.iconAccent}))} role="switch" aria-checked={!!prefs.iconAccent}
+              style={{display:'flex',alignItems:'center',gap:14,textAlign:'left',border:'none',color:'var(--fg)',cursor:'pointer'}}>
+            {window.LMNative?.logo&&<span style={{width:52,height:52,borderRadius:'50%',background:'#000',display:'grid',placeItems:'center',flex:'none'}}>
+              <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path fill={prefs.iconAccent?accent:'#00FFFF'} fillRule="evenodd" d={window.LMNative.logo.body}/><path fill={prefs.iconAccent?accent:'#00FFFF'} d={window.LMNative.logo.leaf}/></svg></span>}
+            <span style={{flex:1,minWidth:0}}><b style={{display:'block',fontSize:16}}>App icon in accent colour</b>
+              <span className="x-sub" style={{display:'block'}}>{prefs.iconAccent?'The home-screen icon matches your accent (the closest of 36 colours). It changes when you leave the app.':'Off: the home-screen icon stays cyan.'}</span></span>
+            <span className={`m3-switch${prefs.iconAccent?' on':''}`}><span className="m3-switch-thumb"/></span>
+          </button>
 
     </div>;
     if(settingsPage==='data')content=<div className="x-wrap" style={{paddingTop:0}}>
