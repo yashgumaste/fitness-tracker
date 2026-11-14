@@ -24,6 +24,9 @@
     {
       "text": "Logging reminders: a friendly good-morning check-in asks how you slept (\"Lazy Sunday morning, Yash?\", \"New week!\", or about yesterday: a late dinner, a long walk, a workout). A little after your usual breakfast, lunch, snack and dinner times you get a nudge if you haven't logged yet, with protein and calories left for today. Tap to log straight away, or Later to be asked again in 30 minutes. Your usual times are learned from when you log. Turn each one on or off in Settings → Logging reminders.",
       "img": "docs/whatsnew/log-reminders.png"
+    },
+    {
+      "text": "Fixed the water glass: when it was more than about 60% full, the water floated with a gap at the bottom. It now fills right down to the bottom, in the small glass and the big one."
     }
   ],
   "releases": [
