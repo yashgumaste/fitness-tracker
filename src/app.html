@@ -179,6 +179,10 @@ textarea.x-field{resize:none;line-height:1.45;}
 @keyframes lm-ripple{0%{transform:scale(.2,.2);opacity:.9}100%{transform:scale(1.5,1);opacity:0}}
 @keyframes lm-slosh{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 @keyframes lm-grow{from{transform:scaleY(0)}}
+@keyframes lm-grow-x{from{transform:scaleX(0)}}
+.lm-grow-x{transform-origin:0 50%;animation:lm-grow-x .6s cubic-bezier(.3,1.2,.5,1) both}
+@keyframes lm-ping{0%{transform:scale(.6);opacity:.5}100%{transform:scale(1.6);opacity:0}}
+.lm-ping{transform-box:fill-box;transform-origin:center;animation:lm-ping 1.6s ease-out infinite}
 .lm-grow{transform-box:fill-box;transform-origin:50% 100%;animation:lm-grow .55s cubic-bezier(.3,1.3,.5,1) both}
 @keyframes lm-bump{0%{transform:scale(1)}35%{transform:scale(1.18)}65%{transform:scale(.95)}100%{transform:scale(1)}}
 .lm-drop{animation:lm-drop .46s cubic-bezier(.55,0,1,.6) both}
@@ -187,7 +191,7 @@ textarea.x-field{resize:none;line-height:1.45;}
 .lm-ripple{animation:lm-ripple .55s ease-out both;transform-box:fill-box;transform-origin:center}
 .lm-slosh{animation:lm-slosh .9s ease-in-out both}
 .lm-bump{animation:lm-bump .5s cubic-bezier(.3,1.5,.5,1)}
-@media (prefers-reduced-motion:reduce){.lm-drop,.lm-splash-l,.lm-splash-r,.lm-ripple{animation:none!important;opacity:0}.lm-slosh,.lm-bump,.lm-grow{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.lm-drop,.lm-splash-l,.lm-splash-r,.lm-ripple{animation:none!important;opacity:0}.lm-slosh,.lm-bump,.lm-grow,.lm-grow-x,.lm-ping{animation:none!important}}
 </style>
 <link rel="stylesheet" href="vendor/fonts.css">
 <style>
@@ -942,6 +946,38 @@ function detectWalks(b){
   }
   return out;
 }
+// ── Walks you record with Start/Finish (GPS) ──
+const TRACKS_KEY='lm-tracks-v1';   // {id:{id,start,end,movingMs,steps,kind,pts:[[sec from start, lat, lon, alt|null]]}}
+const R_EARTH=6371008.8;
+function distM(a,b){const r=Math.PI/180,dl=(b[0]-a[0])*r,dn=(b[1]-a[1])*r,s=Math.sin(dl/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dn/2)**2;return 2*R_EARTH*Math.asin(Math.min(1,Math.sqrt(s)));}
+// distance, time for each km, climb and an elevation profile, from points [[sec,lat,lon,alt]]
+function trackStats(pts){
+  const out={dist:0,splits:[],gain:0,loss:0,profile:[],maxKmh:0,hasAlt:false};
+  if(!pts||pts.length<2)return out;
+  let d=0,next=1000,lastSplitT=pts[0][0];
+  const alts=pts.map(p=>p[3]).filter(a=>a!=null);out.hasAlt=alts.length>pts.length*.6;
+  // smooth altitude (GPS height is noisy) before counting climb
+  const sm=pts.map((p,i)=>{if(p[3]==null)return null;let s=0,n=0;for(let j=Math.max(0,i-3);j<=Math.min(pts.length-1,i+3);j++)if(pts[j][3]!=null){s+=pts[j][3];n++;}return n?s/n:null;});
+  let lastAlt=sm.find(a=>a!=null);
+  for(let i=1;i<pts.length;i++){
+    const a=pts[i-1],b=pts[i],seg=distM([a[1],a[2]],[b[1],b[2]]),dt=b[0]-a[0];
+    if(dt>0&&dt<30){const kmh=seg/dt*3.6;if(kmh<25)out.maxKmh=Math.max(out.maxKmh,kmh);}
+    while(d+seg>=next&&seg>0){const f=(next-d)/seg,t=a[0]+f*dt;out.splits.push({km:next/1000,sec:t-lastSplitT});lastSplitT=t;next+=1000;}
+    d+=seg;
+    if(sm[i]!=null&&lastAlt!=null){const dz=sm[i]-lastAlt;if(Math.abs(dz)>=1.5){if(dz>0)out.gain+=dz;else out.loss-=dz;lastAlt=sm[i];}}
+    if(out.hasAlt&&sm[i]!=null&&(i%Math.max(1,Math.floor(pts.length/60))===0))out.profile.push({x:+(d/1000).toFixed(2),y:Math.round(sm[i])});
+  }
+  const rest=d-(next-1000);if(rest>=100)out.splits.push({km:+(d/1000).toFixed(2),sec:pts[pts.length-1][0]-lastSplitT,part:rest});
+  out.dist=d;return out;
+}
+// keep the route light: drop points closer than minM to the last kept one
+function thinTrack(pts,minM=4){if(!pts||pts.length<3)return pts||[];const out=[pts[0]];
+  for(let i=1;i<pts.length-1;i++){const l=out[out.length-1];if(distM([l[1],l[2]],[pts[i][1],pts[i][2]])>=minM)out.push(pts[i]);}
+  out.push(pts[pts.length-1]);return out;}
+const speedKind=kmh=>kmh>=8?'run':kmh>=5.6?'brisk':kmh>=4?'walk':'stroll';
+const fmtDur=sec=>{sec=Math.round(sec);const h=Math.floor(sec/3600),m=Math.floor(sec/60)%60,s=sec%60;return h?`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`:`${m}:${String(s).padStart(2,'0')}`;};
+const fmtPaceS=secPerKm=>{if(!isFinite(secPerKm)||secPerKm<=0)return '—';const t=Math.round(secPerKm);return `${Math.floor(t/60)}′${String(t%60).padStart(2,'0')}″`;};
+
 // steps per hour (24) from 10-minute slices
 const hourly=b=>Array.from({length:24},(_,h)=>(b||[]).slice(h*6,h*6+6).reduce((a,x)=>a+(+x||0),0));
 const fmtClock=m=>{m=Math.round(m)%1440;const h=Math.floor(m/60),mi=m%60;return `${h%12||12}:${String(mi).padStart(2,'0')} ${h>=12?'PM':'AM'}`;};
@@ -1827,6 +1863,7 @@ function App(){
   const [symptomLog,setSymptomLog]=useState({});
   const [sleepLog,setSleepLog]=useState({}); // see SLEEP_KEY
   const [waterLog,setWaterLog]=useState({}); // see WATER_KEY
+  const [tracks,setTracks]=useState({});      // walks recorded with Start/Finish (GPS)
   const [stepsLog,setStepsLog]=useState({});  // {date:{b:[144 ten-minute step counts],at}} from Health Connect
   const [walkLog,setWalkLog]=useState({});   // {date:{morning:{from,to,steps,km},night:{…},dayTotal}}
   function deleteWalk(date,slot){ // slot=null → whole-day phone steps
@@ -1900,6 +1937,8 @@ function App(){
         if(rwa)setWaterLog(JSON.parse(rwa));
         const rst=localStorage.getItem(STEPS_KEY);
         if(rst)setStepsLog(JSON.parse(rst));
+        const rtr=localStorage.getItem(TRACKS_KEY);
+        if(rtr)setTracks(JSON.parse(rtr));
         const rp=localStorage.getItem(PREFS_KEY);
         if(rp)setPrefs(p=>({...p,...JSON.parse(rp)}));
       }catch(_){}
@@ -1919,7 +1958,7 @@ function App(){
           const read=async k=>{
             try{const s=await db.doc(base+'/'+k).get();return s.exists?s.data().v:null;}catch(_){readFailed=true;return null;}
           };
-          const [dd,df,dw,ds,db2,di,dk,dp,dsl,dwa,dst]=await Promise.all([read(DIET_KEY),read(FIT_KEY),read(WEIGHT_KEY),read(SYMPTOM_KEY),read(BODY_KEY),read('lm-diet-index'),read(WALK_KEY),read(PREFS_KEY),read(SLEEP_KEY),read(WATER_KEY),read(STEPS_KEY)]);
+          const [dd,df,dw,ds,db2,di,dk,dp,dsl,dwa,dst,dtr]=await Promise.all([read(DIET_KEY),read(FIT_KEY),read(WEIGHT_KEY),read(SYMPTOM_KEY),read(BODY_KEY),read('lm-diet-index'),read(WALK_KEY),read(PREFS_KEY),read(SLEEP_KEY),read(WATER_KEY),read(STEPS_KEY),read(TRACKS_KEY)]);
           // Food: monthly documents + old single document + this device's copy, MERGED by entry id
           // (never let an empty copy replace a fuller one)
           const months=di?JSON.parse(di):[];
@@ -1941,6 +1980,7 @@ function App(){
           if(dsl)setSleepLog(JSON.parse(dsl));
           if(dwa)setWaterLog(JSON.parse(dwa));
           if(dst)setStepsLog(JSON.parse(dst));
+          if(dtr)setTracks(JSON.parse(dtr));
           if(dp)setPrefs(p=>({...p,...JSON.parse(dp)}));
           // If any cloud read failed, don't write to the cloud this session — a partial load must never overwrite saved data
           if(readFailed){dbRef.current=null;showToast('⚠ Could not read some saved data — new changes will not overwrite it','var(--warn)');}
@@ -1958,6 +1998,7 @@ function App(){
   useEffect(()=>{if(storageReady)scheduleSave(SYMPTOM_KEY,symptomLog);},[symptomLog,storageReady]);
   useEffect(()=>{if(storageReady)scheduleSave(WALK_KEY,walkLog);},[walkLog,storageReady]);
   useEffect(()=>{if(storageReady)scheduleSave(STEPS_KEY,stepsLog);},[stepsLog,storageReady]);
+  useEffect(()=>{if(storageReady)scheduleSave(TRACKS_KEY,tracks);},[tracks,storageReady]);
   useEffect(()=>{if(storageReady)scheduleSave(SLEEP_KEY,sleepLog);},[sleepLog,storageReady]);
   useEffect(()=>{if(storageReady)scheduleSave(WATER_KEY,waterLog);},[waterLog,storageReady]);
   useEffect(()=>{if(storageReady)scheduleSave(PREFS_KEY,prefs);},[prefs,storageReady]);
@@ -2144,7 +2185,7 @@ function App(){
   },[]);
 
   /* ─── TAB SWITCH ─── */
-  function switchTab(t){setTab(t);setAnimKey(k=>k+1);setStepsPage(null);}
+  function switchTab(t){setTab(t);setAnimKey(k=>k+1);setStepsPage(null);setActPage(null);setRecOpen(false);}
   // New page → start at the top (the page itself scrolls now)
   useEffect(()=>{window.scrollTo(0,0);},[tab,dietView,fitView]);
 
@@ -2922,8 +2963,14 @@ Reply ONLY with valid JSON (no markdown):
     const kg=parseFloat(weightLog[date])||latestWeight?.w||+bodyMeasure.weightKg||75;
     const kmStep=bodySaved&&+bodyMeasure.heightCm?bodyMeasure.heightCm*0.415/100000:KM_PER_STEP;
     const sb=stepsLog[date]?.b,wl=walkLog[date];
-    const ck=JSON.stringify([kg,kmStep,stepsLog[date]?.at,wl]);const c=moveCache.current[date];if(c&&c.k===ck)return c.v;
-    const det=sb?detectWalks(sb):[];
+    const trs=Object.values(tracks).filter(t=>t&&localDate(new Date(t.start))===date);
+    const ck=JSON.stringify([kg,kmStep,stepsLog[date]?.at,wl,trs.map(t=>t.id+':'+t.pts.length+':'+(t.name||''))]);const c=moveCache.current[date];if(c&&c.k===ck)return c.v;
+    const gps=trs.map(t=>{const st=trackStats(t.pts),km=(t.distGps||st.dist||0)/1000,min=Math.max(1,Math.round(t.movingMs/60000));
+      const kmh=km/Math.max(1/60,t.movingMs/3600000),kind=speedKind(kmh),d0=new Date(t.start),start=d0.getHours()*60+d0.getMinutes()+d0.getSeconds()/60;
+      const steps=t.steps||Math.round(km/kmStep);
+      return{id:'gps-'+t.id,src:'gps',trackId:t.id,start,end:start+(t.end-t.start)/60000,min,steps,km,cadence:t.steps?Math.round(t.steps/min):null,kind,kmh,
+        name:t.name||walkName(kind,start),emoji:partOfDay(start)[1],kcal:Math.round((WALK_MET[kind]-1)*kg*min/60),stats:st,track:t};});
+    const det=(sb?detectWalks(sb):[]).filter(d=>!gps.some(g=>d.start<g.end&&d.end>g.start));
     const kcalOf=w=>Math.round(w.min?(WALK_MET[w.kind]-1)*kg*w.min/60:(w.km||w.steps*kmStep)*kg*0.5);
     det.forEach(w=>{w.km=w.steps*kmStep;w.kcal=kcalOf(w);});
     // walks you added yourself, unless the phone already found the same walk
@@ -2932,10 +2979,10 @@ Reply ONLY with valid JSON (no markdown):
       const x={id:'man-'+sl.id,src:'manual',slot:sl.id,start,end:w.from&&w.to?start+m.min:null,min:m.min||0,steps:m.steps||0,km:m.km||(m.steps||0)*kmStep,
         cadence:cad?Math.round(cad):null,kind,name:w.from?walkName(kind,start):`${sl.label} walk`,emoji:partOfDay(start)[1],timed:!!w.from};
       x.kcal=kcalOf(x);return x;})
-      .filter(x=>!det.some(d=>x.timed?(x.start<d.end&&(x.end||x.start+30)>d.start):true));
-    const walks=[...det,...added].sort((a,b)=>a.start-b.start);
+      .filter(x=>![...det,...gps].some(d=>x.timed?(x.start<d.end&&(x.end||x.start+30)>d.start):true));
+    const walks=[...gps,...det,...added].sort((a,b)=>a.start-b.start);
     const t=walkDayTotals(wl),sliceSum=sb?sb.reduce((a,x)=>a+(+x||0),0):0;
-    const steps=Math.max(t.best,sliceSum);
+    const steps=Math.max(t.best,sliceSum,gps.reduce((a,g)=>a+g.steps,0));
     const walkSteps=walks.reduce((a,w)=>a+w.steps,0),other=Math.max(0,steps-walkSteps);
     const walkKcal=walks.reduce((a,w)=>a+w.kcal,0),otherKcal=Math.round(other*kg*KCAL_PER_STEP_KG);
     const km=Math.max(steps*kmStep,walks.reduce((a,w)=>a+w.km,0));
@@ -2950,6 +2997,49 @@ Reply ONLY with valid JSON (no markdown):
   // ── Steps page (Day / Week / Month / Year) ──
   const [stepsPage,setStepsPage]=useState(null);   // {view:'day'|'week'|'month'|'year', date, sel}
   const openStepsPage=date=>{setStepsPage({view:'day',date:date||TODAY,sel:null});window.scrollTo(0,0);};
+  // ── Recording a walk (Start / Pause / Finish) ──
+  const [rec,setRec]=useState(null);        // live: {state,start,movingMs,distanceM,steps,gps,pts:[[ms,lat,lon,alt,acc]],confirm}
+  const [recOpen,setRecOpen]=useState(false);
+  const [actPage,setActPage]=useState(null);  // {date,id}: one walk's details
+  const recRef=useRef(null);recRef.current=rec;
+  const openAct=(date,id)=>{setActPage({date,id});window.scrollTo(0,0);};
+  async function startRecording(){
+    const W=window.LMNative?.walk;
+    if(!W||!W.available()){showToast('Recording a walk works in the Android app','var(--warn)');return;}
+    setSheet(null);
+    try{const st=await W.start('walk');setRec({...st,pts:st.points||[]});setRecOpen(true);setActPage(null);window.scrollTo(0,0);}
+    catch(e){const m=String(e&&(e.message||e.code)||e);
+      showToast(/location/i.test(m)?'Allow precise location so the app can draw your route':'Couldn’t start recording: '+m,'var(--warn)');}
+  }
+  async function finishRecording(save){
+    const W=window.LMNative.walk;
+    if(!save){await W.discard().catch(()=>{});setRec(null);setRecOpen(false);showToast('Walk discarded');return;}
+    setRec(r=>r&&{...r,saving:true});
+    const st=await W.stop();const start=st.start,end=st.end||Date.now();
+    const pts=thinTrack((st.points||[]).map(p=>[Math.max(0,Math.round((p[0]-start)/1000)),+(+p[1]).toFixed(6),+(+p[2]).toFixed(6),p[3]==null?null:Math.round(p[3]*10)/10]));
+    const id=String(start);
+    setTracks(p=>({...p,[id]:{id,start,end,movingMs:st.movingMs||0,steps:st.steps||0,distGps:Math.round(st.distanceM||0),pts}}));
+    setRec(null);setRecOpen(false);setStepsPage(null);openAct(localDate(new Date(start)),'gps-'+id);
+    showToast('Walk saved 🎉','var(--ok)');
+  }
+  // keep in step with the recorder: fast while its screen is open, slowly otherwise (for the Home banner)
+  useEffect(()=>{
+    const W=window.LMNative?.walk;if(!storageReady||!W||!W.available())return;
+    let gone=false;
+    const tick=async()=>{try{
+      const cur=recRef.current;if(cur&&cur.saving)return;
+      const st=await W.status(cur?cur.pts.length:0);if(gone)return;
+      if(st.state==='idle'){if(cur)setRec(null);return;}
+      setRec(p=>{const base=p&&st.from===p.pts.length?p.pts:[];return{...(p||{}),...st,points:undefined,pts:[...base,...(st.points||[])]};});
+      if(!cur&&!recRef.current)setRecOpen(true);   // app opened while a walk is being recorded
+    }catch(_){}};
+    tick();const t=setInterval(tick,recOpen?1000:4000);
+    return()=>{gone=true;clearInterval(t);};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[storageReady,recOpen]);
+  useEffect(()=>{window.__lmWalkOpen=()=>{setSheet(null);setRecOpen(true);};
+    if(window.__lmWalkOpenQueued){window.__lmWalkOpenQueued=false;setRecOpen(true);}
+    return()=>{window.__lmWalkOpen=null;};},[]);
   const mergeBuckets=days=>{if(!days||!days.length)return;
     setStepsLog(p=>{const n={...p},cut=calAddDays(TODAY,-40);
       for(const x of days)if(x&&x.date&&Array.isArray(x.b))n[x.date]={b:x.b.map(v=>+v||0),at:Date.now()};
@@ -3050,6 +3140,9 @@ Reply ONLY with valid JSON (no markdown):
   const backRef=useRef(null);
   backRef.current=()=>{if(bigWater&&bigWater.phase==='pick'){setBigWater(null);return true;}
     if(sheet){closeSheet();return true;}
+    if(rec&&rec.confirm){setRec(r=>({...r,confirm:false}));return true;}
+    if(recOpen){setRecOpen(false);return true;}
+    if(actPage){setActPage(null);return true;}
     if(stepsPage){setStepsPage(null);return true;}
     if(setupOpen){if(setupStep>0){setSetupStep(n=>n-1);return true;}return false;}
     if(tab==='settings'&&settingsPage){setSettingsPage(null);return true;}
@@ -3174,7 +3267,7 @@ Reply ONLY with valid JSON (no markdown):
   }
   function openItem(it,day){
     if(it.kind==='meal')openMeal(it.entry.id);
-    else if(it.kind==='walk'){if(it.src==='hc')openStepsPage(day);else openWalk(day,it.slot);}
+    else if(it.kind==='walk')openAct(day,it.id.slice(1));
     else if(it.kind==='weight')openWeight(day);
     else if(it.kind==='feel')openFeel(day,it.entry.id);
     else if(it.kind==='sleep')openSleep(day);
@@ -3307,11 +3400,111 @@ Reply ONLY with valid JSON (no markdown):
         </div>
       </div>);
   }
+  /* ═══ RECORDING A WALK ═══ */
+  function renderRecPage(){
+    const r=rec||{state:'idle',pts:[]};const paused=r.state==='paused';
+    const sec=(r.movingMs||0)/1000,km=(r.distanceM||0)/1000,pace=km>=0.02?sec/km:NaN,min=sec/60;
+    const cad=r.steps&&min>=0.5?Math.round(r.steps/min):null;
+    const gpsTxt=r.gps==='ok'?`GPS ±${Math.round(r.accuracy||0)} m`:r.gps==='lost'?'GPS signal lost':'Finding GPS…';
+    const W=window.LMNative?.walk;
+    const toggle=async()=>{try{const st=paused?await W.resume():await W.pause();setRec(p=>({...p,state:st.state}));}catch(_){}};
+    return(<div>
+      <div className="x-head" style={{alignItems:'center',justifyContent:'flex-start'}}>
+        <button className="x-ibtn" aria-label="Back" onClick={()=>setRecOpen(false)}><Ico d={ICON.left} size={24}/></button>
+        <Shape kind="cookie9" size={44} fill={paused?'var(--amber-c)':'var(--mint-c)'} color="var(--fg)" font={20}>{paused?'⏸':'🚶'}</Shape>
+        <h1 style={{fontSize:28,flex:1}}>{paused?'Paused':'Walk'}</h1>
+        <span className="x-tag" style={{background:r.gps==='ok'?'var(--mint-c)':'var(--amber-c)',color:r.gps==='ok'?'var(--on-mint-c)':'var(--on-amber-c)'}}>{gpsTxt}</span>
+      </div>
+      <div className="x-wrap" style={{paddingTop:0}}>
+        <RouteMap pts={r.pts.map(p=>[0,p[1],p[2]])} live height={290} dark={!isLight}/>
+        <div style={{textAlign:'center',padding:'4px 0'}}>
+          <div className="x-eyebrow" style={{color:'var(--fg2)'}}>Distance</div>
+          <div className="x-num" style={{fontSize:96,lineHeight:1,color:paused?'var(--fg2)':'var(--pri)'}}>{km.toFixed(2)}</div>
+          <div style={{fontWeight:800,color:'var(--fg2)'}}>kilometres</div>
+        </div>
+        <div className="x-grid3" style={{gap:8}}>
+          {[['Time',fmtDur(sec),''],['Pace',fmtPaceS(pace),'per km'],['Steps',r.steps?fmtN(r.steps):'—',cad?`${cad} a minute`:'']].map(([l,v,u],i)=>
+            <div key={l} className="x-card" style={{padding:'12px 10px',textAlign:'center',borderRadius:i===0?'28px 12px 12px 28px':i===2?'12px 28px 28px 12px':12}}>
+              <div style={{fontSize:12,fontWeight:750,color:'var(--fg2)'}}>{l}</div>
+              <div className="x-num" style={{fontSize:26}}>{v}</div>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--fg2)',minHeight:14}}>{u}</div></div>)}
+        </div>
+        <div style={{display:'flex',gap:12}}>
+          <button className="x-btn tonal" onClick={toggle} style={{flex:1,height:72,borderRadius:36,fontSize:18}}>{paused?'▶  Resume':'⏸  Pause'}</button>
+          <button className="x-btn" onClick={()=>setRec(p=>({...p,confirm:true,arm:false}))} style={{flex:1,height:72,borderRadius:'36px 18px 36px 18px',fontSize:18}}>■  Finish</button>
+        </div>
+        <div className="x-sub" style={{textAlign:'center',fontSize:12.5,lineHeight:1.5}}>You can leave this screen or lock your phone: recording keeps going. Tap the notification to come back.</div>
+      </div>
+      {r.confirm&&<div onClick={()=>setRec(p=>({...p,confirm:false}))} style={{position:'fixed',inset:0,zIndex:300,background:'rgba(0,0,0,.72)',display:'flex',alignItems:'flex-end',justifyContent:'center',padding:16}}>
+        <div onClick={e=>e.stopPropagation()} role="dialog" aria-label="Finish this walk?" className="x-card" style={{width:'100%',maxWidth:420,borderRadius:32,display:'flex',flexDirection:'column',gap:12,padding:20}}>
+          <h2 style={{margin:0}}>Finish this walk?</h2>
+          <div className="x-sub">{km.toFixed(2)} km · {fmtDur(sec)}{r.steps?` · ${fmtN(r.steps)} steps`:''}{km<0.05?' — very short, but you can still save it':''}</div>
+          <button className="x-btn" disabled={r.saving} onClick={()=>finishRecording(true)}>{r.saving?'Saving…':'✓  Save walk'}</button>
+          <button className="x-btn tonal" onClick={()=>setRec(p=>({...p,confirm:false}))}>Keep going</button>
+          <button className="x-btn ghost" style={{color:'var(--err)'}} onClick={()=>r.arm?finishRecording(false):setRec(p=>({...p,arm:true}))}>{r.arm?'Tap again to discard':'Discard'}</button>
+        </div>
+      </div>}
+    </div>);
+  }
+  /* ═══ ONE WALK ═══ */
+  function renderActPage(){
+    const {date,id,del}=actPage;const mv=moveDay(date);const w=mv.walks.find(x=>x.id===id);
+    const head=(title,sub,emoji)=>(<div className="x-head" style={{alignItems:'center',justifyContent:'flex-start'}}>
+      <button className="x-ibtn" aria-label="Back" onClick={()=>setActPage(null)}><Ico d={ICON.left} size={24}/></button>
+      <Shape kind="cookie9" size={44} fill="var(--mint-c)" color="var(--on-mint-c)" font={20}>{emoji}</Shape>
+      <div style={{flex:1,minWidth:0}}><h1 style={{fontSize:24,lineHeight:1.15}}>{title}</h1>{sub&&<div className="x-sub" style={{fontSize:13}}>{sub}</div>}</div></div>);
+    if(!w)return(<div>{head('Walk',dateLong(date),'🚶')}<div className="x-wrap"><div className="x-card">This walk isn’t here any more.</div></div></div>);
+    const gps=w.src==='gps',st=w.stats||{},sec=gps?w.track.movingMs/1000:(w.min||0)*60;
+    const elapsed=gps?(w.track.end-w.track.start)/1000:null,pace=w.km>0&&sec>0?sec/w.km:NaN,kmh=sec>0?w.km/(sec/3600):0;
+    const stride=w.steps>0&&w.km>0?w.km*1000/w.steps:null,est=w.src==='hc'||(w.src==='manual'&&!walkLog[date]?.[w.slot]?.km);
+    const e=est?'≈ ':'';
+    const stats=[['⏱','Moving time',fmtDur(sec),''],...(gps?[['🕐','Total time',fmtDur(elapsed),'with pauses']]:[]),
+      ['⚡','Average pace',e+fmtPaceS(pace),'per km'],['🏎️','Average speed',e+(kmh?kmh.toFixed(1):'—'),'km/h'],
+      ['👟','Steps',w.steps?fmtN(w.steps):'—',''],['🎵','Cadence',w.cadence?String(w.cadence):'—','steps a minute'],
+      ['📏','Stride',stride?e+Math.round(stride*100):'—',stride?'cm a step':''],['🔥','Calories',`~${w.kcal}`,'kcal from moving'],
+      ...(gps&&st.hasAlt?[['⛰️','Climb',`${Math.round(st.gain)}`,`m up · ${Math.round(st.loss)} m down`]]:[]),
+      ...(gps&&st.maxKmh?[['💨','Top speed',st.maxKmh.toFixed(1),'km/h']]:[])];
+    const sp=st.splits||[],full=sp.filter(x=>!x.part),fast=full.length?Math.min(...full.map(x=>x.sec)):0,slow=sp.length?Math.max(...sp.map(x=>x.part?x.sec*1000/x.part:x.sec)):1;
+    const routeShared=(hcState.write||[]).includes('ExerciseRoute');
+    return(<div>
+      {head(w.name,`${dateLong(date)} · ${w.end?fmtSpan(w.start,w.end):'time not set'}`,w.kind==='run'?'🏃':w.emoji)}
+      <div className="x-wrap" style={{paddingTop:0}}>
+        {gps&&<RouteMap pts={w.track.pts} height={290} dark={!isLight}/>}
+        <div className="x-card mint sa" style={{display:'flex',alignItems:'baseline',gap:10,flexWrap:'wrap'}}>
+          <span className="x-num" style={{fontSize:64,lineHeight:1,color:'var(--fg)'}}>{e}{w.km.toFixed(2)}</span><span style={{fontWeight:800,fontSize:18}}>km</span>
+          <span style={{flex:1}}/><span style={{fontWeight:800}}>{fmtDur(sec)} · {fmtPaceS(pace)}/km</span>
+        </div>
+        <div className="x-grid2">{stats.map(([em,l,v,u])=><div key={l} className="x-stat"><small>{em} {l}</small><b>{v}</b><i>{u}</i></div>)}</div>
+        {gps&&sp.length>0&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
+          <h2 className="x-h2" style={{margin:0}}>Pace for each km</h2>
+          {sp.map((x,i)=>{const p=x.part?x.sec*1000/x.part:x.sec,best=!x.part&&x.sec===fast&&full.length>1;
+            return(<div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
+              <span style={{width:44,fontWeight:800,fontSize:13}}>{x.part?`${(x.part/1000).toFixed(2)}`:`km ${x.km}`}</span>
+              <span style={{flex:1,height:22,background:'var(--s2)',borderRadius:11,overflow:'hidden'}}>
+                <span className="lm-grow-x" style={{display:'block',height:'100%',width:`${Math.max(18,100*p/slow)}%`,borderRadius:11,background:best?'var(--mint)':'var(--pri-c)',animationDelay:`${i*60}ms`}}/></span>
+              <b style={{width:64,textAlign:'right',fontSize:14,color:best?'var(--mint)':'var(--fg)'}}>{fmtPaceS(p)}{best?' ★':''}</b></div>);})}
+          <div className="x-sub" style={{fontSize:12}}>Shorter bar = faster. ★ fastest km{sp.some(x=>x.part)?'; the last row is the part-km at the end':''}.</div>
+        </div>}
+        {gps&&st.hasAlt&&st.profile.length>=3&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:8}}>
+          <h2 className="x-h2" style={{margin:0}}>Elevation</h2>
+          <LineChart points={st.profile.map(p=>({x:p.x+' km',y:p.y}))} color="var(--amber)" height={120} fmt={v=>v+' m'}/></div>}
+        {gps&&window.LMNative?.isNative&&(hcState.write||[]).includes('ExerciseSession')&&!routeShared&&
+          <Nudge emoji="🗺️" text="Show this route in Google Health too" action="Allow" onClick={()=>connectHC()}/>}
+        {w.src==='hc'&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
+          <div className="x-sub" style={{lineHeight:1.5}}>Found from your phone’s steps, so distance, pace and stride (≈) are estimated from your steps. Next time, tap <b>Start a walk</b> to record the route, pace for each km and climb.</div>
+          {date===TODAY&&!rec&&<button className="x-btn" onClick={startRecording}>▶  Start a walk</button>}</div>}
+        {w.src==='manual'&&<button className="x-btn outline" onClick={()=>openWalk(date,w.slot)}>Edit this walk</button>}
+        {gps&&<button className="x-btn ghost" style={{color:'var(--err)'}} onClick={()=>{if(!del){setActPage(a=>({...a,del:true}));return;}
+          setTracks(p=>{const n={...p};delete n[w.trackId];return n;});setActPage(null);showToast('Walk deleted');}}>{del?'Tap again to delete this walk':'Delete walk'}</button>}
+      </div>
+    </div>);
+  }
   /* ═══ STEPS ═══ */
   function renderWalkRow(date,w){
-    return(<button key={w.id} className="x-card" onClick={()=>w.src==='manual'?openWalk(date,w.slot):openStepsPage(date)}
+    return(<button key={w.id} className="x-card" onClick={()=>openAct(date,w.id)}
         style={{display:'flex',gap:12,alignItems:'center',textAlign:'left',color:'var(--on-mint-c)',background:'var(--mint-c)',borderRadius:'18px 34px 18px 34px',padding:'12px 14px'}}>
-      <Shape kind={w.kind==='run'?'cookie6':'sunny'} size={48} fill="var(--mint)" color="#000" font={22}>{w.kind==='run'?'🏃':w.emoji}</Shape>
+      {w.src==='gps'?<span style={{width:56,height:56,flex:'none',borderRadius:18,overflow:'hidden',border:'2px solid var(--mint)'}}><RouteThumb pts={w.track.pts}/></span>
+        :<Shape kind={w.kind==='run'?'cookie6':'sunny'} size={48} fill="var(--mint)" color="#000" font={22}>{w.kind==='run'?'🏃':w.emoji}</Shape>}
       <span style={{flex:1,minWidth:0}}>
         <b style={{display:'block',fontSize:16,color:'var(--fg)',lineHeight:1.25}}>{w.name}</b>
         <span style={{display:'block',fontSize:13,fontWeight:700}}>{w.end?fmtSpan(w.start,w.end):'Time not set'}{w.min?` · ${w.min} min`:''}</span>
@@ -3320,7 +3513,7 @@ Reply ONLY with valid JSON (no markdown):
       <span style={{textAlign:'right',flex:'none'}}>
         <b className="x-num" style={{fontSize:22,color:'var(--fg)',display:'block'}}>{w.kcal}</b>
         <span style={{fontSize:11,fontWeight:750}}>kcal</span>
-        {w.src==='manual'&&<span style={{display:'block',fontSize:10.5,fontWeight:750,opacity:.8,marginTop:2}}>added by you</span>}
+        {w.src!=='hc'&&<span style={{display:'block',fontSize:10.5,fontWeight:750,opacity:.8,marginTop:2}}>{w.src==='gps'?'recorded':'added by you'}</span>}
       </span>
     </button>);
   }
@@ -3344,6 +3537,8 @@ Reply ONLY with valid JSON (no markdown):
       body=<>
         {navRow(isT?'Today':dateLong(date),null,()=>set({date:calAddDays(date,-1),sel:null}),()=>set({date:calAddDays(date,1),sel:null}),date<TODAY,
           !isT&&<button className="x-btn sm outline" onClick={()=>set({date:TODAY,sel:null})} style={{alignSelf:'center'}}>Back to today</button>)}
+        {isT&&(rec?<Nudge emoji="🔴" text={`Recording · ${((rec.distanceM||0)/1000).toFixed(2)} km`} action="Open" onClick={()=>setRecOpen(true)}/>
+          :<button className="x-btn" onClick={startRecording} style={{height:60,borderRadius:'30px 30px 30px 12px',fontSize:17}}>▶  Start a walk</button>)}
         <div className="x-card mint sa" style={{display:'flex',flexDirection:'column',gap:12}}>
           <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap'}}>
             <span className="x-num" style={{fontSize:52,color:'var(--fg)',lineHeight:1}}>{fmtN(mv.steps)}</span>
@@ -3465,6 +3660,7 @@ Reply ONLY with valid JSON (no markdown):
             </button>);})}
         </div>
         <div className="x-wrap" style={{marginTop:14}}>
+          {rec&&!recOpen&&<Nudge emoji="🔴" text={`${rec.state==='paused'?'Walk paused':'Recording your walk'} · ${((rec.distanceM||0)/1000).toFixed(2)} km · ${fmtDur((rec.movingMs||0)/1000)}`} action="Open" onClick={()=>setRecOpen(true)}/>}
           {isT&&update&&!updSkipped&&<div style={{display:'flex',gap:8,alignItems:'stretch'}}>
             <div style={{flex:1,display:'flex'}}><Nudge emoji="🎁" text={`Version ${update.latest} is out`} action="See what’s new" onClick={()=>goSettings('app')}/></div>
             <button className="x-ibtn" aria-label="Not now" onClick={()=>{try{localStorage.setItem('lm-update-skip',update.latest);}catch(_){}setUpdate({...update});}}
@@ -3699,7 +3895,8 @@ Reply ONLY with valid JSON (no markdown):
           <div className="x-stat"><small>Burned</small><b style={{color:'var(--amber)'}}>{exKcal+walkKcal||'—'}</b><i>{exKcal&&walkKcal?'gym + steps':walkKcal?'from steps':'kcal est.'}</i></div>
         </div>
 
-        <div className="x-sec"><h2 className="x-h2">Walks</h2><button className="x-btn sm tonal" onClick={()=>openStepsPage(date)}>Steps by hour</button></div>
+        <div className="x-sec"><h2 className="x-h2">Walks</h2><span style={{display:'flex',gap:6}}>
+          {isT&&!rec&&<button className="x-btn sm" onClick={startRecording}>▶ Start</button>}<button className="x-btn sm tonal" onClick={()=>openStepsPage(date)}>By hour</button></span></div>
         {mv.walks.length?<div style={{display:'flex',flexDirection:'column',gap:10}}>{mv.walks.map(w=>renderWalkRow(date,w))}</div>
           :<button className="x-card" onClick={()=>openStepsPage(date)} style={{textAlign:'left',color:'var(--fg)',display:'flex',gap:12,alignItems:'center'}}>
             <Shape kind="sunny" size={42} fill="var(--s3)" font={20}>🚶</Shape>
@@ -4318,7 +4515,7 @@ Reply ONLY with valid JSON (no markdown):
     if(s.type==='log'){
       title='Log';sub='What would you like to add?';
       const opts=[['🍽️','Food','AI works out the macros','pri',()=>openFood(TODAY,null)],['💧','Water','Glass, bottle or custom','sky',()=>openSheet('water',{date:TODAY},{amt:300})],
-        ['🚶','Walk','Times, steps, distance','mint',()=>openWalk(TODAY)],['😴','Sleep','Last night','night',()=>openSleep(TODAY)],
+        ['▶️','Start a walk','Record route, pace and steps','mint',()=>startRecording()],['🚶','Add a walk','Times, steps, distance','mint',()=>openWalk(TODAY)],['😴','Sleep','Last night','night',()=>openSleep(TODAY)],
         ['⚖️','Weight','Today’s weigh-in','violet',()=>openWeight(TODAY)],['😶','Feeling','Symptoms & energy','pink',()=>openFeel(TODAY)],
         ['🏋️','Workout','Today’s plan','amber',()=>goWorkout(TODAY)],['📱','Phone steps','Whole-day total','',()=>openSteps(TODAY)]];
       body=<div className="x-grid2">{opts.map(([em,l,sb,c,fn],i)=>(
@@ -4956,7 +5153,7 @@ Reply ONLY with valid JSON (no markdown):
     const av=await H.available();
     if(!av.available){setHcState(s=>({...s,available:false}));showToast(av.needsUpdate?'Update Health Connect from the Play Store first':'Health Connect isn’t available on this phone','var(--warn)');
       if(av.needsUpdate)window.LMNative.openUrl('https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata');return;}
-    try{const g=await H.authorize(hcT.steps?['Steps']:[],Object.entries(HC_WRITE).filter(([k])=>hcT[k]).map(([,v])=>v));
+    try{const g=await H.authorize(hcT.steps?['Steps']:[],Object.entries(HC_WRITE).filter(([k])=>hcT[k]).flatMap(([k,v])=>k==='workouts'?[v,'Steps','Distance','ExerciseRoute']:[v]));
       setHcState(s=>({...s,available:true,...g}));
       if(g.read.length||g.write.length){showToast('Health Connect connected ✓','var(--ok)');setTimeout(()=>syncHC(true),300);}
       else showToast('No permissions were given','var(--warn)');
@@ -4993,12 +5190,19 @@ Reply ONLY with valid JSON (no markdown):
           const end=l._completedAt?+new Date(l._completedAt):new Date(dk+'T19:00:00').getTime();
           recs.push({type:'ExerciseSession',id:'gym-'+dk,start:end-45*60000,end,exercise:/run/.test(info?.type||'')?'running':'strength',title:info?.label||'Workout'});});
       }
+      if(hcT.workouts&&can('ExerciseSession'))Object.values(tracks).forEach(t=>{if(!t||localDate(new Date(t.start))<since)return;
+        const mv=moveDay(localDate(new Date(t.start))).walks.find(w=>w.trackId===t.id);
+        recs.push({type:'ExerciseSession',id:'track-'+t.id,start:t.start,end:t.end,exercise:mv&&mv.kind==='run'?'running':'walking',title:mv?mv.name:'Walk',
+          route:t.pts.map(p=>[t.start+p[0]*1000,p[1],p[2],p[3]])});
+        if(can('Steps')&&t.steps>0)recs.push({type:'Steps',id:'trsteps-'+t.id,start:t.start,end:t.end,count:t.steps});
+        if(can('Distance')&&mv)recs.push({type:'Distance',id:'trdist-'+t.id,start:t.start,end:t.end,meters:Math.round(mv.km*1000)});});
       if(hcT.weight&&can('Weight'))Object.entries(weightLog).forEach(([dk,v])=>{if(dk<since||!(+v>0))return;recs.push({type:'Weight',id:'weight-'+dk,time:new Date(dk+'T08:00:00').getTime(),kg:+v});});
       if(hcT.sleep&&can('SleepSession'))Object.entries(sleepLog).forEach(([dk,sl])=>{if(dk<since)return;const mn=sleepMin(sl);if(!mn)return;
         const wake=new Date(dk+'T'+sl.wake+':00').getTime();recs.push({type:'SleepSession',id:'sleep-'+dk,start:wake-mn*60000,end:wake,title:'Sleep'});});
       let synced={};try{synced=JSON.parse(localStorage.getItem('lm-hc-synced')||'{}');}catch(_){}
       const ver=Date.now(),want={},put=[];
-      for(const r of recs){const {id,...rest}=r;const h=JSON.stringify(rest);want[id]=1;if(!synced[id]||synced[id].h!==h){put.push({...r,version:ver});synced[id]={h,t:r.type,s:r.start||r.time};}}
+      const hash=x=>{let h=5381;for(let i=0;i<x.length;i++)h=(h*33^x.charCodeAt(i))>>>0;return h.toString(36)+'.'+x.length;};
+      for(const r of recs){const {id,...rest}=r;const h=hash(JSON.stringify(rest));want[id]=1;if(!synced[id]||synced[id].h!==h){put.push({...r,version:ver});synced[id]={h,t:r.type,s:r.start||r.time};}}
       const gone={};
       for(const [id,v] of Object.entries(synced))if(!want[id]&&v.s>=new Date(since+'T00:00:00').getTime()){(gone[v.t]=gone[v.t]||[]).push(id);delete synced[id];}
       if(put.length)await H.upsert(put);
@@ -5115,8 +5319,9 @@ Reply ONLY with valid JSON (no markdown):
       {toast&&<div className="x-snack" role="status" style={sheet?{top:'calc(12px + env(safe-area-inset-top,0px))',bottom:'auto'}:null}><i style={{background:toast.color}}/>{toast.msg}</div>}
       {setupOpen&&!sheet&&renderSetup()}
       {renderBigWater()}
-      {stepsPage&&!sheet&&!setupOpen&&<div className="page-pad" style={{flex:1,display:'flex',flexDirection:'column'}}>{renderStepsPage()}</div>}
-      <div style={{display:sheet||setupOpen||stepsPage?'none':'flex',flexDirection:'column',flex:1}}>
+      {!sheet&&!setupOpen&&(recOpen||actPage||stepsPage)&&<div className="page-pad" style={{flex:1,display:'flex',flexDirection:'column'}}>
+        {recOpen?renderRecPage():actPage?renderActPage():renderStepsPage()}</div>}
+      <div style={{display:sheet||setupOpen||stepsPage||actPage||recOpen?'none':'flex',flexDirection:'column',flex:1}}>
       {tab==='diet'&&<div>{head('Food',dateLong(TODAY))}<div style={{padding:'0 16px 12px'}}><Seg items={[['today','Today'],['history','History']]} value={pillPreview?.dietView||dietView} onChange={setDietView}/></div></div>}
       {tab==='fitness'&&<div>{head('Fitness',fitView==='day'?'Plan · walks · workout':'Your history')}<div style={{padding:'0 16px 12px'}}><Seg items={[['day','Today'],['calendar','History']]} value={pillPreview?.fitView||fitView} onChange={setFitView}/></div></div>}
       {tab==='progress'&&head('Progress','Body, trends and weekly review')}
@@ -5289,6 +5494,56 @@ function Shape({kind='cookie9',size=44,fill='var(--s3)',color,children,style,fon
 }
 
 // Wavy linear progress (M3 Expressive): wavy active track + flat remaining track
+// A route on an OpenStreetMap background (needs internet for the map; the route always shows).
+// Fits the whole route; while recording it follows you.
+function lonX(lon,z){return 256*2**z*(lon+180)/360;}
+function latY(lat,z){const r=lat*Math.PI/180;return 256*2**z*(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2;}
+function RouteMap({pts,height=280,live=false,dark=true,round=28}){
+  const ref=useRef(null);const [w,setW]=useState(360);
+  useEffect(()=>{const el=ref.current;if(!el)return;const f=()=>setW(el.clientWidth||360);f();
+    const ro=window.ResizeObserver?new ResizeObserver(f):null;ro&&ro.observe(el);return()=>ro&&ro.disconnect();},[]);
+  const H=height,pad=36;
+  const ll=(pts||[]).map(p=>[p[1],p[2]]);
+  let z=17,cx=0,cy=0;
+  if(ll.length){
+    const lats=ll.map(p=>p[0]),lons=ll.map(p=>p[1]);
+    const n=Math.max(...lats),s=Math.min(...lats),e=Math.max(...lons),wst=Math.min(...lons);
+    // fit the whole route (while recording, never closer than street level)
+    z=live?17:18;while(z>3&&(lonX(e,z)-lonX(wst,z)>w-2*pad||latY(s,z)-latY(n,z)>H-2*pad))z--;
+    const c=[(n+s)/2,(e+wst)/2];cx=lonX(c[1],z);cy=latY(c[0],z);
+  }
+  const ox=cx-w/2,oy=cy-H/2;
+  const tiles=[];
+  if(ll.length){const n=2**z;for(let tx=Math.floor(ox/256);tx<=Math.floor((ox+w)/256);tx++)for(let ty=Math.floor(oy/256);ty<=Math.floor((oy+H)/256);ty++){
+    if(ty<0||ty>=n)continue;const wx=((tx%n)+n)%n;tiles.push({k:`${z}/${wx}/${ty}`,x:tx*256-ox,y:ty*256-oy});}}
+  const xy=ll.map(p=>[lonX(p[1],z)-ox,latY(p[0],z)-oy]);
+  const d=xy.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  return(<div ref={ref} style={{position:'relative',height:H,borderRadius:round,overflow:'hidden',background:'var(--s2)',
+      backgroundImage:'radial-gradient(var(--line) 1px, transparent 1px)',backgroundSize:'18px 18px'}}>
+    {tiles.map(t=><img key={t.k} alt="" src={`https://tile.openstreetmap.org/${t.k}.png`} draggable="false" onError={e=>{e.currentTarget.style.visibility='hidden';}}
+      style={{position:'absolute',left:t.x,top:t.y,width:256,height:256,filter:dark?'invert(1) hue-rotate(180deg) brightness(.82) contrast(.88) saturate(.5)':'saturate(.7)',pointerEvents:'none'}}/>)}
+    {xy.length>0&&<svg width={w} height={H} style={{position:'absolute',left:0,top:0,overflow:'visible'}} aria-label="Route map" role="img">
+      <path d={d} fill="none" stroke="var(--bg)" strokeWidth="10" strokeLinejoin="round" strokeLinecap="round" opacity=".85"/>
+      <path d={d} fill="none" stroke="var(--pri)" strokeWidth="5.5" strokeLinejoin="round" strokeLinecap="round"/>
+      <circle cx={xy[0][0]} cy={xy[0][1]} r="8" fill="var(--mint)" stroke="var(--bg)" strokeWidth="3"/>
+      {live?<g><circle cx={xy[xy.length-1][0]} cy={xy[xy.length-1][1]} r="16" fill="var(--pri)" opacity=".25" className="lm-ping"/>
+          <circle cx={xy[xy.length-1][0]} cy={xy[xy.length-1][1]} r="8" fill="var(--pri)" stroke="#fff" strokeWidth="3"/></g>
+        :xy.length>1&&<g><circle cx={xy[xy.length-1][0]} cy={xy[xy.length-1][1]} r="9" fill="var(--bg)" stroke="var(--pri)" strokeWidth="3"/>
+          <circle cx={xy[xy.length-1][0]} cy={xy[xy.length-1][1]} r="3.5" fill="var(--pri)"/></g>}
+    </svg>}
+    {!xy.length&&<div style={{position:'absolute',inset:0,display:'grid',placeItems:'center',color:'var(--fg2)',fontWeight:700}}>{live?'📡 Finding GPS…':'No route'}</div>}
+    {tiles.length>0&&<span style={{position:'absolute',right:10,bottom:8,fontSize:10,fontWeight:700,color:'var(--fg2)',background:'var(--bg)',padding:'2px 6px',borderRadius:8,opacity:.85}}>© OpenStreetMap</span>}
+  </div>);
+}
+// Small route drawing for a walk's card (no map)
+function RouteThumb({pts}){
+  const ll=(pts||[]).map(p=>[lonX(p[2],17),latY(p[1],17)]);
+  if(ll.length<2)return <div style={{width:'100%',height:'100%',background:'var(--mint-c)',display:'grid',placeItems:'center'}}>🚶</div>;
+  const xs=ll.map(p=>p[0]),ys=ll.map(p=>p[1]),x0=Math.min(...xs),y0=Math.min(...ys),wd=Math.max(...xs)-x0,ht=Math.max(...ys)-y0,k=40/Math.max(wd,ht,1);
+  const ox=(56-wd*k)/2,oy=(56-ht*k)/2,d=ll.map((p,i)=>(i?'L':'M')+(ox+(p[0]-x0)*k).toFixed(1)+' '+(oy+(p[1]-y0)*k).toFixed(1)).join(' ');
+  return(<svg viewBox="0 0 56 56" width="100%" height="100%" style={{display:'block',background:'var(--mint-c)'}} aria-hidden="true">
+    <path d={d} fill="none" stroke="var(--mint)" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/></svg>);
+}
 // A bar's number: across the top when the bar is wide enough, otherwise turned on its side
 // (inside the bar when it fits, just above it when the bar is short)
 const kfmt=v=>v>=1e6?(v/1e6).toFixed(1).replace(/\.0$/,'')+'M':v>=1000?(v/1000).toFixed(v>=10000?0:1).replace(/\.0$/,'')+'k':String(Math.round(v));

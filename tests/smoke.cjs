@@ -16,6 +16,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   p.on('console',m=>{if(m.type()==='error'&&!/favicon|ERR_FILE_NOT_FOUND/.test(m.text()))errors.push('console: '+m.text());});
   // What's new pictures come from GitHub; serve a blank image so the test never depends on the network
   const blank=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=','base64');
+  await p.route(/tile\.openstreetmap\.org/,r=>r.fulfill({status:200,contentType:'image/png',body:blank}));
   await p.route(/raw\.githubusercontent\.com/,r=>r.fulfill({status:200,contentType:'image/png',body:blank}));
   await p.clock.setFixedTime(new Date('2026-11-09T20:30:00+05:30'));
   await p.addInitScript(()=>{
@@ -99,6 +100,23 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await expect('By the hour');
     await click('.x-seg button','Day');await p.click('[aria-label="Earlier"]');await W();await expect('Back to today');
     await p.click('[aria-label="Back"]');await W();await expect('Timeline');});
+  await step('Walk found from steps opens its page',async()=>{await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);
+    await click('.x-card','Brisk morning walk');await W(400);await expect('estimated from your steps');await expect('Cadence');
+    await p.click('[aria-label="Back"]');await W();await p.click('[aria-label="Back"]');await W();});
+  await step('Record a walk (start, pause, finish)',async()=>{
+    // a pretend GPS recorder: 25 minutes around a park
+    await p.evaluate(()=>{window.LMNative.walk={available:()=>true,_st:'idle',_t0:0,_pts:[],
+      async start(){this._st='recording';this._t0=Date.now()-25*60000;const c=[18.5204,73.8567];
+        this._pts=Array.from({length:120},(_,i)=>{const a=i/120*2*Math.PI;return[this._t0+i*12500,c[0]+0.004*Math.sin(a),c[1]+0.006*Math.cos(a)+i*0.00003,560+10*Math.sin(a*2),5];});return this.status(0);},
+      async status(from){return{state:this._st,start:this._t0,movingMs:25*60000,distanceM:2600,steps:3300,gps:'ok',accuracy:5,count:this._pts.length,from:from||0,points:this._pts.slice(from||0)};},
+      async pause(){this._st='paused';return this.status(1e9);},async resume(){this._st='recording';return this.status(1e9);},
+      async stop(){const s=await this.status(0);s.end=this._t0+26*60000;this._st='idle';return s;},async discard(){this._st='idle';}};});
+    await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);await click('.x-btn','Start a walk');await W(1500);
+    await expect('kilometres');await click('.x-btn','Pause');await expect('Resume');await click('.x-btn','Resume');
+    await click('.x-btn','Finish');await expect('Finish this walk');await click('.x-btn','Save walk');await W(900);
+    await expect('Pace for each km');await expect('Moving time');await expect('Elevation');
+    if(!(await p.$('[aria-label="Route map"]')))throw new Error('no route map');
+    await p.click('[aria-label="Back"]');await W();});
   await step('Burned counts steps',async()=>{await tab(2);if(!(await has('from steps'))&&!(await has('gym + steps')))throw new Error('Burned does not include steps');});
   await step('Water reminder tapped: pick an amount',async()=>{await tab(0);await p.evaluate(()=>window.__lmWaterPick());await W(700);
     await expect('How much did you drink');await p.click('[aria-label="500 ml"]');await W(3600);
@@ -121,7 +139,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     if(!(await p.evaluate(()=>window.__jsonMode)))throw new Error('Claude was not told to reply in JSON');});
   await step('Water',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Water');
     await click('.x-sheet button','Glass');await expect('250 ml');await close();});
-  await step('Walk',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Walk');
+  await step('Walk',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Add a walk');
     await expect('Start + duration');await p.fill('.x-sheet input[inputmode=numeric]','3500');await click('.x-sheet-foot button','Save walk');
     if(await p.$('.x-sheet'))throw new Error('walk panel did not close after saving');});
   await step('Sleep',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Sleep');
