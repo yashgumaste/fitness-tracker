@@ -1,50 +1,55 @@
 {
-  "unreleased": [
-    {
-      "text": "Record a walk: tap Start a walk (Steps page, Fitness or +). The app records your route with GPS, plus distance, time, pace and steps, even with the screen off. A notification shows the progress. Pause, resume, then Finish to save or discard.",
-      "img": "docs/whatsnew/walk-recording.png"
-    },
-    {
-      "text": "Each recorded walk has its own page: the route on a map, moving and total time, average pace and speed, steps, cadence, stride, calories, climb, top speed, pace for each km and an elevation chart.",
-      "img": "docs/whatsnew/walk-details.png"
-    },
-    {
-      "text": "Walks found from your phone's steps open their own page too, with time, steps, cadence and calories. Distance, pace and stride are estimated, and there's no map."
-    },
-    {
-      "text": "Recorded walks go to Health Connect with their route, steps and distance, so they show in Google Health. Tap Allow once on a walk's page to share routes."
-    },
-    {
-      "text": "Google Drive backup, like WhatsApp: in Settings → Data & backup, sign in with Google once. The app then backs up by itself (daily, weekly or monthly, on Wi-Fi or also mobile data) to a hidden folder in your own Drive, keeping the last 30. Back up now any time, or restore any backup on a new phone.",
-      "img": "docs/whatsnew/drive-backup.png"
-    },
-    {
-      "text": "The coach now looks at everything you log, everywhere it appears (Home, food history, workout review and weekly analysis): every meal with its macros, water, sleep, weight, how you felt, walks (recorded, found from your steps or added by hand), all your steps and workouts. It weighs what you ate against what you burned. The coach card also shows on days with no meals logged."
-    },
-    {
-      "text": "Logging reminders: a friendly good-morning check-in asks how you slept (\"Lazy Sunday morning, Yash?\", \"New week!\", or about yesterday: a late dinner, a long walk, a workout). A little after your usual breakfast, lunch, snack and dinner times you get a nudge if you haven't logged yet, with protein and calories left for today. Tap to log straight away, or Later to be asked again in 30 minutes. Your usual times are learned from when you log. Turn each one on or off in Settings → Logging reminders.",
-      "img": "docs/whatsnew/log-reminders.png"
-    },
-    {
-      "text": "Fixed the water glass: when it was more than about 60% full, the water floated with a gap at the bottom. It now fills right down to the bottom, in the small glass and the big one."
-    },
-    {
-      "text": "Record a hike: tap 🥾 Hike on the Steps page (or Start a hike in +). While you hike you see distance, time, pace, steps, climb so far, your height above sea level, speed and a live height chart. It works with no mobile signal; only the map background needs internet.",
-      "img": "docs/whatsnew/hike-recording.png"
-    },
-    {
-      "text": "Each hike has its own page: the route, an elevation profile, a speed chart, elevation gain and loss, highest and lowest point, climbing speed (metres up an hour), the steepest slope, moving time and rest time, pace and climb for each km, steps, stride and calories that count the climb. Hikes go to Health Connect as hiking.",
-      "img": "docs/whatsnew/hike-details.png"
-    },
-    {
-      "text": "Climb is measured with your phone's air-pressure sensor when it has one, which is much steadier than GPS height. On Android 14 and newer, heights are above sea level."
-    },
-    {
-      "text": "A new logo: an apple with a lightning bolt, for food as energy. It's one simple shape, so it's easy to spot in the notification bar. The home-screen icon is cyan; to make it match your accent colour, turn on App icon in accent colour in Settings → Theme & colour.",
-      "img": "docs/whatsnew/new-logo.png"
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.20",
+      "date": "2026-11-15",
+      "items": [
+        {
+          "text": "Record a walk: tap Start a walk (Steps page, Fitness or +). The app records your route with GPS, plus distance, time, pace and steps, even with the screen off. A notification shows the progress. Pause, resume, then Finish to save or discard.",
+          "img": "docs/whatsnew/walk-recording.png"
+        },
+        {
+          "text": "Each recorded walk has its own page: the route on a map, moving and total time, average pace and speed, steps, cadence, stride, calories, climb, top speed, pace for each km and an elevation chart.",
+          "img": "docs/whatsnew/walk-details.png"
+        },
+        {
+          "text": "Walks found from your phone's steps open their own page too, with time, steps, cadence and calories. Distance, pace and stride are estimated, and there's no map."
+        },
+        {
+          "text": "Recorded walks go to Health Connect with their route, steps and distance, so they show in Google Health. Tap Allow once on a walk's page to share routes."
+        },
+        {
+          "text": "Google Drive backup, like WhatsApp: in Settings → Data & backup, sign in with Google once. The app then backs up by itself (daily, weekly or monthly, on Wi-Fi or also mobile data) to a hidden folder in your own Drive, keeping the last 30. Back up now any time, or restore any backup on a new phone.",
+          "img": "docs/whatsnew/drive-backup.png"
+        },
+        {
+          "text": "The coach now looks at everything you log, everywhere it appears (Home, food history, workout review and weekly analysis): every meal with its macros, water, sleep, weight, how you felt, walks (recorded, found from your steps or added by hand), all your steps and workouts. It weighs what you ate against what you burned. The coach card also shows on days with no meals logged."
+        },
+        {
+          "text": "Logging reminders: a friendly good-morning check-in asks how you slept (\"Lazy Sunday morning, Yash?\", \"New week!\", or about yesterday: a late dinner, a long walk, a workout). A little after your usual breakfast, lunch, snack and dinner times you get a nudge if you haven't logged yet, with protein and calories left for today. Tap to log straight away, or Later to be asked again in 30 minutes. Your usual times are learned from when you log. Turn each one on or off in Settings → Logging reminders.",
+          "img": "docs/whatsnew/log-reminders.png"
+        },
+        {
+          "text": "Fixed the water glass: when it was more than about 60% full, the water floated with a gap at the bottom. It now fills right down to the bottom, in the small glass and the big one."
+        },
+        {
+          "text": "Record a hike: tap 🥾 Hike on the Steps page (or Start a hike in +). While you hike you see distance, time, pace, steps, climb so far, your height above sea level, speed and a live height chart. It works with no mobile signal; only the map background needs internet.",
+          "img": "docs/whatsnew/hike-recording.png"
+        },
+        {
+          "text": "Each hike has its own page: the route, an elevation profile, a speed chart, elevation gain and loss, highest and lowest point, climbing speed (metres up an hour), the steepest slope, moving time and rest time, pace and climb for each km, steps, stride and calories that count the climb. Hikes go to Health Connect as hiking.",
+          "img": "docs/whatsnew/hike-details.png"
+        },
+        {
+          "text": "Climb is measured with your phone's air-pressure sensor when it has one, which is much steadier than GPS height. On Android 14 and newer, heights are above sea level."
+        },
+        {
+          "text": "A new logo: an apple with a lightning bolt, for food as energy. It's one simple shape, so it's easy to spot in the notification bar. The home-screen icon is cyan; to make it match your accent colour, turn on App icon in accent colour in Settings → Theme & colour.",
+          "img": "docs/whatsnew/new-logo.png"
+        }
+      ]
+    },
     {
       "version": "1.18",
       "date": "2026-11-14",
