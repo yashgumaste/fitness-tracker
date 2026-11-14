@@ -4725,7 +4725,10 @@ Reply ONLY with valid JSON (no markdown):
             {!dl&&<div style={{fontSize:13,opacity:.8}}>The first time, Android may ask you to allow Fitness Tracker to install apps.</div>}
           </div>}
           <div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
-            <div style={{display:'flex',alignItems:'baseline',gap:8}}><b style={{flex:1}}>Version</b><span className="x-sub">{window.LMNative?.version}</span></div>
+            <div style={{display:'flex',alignItems:'center',gap:14}}>
+              {window.LMNative?.logo&&<span style={{width:56,height:56,borderRadius:18,background:'#000',display:'grid',placeItems:'center',flex:'none'}}>
+                <svg viewBox="0 0 24 24" width="36" height="36" aria-label="Fitness Tracker logo"><path fill="var(--pri)" fillRule="evenodd" d={window.LMNative.logo.body}/><path fill="var(--pri)" d={window.LMNative.logo.leaf}/></svg></span>}
+              <div style={{flex:1}}><b style={{display:'block',fontSize:18}}>Fitness Tracker</b><span className="x-sub">Version {window.LMNative?.version}</span></div></div>
             <button className="x-btn tonal" disabled={updChecking} onClick={async()=>{
               if(!window.LMNative?.checkUpdate){window.LMNative.openUrl(window.LMNative.releasesUrl);return;}
               setUpdChecking(true);const u=await window.LMNative.checkUpdate(true);setUpdChecking(false);
