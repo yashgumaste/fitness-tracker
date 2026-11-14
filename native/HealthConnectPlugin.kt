@@ -4,6 +4,8 @@ import androidx.activity.result.ActivityResult
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ExerciseRoute
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HydrationRecord
 import androidx.health.connect.client.records.MealType
@@ -18,6 +20,7 @@ import androidx.health.connect.client.request.AggregateGroupByDurationRequest
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.health.connect.client.units.Energy
+import androidx.health.connect.client.units.Length
 import androidx.health.connect.client.units.Mass
 import androidx.health.connect.client.units.Volume
 import com.getcapacitor.JSArray
@@ -50,6 +53,7 @@ class HealthConnectPlugin : Plugin() {
 
     private val types: Map<String, KClass<out Record>> = mapOf(
         "Steps" to StepsRecord::class,
+        "Distance" to DistanceRecord::class,
         "Nutrition" to NutritionRecord::class,
         "Hydration" to HydrationRecord::class,
         "ExerciseSession" to ExerciseSessionRecord::class,
@@ -72,7 +76,9 @@ class HealthConnectPlugin : Plugin() {
     private fun wanted(call: PluginCall): Set<String> {
         val out = mutableSetOf<String>()
         call.getArray("read")?.toList<String>()?.forEach { t -> types[t]?.let { out.add(HealthPermission.getReadPermission(it)) } }
-        call.getArray("write")?.toList<String>()?.forEach { t -> types[t]?.let { out.add(HealthPermission.getWritePermission(it)) } }
+        call.getArray("write")?.toList<String>()?.forEach { t ->
+            if (t == "ExerciseRoute") out.add(HealthPermission.PERMISSION_WRITE_EXERCISE_ROUTE)
+            else types[t]?.let { out.add(HealthPermission.getWritePermission(it)) } }
         return out
     }
 
@@ -82,6 +88,7 @@ class HealthConnectPlugin : Plugin() {
             if (granted.contains(HealthPermission.getReadPermission(k))) read.put(name)
             if (granted.contains(HealthPermission.getWritePermission(k))) write.put(name)
         }
+        if (granted.contains(HealthPermission.PERMISSION_WRITE_EXERCISE_ROUTE)) write.put("ExerciseRoute")
         val r = JSObject(); r.put("read", read); r.put("write", write); return r
     }
 
@@ -163,6 +170,22 @@ class HealthConnectPlugin : Plugin() {
     private fun meta(o: JSONObject) = Metadata.manualEntry(
         device = phone, clientRecordId = o.getString("id"), clientRecordVersion = o.getLong("version"))
 
+    private var routeOk = false
+
+    /** GPS points [[time ms, lat, lon, altitude|null, accuracy], ...] → a Health Connect route. */
+    private fun route(o: JSONObject): ExerciseRoute? {
+        if (!routeOk) return null
+        val a = o.optJSONArray("route") ?: return null
+        val locs = ArrayList<ExerciseRoute.Location>()
+        for (i in 0 until a.length()) {
+            val p = a.optJSONArray(i) ?: continue
+            val alt = if (p.isNull(3)) null else Length.meters(p.getDouble(3))
+            locs.add(ExerciseRoute.Location(time = Instant.ofEpochMilli(p.getLong(0)), latitude = p.getDouble(1), longitude = p.getDouble(2),
+                horizontalAccuracy = if (p.length() > 4 && !p.isNull(4)) Length.meters(p.getDouble(4)) else null, altitude = alt))
+        }
+        return if (locs.size >= 2) ExerciseRoute(locs) else null
+    }
+
     private fun build(o: JSONObject): Record? {
         val start = Instant.ofEpochMilli(o.optLong("start", o.optLong("time")))
         val end = Instant.ofEpochMilli(o.optLong("end", start.toEpochMilli() + 60_000))
@@ -189,7 +212,14 @@ class HealthConnectPlugin : Plugin() {
                     "running" -> ExerciseSessionRecord.EXERCISE_TYPE_RUNNING
                     "strength" -> ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING
                     else -> ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT },
-                title = o.optString("title").ifEmpty { null }, metadata = meta(o))
+                title = o.optString("title").ifEmpty { null }, metadata = meta(o),
+                exerciseRoute = route(o))
+            "Steps" -> StepsRecord(
+                startTime = start, startZoneOffset = zone(start), endTime = end, endZoneOffset = zone(end),
+                count = o.optLong("count", 0).coerceAtLeast(1), metadata = meta(o))
+            "Distance" -> DistanceRecord(
+                startTime = start, startZoneOffset = zone(start), endTime = end, endZoneOffset = zone(end),
+                distance = Length.meters(o.optDouble("meters", 0.0)), metadata = meta(o))
             "Weight" -> WeightRecord(
                 time = start, zoneOffset = zone(start), weight = Mass.kilograms(o.getDouble("kg")), metadata = meta(o))
             "SleepSession" -> SleepSessionRecord(
@@ -206,6 +236,7 @@ class HealthConnectPlugin : Plugin() {
         scope.launch {
             try {
                 val granted = client().permissionController.getGrantedPermissions()
+                routeOk = granted.contains(HealthPermission.PERMISSION_WRITE_EXERCISE_ROUTE)
                 val recs = mutableListOf<Record>(); val failed = JSArray()
                 for (i in 0 until list.length()) {
                     val o = list.getJSONObject(i)

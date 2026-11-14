@@ -207,6 +207,20 @@
   /* ── Open a web page (updates, API console) ── */
   function openUrl(url){if(Browser)Browser.open({url});else window.open(url,'_blank');}
 
+  /* ── Recording a walk (GPS + steps, foreground service) ── */
+  const WT=plug('WalkTracker');
+  if(WT)WT.addListener('open',()=>{if(window.__lmWalkOpen)window.__lmWalkOpen();else window.__lmWalkOpenQueued=true;});
+  const walk={
+    available:()=>!!WT,
+    async start(kind){
+      if(LN){try{const p=await LN.checkPermissions();if(p.display!=='granted')await LN.requestPermissions();}catch(_){}}
+      return WT.start({kind:kind||'walk'});
+    },
+    pause:()=>WT.pause(),resume:()=>WT.resume(),
+    status:from=>WT?WT.status({from:from||0}):Promise.resolve({state:'idle'}),
+    stop:()=>WT.stop(),discard:()=>WT.discard()
+  };
+
   /* ── Move reminders: a background check of the phone's step counter (native plugin) ── */
   const Move=plug('MoveReminder');
   const hm=t=>{const [h,m]=String(t||'0:0').split(':').map(Number);return (h||0)*60+(m||0);};
@@ -313,6 +327,6 @@
   window.LMNative={hc,provider,setProvider:p=>{try{localStorage.setItem('lm-ai-provider',p);}catch(_){}},hasFreeKey,
     setGeminiKey:async k=>{gemKeyCache=k||null;await kv.set('gemini_key',k||null);},hasGeminiKey:async()=>!!(await kv.get('gemini_key')),
 isNative,kv,ask,usage,MODELS,setKey:async k=>{keyCache=k||null;await kv.set('anthropic_key',k||null);},hasKey:async()=>!!(await apiKey()),
-    planWater,testNotification,takeLoggedWater,planMove,testMove,shareBackup,openUrl,bars,setIcon,iconFor,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
+    walk,planWater,testNotification,takeLoggedWater,planMove,testMove,shareBackup,openUrl,bars,setIcon,iconFor,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
     releasesUrl:'https://github.com/'+REPO+'/releases/latest'};
 })();

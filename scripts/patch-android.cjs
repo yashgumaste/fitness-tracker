@@ -7,7 +7,8 @@ const run=parseInt(process.env.RUN||'1',10);
 // Manifest
 const mf=path.join(app,'src/main/AndroidManifest.xml');
 let m=fs.readFileSync(mf,'utf8');
-for(const perm of ['android.permission.POST_NOTIFICATIONS','android.permission.RECEIVE_BOOT_COMPLETED','android.permission.WAKE_LOCK','android.permission.REQUEST_INSTALL_PACKAGES','android.permission.ACTIVITY_RECOGNITION']){
+for(const perm of ['android.permission.POST_NOTIFICATIONS','android.permission.RECEIVE_BOOT_COMPLETED','android.permission.WAKE_LOCK','android.permission.REQUEST_INSTALL_PACKAGES','android.permission.ACTIVITY_RECOGNITION',
+  'android.permission.ACCESS_FINE_LOCATION','android.permission.ACCESS_COARSE_LOCATION','android.permission.FOREGROUND_SERVICE','android.permission.FOREGROUND_SERVICE_LOCATION']){
   if(!m.includes(perm))m=m.replace('</manifest>',`    <uses-permission android:name="${perm}" />\n</manifest>`);
 }
 if(!m.includes('android.hardware.sensor.stepcounter'))m=m.replace('</manifest>','    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />\n</manifest>');
@@ -19,7 +20,7 @@ const icons=require('./app-icons.cjs');
 m=icons.manifest(m,'com.yashgumaste.fitnesstracker');
 if(/<activity[^>]*MainActivity[\s\S]*?category\.LAUNCHER[\s\S]*?<\/activity>/.test(m))throw new Error('MainActivity still has the launcher filter — icon aliases would duplicate the app icon');
 // Health Connect: permissions, the screens Health Connect opens to explain them, and package visibility
-const HC=['READ_STEPS','WRITE_NUTRITION','WRITE_HYDRATION','WRITE_EXERCISE','WRITE_WEIGHT','WRITE_SLEEP'];
+const HC=['READ_STEPS','WRITE_NUTRITION','WRITE_HYDRATION','WRITE_EXERCISE','WRITE_WEIGHT','WRITE_SLEEP','WRITE_STEPS','WRITE_DISTANCE','WRITE_EXERCISE_ROUTE'];
 for(const h of HC){const perm='android.permission.health.'+h;
   if(!m.includes(perm))m=m.replace('</manifest>',`    <uses-permission android:name="${perm}" />\n</manifest>`);}
 if(!m.includes('com.google.android.apps.healthdata'))
@@ -82,6 +83,7 @@ fs.copyFileSync(path.join(__dirname,'..','native','HealthConnectPlugin.kt'),path
 fs.copyFileSync(path.join(__dirname,'..','native','AppUpdatePlugin.java'),path.join(javaDir,'AppUpdatePlugin.java'));
 fs.copyFileSync(path.join(__dirname,'..','native','MoveReminderPlugin.kt'),path.join(javaDir,'MoveReminderPlugin.kt'));
 fs.copyFileSync(path.join(__dirname,'..','native','WaterReminderPlugin.kt'),path.join(javaDir,'WaterReminderPlugin.kt'));
+fs.copyFileSync(path.join(__dirname,'..','native','WalkTrackerPlugin.kt'),path.join(javaDir,'WalkTrackerPlugin.kt'));
 const ma=path.join(javaDir,'MainActivity.java');
 let j=fs.readFileSync(ma,'utf8');
 if(!j.includes('AppIconPlugin')){
@@ -94,6 +96,7 @@ if(!j.includes('AppIconPlugin')){
         registerPlugin(AppUpdatePlugin.class);
         registerPlugin(MoveReminderPlugin.class);
         registerPlugin(WaterReminderPlugin.class);
+        registerPlugin(WalkTrackerPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }`);
@@ -138,7 +141,8 @@ fs.writeFileSync(path.join(dr,'ic_large_walk.xml'),big('#FF5CF2A6','#FF00391F',W
 // Water reminders are posted by WaterReminderPlugin: alarm, notification-button and restart receivers
 m=fs.readFileSync(mf,'utf8');
 if(!m.includes('WaterAlarmReceiver')){
-  m=m.replace('</application>',`        <receiver android:name=".WaterAlarmReceiver" android:exported="false" />
+  m=m.replace('</application>',`        <service android:name=".WalkService" android:exported="false" android:foregroundServiceType="location" />
+        <receiver android:name=".WaterAlarmReceiver" android:exported="false" />
         <receiver android:name=".WaterActionReceiver" android:exported="false" />
         <receiver android:name=".WaterBootReceiver" android:exported="true">
             <intent-filter>

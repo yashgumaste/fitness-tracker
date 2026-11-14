@@ -1,5 +1,20 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "Record a walk: tap Start a walk (Steps page, Fitness or +). The app records your route with GPS, plus distance, time, pace and steps, even with the screen off. A notification shows the progress. Pause, resume, then Finish to save or discard.",
+      "img": "docs/whatsnew/walk-recording.png"
+    },
+    {
+      "text": "Each recorded walk has its own page: the route on a map, moving and total time, average pace and speed, steps, cadence, stride, calories, climb, top speed, pace for each km and an elevation chart.",
+      "img": "docs/whatsnew/walk-details.png"
+    },
+    {
+      "text": "Walks found from your phone's steps open their own page too, with time, steps, cadence and calories. Distance, pace and stride are estimated, and there's no map."
+    },
+    {
+      "text": "Recorded walks go to Health Connect with their route, steps and distance, so they show in Google Health. Tap Allow once on a walk's page to share routes."
+    }
+  ],
   "releases": [
     {
       "version": "1.18",
