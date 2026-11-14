@@ -152,6 +152,19 @@
     WR.addListener('pick',()=>{if(window.__lmWaterPick)window.__lmWaterPick();else window.__lmWaterPickQueued=true;});
     WR.takePick().then(r=>{if(r&&r.pick){if(window.__lmWaterPick)window.__lmWaterPick();else window.__lmWaterPickQueued=true;}}).catch(()=>{});
   }
+  // Logging reminders (good-morning sleep check-in, meals): the app writes the messages, the phone posts them
+  const LR=plug('LogReminder');
+  const logOpen=k=>{if(!k)return;if(window.__lmLogOpen)window.__lmLogOpen(k);else window.__lmLogOpenQueued=k;};
+  if(LR){LR.addListener('open',e=>logOpen(e&&e.kind));LR.takeOpen().then(r=>logOpen(r&&r.kind)).catch(()=>{});}
+  async function planLogs(items){
+    if(!LR)return{ok:false,reason:'web'};
+    if(items.length&&LN){const perm=await LN.checkPermissions().catch(()=>({display:'granted'}));
+      if(perm.display!=='granted'){const q=await LN.requestPermissions();if(q.display!=='granted'){await LR.schedule({items:[]});return{ok:false,reason:'notifications'};}}}
+    await LR.schedule({items});return{ok:true,count:items.length,next:items[0]||null};
+  }
+  async function testLog(item){if(!LR)return false;if(LN){const q=await LN.requestPermissions().catch(()=>({display:'granted'}));if(q.display!=='granted')return false;}
+    try{return (await LR.test(item)).ok;}catch(_){return false;}}
+  const clearLog=kind=>{if(LR)LR.clear({kind}).catch(()=>{});};
   async function takeLoggedWater(){if(!WR)return[];try{return (await WR.takeLogged()).drinks||[];}catch(_){return[];}}
   async function planWater(cfg,lastDrinkTs,todayMl,goal){
     if(!LN&&!WR)return{ok:false,reason:'browser'};
@@ -336,6 +349,6 @@
   window.LMNative={hc,provider,setProvider:p=>{try{localStorage.setItem('lm-ai-provider',p);}catch(_){}},hasFreeKey,
     setGeminiKey:async k=>{gemKeyCache=k||null;await kv.set('gemini_key',k||null);},hasGeminiKey:async()=>!!(await kv.get('gemini_key')),
 isNative,kv,ask,usage,MODELS,setKey:async k=>{keyCache=k||null;await kv.set('anthropic_key',k||null);},hasKey:async()=>!!(await apiKey()),
-    walk,drive,planWater,testNotification,takeLoggedWater,planMove,testMove,shareBackup,openUrl,bars,setIcon,iconFor,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
+    walk,drive,planLogs,testLog,clearLog,planWater,testNotification,takeLoggedWater,planMove,testMove,shareBackup,openUrl,bars,setIcon,iconFor,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
     releasesUrl:'https://github.com/'+REPO+'/releases/latest'};
 })();

@@ -20,6 +20,10 @@
     },
     {
       "text": "The coach now looks at everything you log, everywhere it appears (Home, food history, workout review and weekly analysis): every meal with its macros, water, sleep, weight, how you felt, walks (recorded, found from your steps or added by hand), all your steps and workouts. It weighs what you ate against what you burned. The coach card also shows on days with no meals logged."
+    },
+    {
+      "text": "Logging reminders: a friendly good-morning check-in asks how you slept (\"Lazy Sunday morning, Yash?\", \"New week!\", or about yesterday: a late dinner, a long walk, a workout). A little after your usual breakfast, lunch, snack and dinner times you get a nudge if you haven't logged yet, with protein and calories left for today. Tap to log straight away, or Later to be asked again in 30 minutes. Your usual times are learned from when you log. Turn each one on or off in Settings → Logging reminders.",
+      "img": "docs/whatsnew/log-reminders.png"
     }
   ],
   "releases": [
