@@ -834,7 +834,7 @@ function WaterGlass({pct=0,size=60,color='var(--sky)',glass='var(--on-sky-c)',dr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[dropKey,target]);
   // wave drawn for an empty glass, then lifted to the level (so the rise can animate)
-  let wave=`M-20 ${bot}`;for(let x=-20;x<=W+20;x+=2)wave+=` L${x} ${(bot+2.4*Math.sin(x/W*2*Math.PI*1.5)).toFixed(2)}`;wave+=` L${W+20} ${H+40} L-20 ${H+40}Z`;
+  let wave=`M-20 ${bot}`;for(let x=-20;x<=W+20;x+=2)wave+=` L${x} ${(bot+2.4*Math.sin(x/W*2*Math.PI*1.5)).toFixed(2)}`;wave+=` L${W+20} ${bot+span+12} L-20 ${bot+span+12}Z`;   // deep enough to reach the bottom even when full
   const lift=span*shown,surf=bot-span*(fx?fx.from:shown);
   return(<svg viewBox={`0 0 ${W} ${H}`} width={size*W/H} height={size} aria-hidden="true"
       className={bumpKey?'lm-bump':undefined} key={bumpKey||'g'} style={{display:'block',flex:'none',overflow:'visible'}}>
