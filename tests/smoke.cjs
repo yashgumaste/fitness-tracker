@@ -117,6 +117,14 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await expect('Pace for each km');await expect('Moving time');await expect('Elevation');
     if(!(await p.$('[aria-label="Route map"]')))throw new Error('no route map');
     await p.click('[aria-label="Back"]');await W();});
+  await step('Record a hike',async()=>{
+    await p.evaluate(()=>{const W=window.LMNative.walk;W.start=async function(kind){this._st='recording';this._kind=kind;this._t0=Date.now()-60*60000;const c=[18.366,73.747];
+      this._pts=Array.from({length:300},(_,i)=>{const up=i<150?i:300-i;return[this._t0+i*12000,c[0]+i*0.00006,c[1]+0.0003*Math.sin(i/20),700+up*3+Math.random()*8,6,660+up*3];});return this.status(0);};
+      const st=W.status;W.status=async function(from){const r=await st.call(this,from);r.kind=this._kind;r.gainM=120;r.alt=900;r.distanceM=4000;return r;};});
+    await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);await click('.x-btn','Hike');await W(1500);
+    await expect('Climb');await expect('m above sea');await click('.x-btn','Finish');await expect('Finish this hike');await click('.x-btn','Save hike');await W(900);
+    await expect('Elevation gain');await expect('Highest point');await expect('Each km: pace and climb');await expect('Speed');
+    await p.click('[aria-label="Back"]');await W();});
   await step('Burned counts steps',async()=>{await tab(2);if(!(await has('from steps'))&&!(await has('gym + steps')))throw new Error('Burned does not include steps');});
   await step('Water reminder tapped: pick an amount',async()=>{await tab(0);await p.evaluate(()=>window.__lmWaterPick());await W(700);
     await expect('How much did you drink');await p.click('[aria-label="500 ml"]');await W(3600);

@@ -210,6 +210,7 @@ class HealthConnectPlugin : Plugin() {
                 exerciseType = when (o.optString("exercise")) {
                     "walking" -> ExerciseSessionRecord.EXERCISE_TYPE_WALKING
                     "running" -> ExerciseSessionRecord.EXERCISE_TYPE_RUNNING
+                    "hiking" -> ExerciseSessionRecord.EXERCISE_TYPE_HIKING
                     "strength" -> ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING
                     else -> ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT },
                 title = o.optString("title").ifEmpty { null }, metadata = meta(o),

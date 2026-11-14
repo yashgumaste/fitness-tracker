@@ -118,7 +118,10 @@ object WalkState {
     private var movingAcc = 0L            // ms recorded before the last pause
     var distanceM = 0.0
     var stepsBase = -1L; var stepsNow = -1L; var stepsPaused = 0L
-    val points = ArrayList<DoubleArray>()  // [time ms, lat, lon, altitude m (NaN if none), accuracy m]
+    val points = ArrayList<DoubleArray>()  // [time ms, lat, lon, altitude m (NaN if none), accuracy m, barometer altitude m (NaN if none)]
+    @Volatile var baro = Double.NaN        // smoothed height from the air-pressure sensor (good for climb, not for absolute height)
+    var gainM = 0.0                        // climb so far, for the live screen
+    private var refAlt = Double.NaN
     var lastFix = 0L; var lastAcc = 0f
     private var last: Location? = null
 
@@ -126,7 +129,12 @@ object WalkState {
         kind = k; state = "recording"; start = System.currentTimeMillis()
         movingBase = SystemClock.elapsedRealtime(); movingAcc = 0
         distanceM = 0.0; stepsBase = -1; stepsNow = -1; stepsPaused = 0
-        points.clear(); last = null; lastFix = 0
+        points.clear(); last = null; lastFix = 0; gainM = 0.0; refAlt = Double.NaN
+    }
+
+    fun onPressure(hPa: Float) {
+        val a = SensorManager.getAltitude(SensorManager.PRESSURE_STANDARD_ATMOSPHERE, hPa).toDouble()
+        baro = if (baro.isNaN()) a else baro * 0.85 + a * 0.15
     }
     fun movingMs(): Long = movingAcc + if (state == "recording") SystemClock.elapsedRealtime() - movingBase else 0
     @Synchronized fun pause() { if (state != "recording") return; movingAcc = movingMs(); state = "paused"; last = null }
@@ -151,7 +159,18 @@ object WalkState {
             distanceM += d
         }
         last = l
-        points.add(doubleArrayOf(l.time.toDouble(), l.latitude, l.longitude, if (l.hasAltitude()) l.altitude else Double.NaN, l.accuracy.toDouble()))
+        // height above sea level where Android can give it (14+), otherwise GPS height
+        val alt = if (Build.VERSION.SDK_INT >= 34 && l.hasMslAltitude()) l.mslAltitudeMeters
+            else if (l.hasAltitude()) l.altitude else Double.NaN
+        val b = baro
+        points.add(doubleArrayOf(l.time.toDouble(), l.latitude, l.longitude, alt, l.accuracy.toDouble(), b))
+        // live climb: barometer if there is one (steady), else GPS height with a bigger dead band (it wobbles)
+        val h = if (!b.isNaN()) b else alt
+        if (!h.isNaN()) {
+            if (refAlt.isNaN()) refAlt = h
+            val dz = h - refAlt
+            if (Math.abs(dz) >= (if (!b.isNaN()) 2.0 else 6.0)) { if (dz > 0) gainM += dz; refAlt = h }
+        }
     }
 
     @Synchronized fun status(from: Int): JSObject {
@@ -160,11 +179,14 @@ object WalkState {
         o.put("movingMs", movingMs()); o.put("distanceM", distanceM); o.put("steps", steps())
         o.put("gps", if (lastFix == 0L) "searching" else if (System.currentTimeMillis() - lastFix > 15000) "lost" else "ok")
         o.put("accuracy", lastAcc.toDouble())
-        o.put("count", points.size)
+        o.put("count", points.size); o.put("gainM", gainM)
+        o.put("alt", if (points.isEmpty() || points[points.size - 1][3].isNaN()) JSONObject.NULL else points[points.size - 1][3])
+        o.put("baro", !baro.isNaN())
         val a = JSArray()
         for (i in maxOf(0, from) until points.size) {
             val p = points[i]; val q = JSONArray()
             q.put(p[0].toLong()); q.put(p[1]); q.put(p[2]); q.put(if (p[3].isNaN()) JSONObject.NULL else p[3]); q.put(p[4])
+            q.put(if (p.size < 6 || p[5].isNaN()) JSONObject.NULL else p[5])
             a.put(q)
         }
         o.put("points", a); o.put("from", maxOf(0, from))
@@ -174,7 +196,8 @@ object WalkState {
     fun line(): String {
         val km = String.format(Locale.US, "%.2f km", distanceM / 1000)
         val s = movingMs() / 1000; val t = if (s >= 3600) String.format(Locale.US, "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) else String.format(Locale.US, "%d:%02d", s / 60, s % 60)
-        val st = steps(); return "$km · $t" + (if (st > 0) " · $st steps" else "") + (if (state == "paused") " · paused" else "")
+        val st = steps(); val up = if (kind == "hike" && gainM >= 1) " · ↑ ${gainM.toInt()} m" else ""
+        return "$km · $t$up" + (if (st > 0) " · $st steps" else "") + (if (state == "paused") " · paused" else "")
     }
 }
 
@@ -199,10 +222,12 @@ class WalkService : Service(), LocationListener, SensorEventListener {
             try {
                 lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000L, 0f, this, Looper.getMainLooper())
             } catch (e: SecurityException) { } catch (e: IllegalArgumentException) { }
+            val sm = getSystemService(Context.SENSOR_SERVICE) as SensorManager
             if (Build.VERSION.SDK_INT < 29 || ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED) {
-                val sm = getSystemService(Context.SENSOR_SERVICE) as SensorManager
                 sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
             }
+            // air pressure gives a much steadier height than GPS, for climb on hikes (most phones have the sensor)
+            sm.getDefaultSensor(Sensor.TYPE_PRESSURE)?.let { sm.registerListener(this, it, 1_000_000) }
             handler.removeCallbacks(tick); handler.post(tick)
         } else update()
         return START_STICKY
@@ -219,7 +244,8 @@ class WalkService : Service(), LocationListener, SensorEventListener {
         return NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(Water.smallIcon(this)).setColor(0xFF5CF2A6.toInt())
             .setLargeIcon(Water.largeIcon(this, "ic_large_walk"))
-            .setContentTitle(if (WalkState.state == "paused") "Walk paused" else "Recording your walk")
+            .setContentTitle(run { val w = if (WalkState.kind == "hike") "hike" else "walk"
+                if (WalkState.state == "paused") w.replaceFirstChar { it.uppercase() } + " paused" else "Recording your $w" })
             .setContentText(WalkState.line())
             .setOngoing(true).setOnlyAlertOnce(true).setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_WORKOUT)
@@ -236,7 +262,9 @@ class WalkService : Service(), LocationListener, SensorEventListener {
     @Deprecated("Deprecated in Java") override fun onStatusChanged(p: String?, s: Int, e: android.os.Bundle?) {}
     override fun onProviderEnabled(p: String) {}
     override fun onProviderDisabled(p: String) {}
-    override fun onSensorChanged(e: SensorEvent) { WalkState.onSteps(e.values[0].toLong()) }
+    override fun onSensorChanged(e: SensorEvent) {
+        if (e.sensor.type == Sensor.TYPE_PRESSURE) WalkState.onPressure(e.values[0]) else WalkState.onSteps(e.values[0].toLong())
+    }
     override fun onAccuracyChanged(s: Sensor?, a: Int) {}
 
     override fun onDestroy() {
