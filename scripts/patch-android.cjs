@@ -86,6 +86,7 @@ fs.copyFileSync(path.join(__dirname,'..','native','MoveReminderPlugin.kt'),path.
 fs.copyFileSync(path.join(__dirname,'..','native','WaterReminderPlugin.kt'),path.join(javaDir,'WaterReminderPlugin.kt'));
 fs.copyFileSync(path.join(__dirname,'..','native','WalkTrackerPlugin.kt'),path.join(javaDir,'WalkTrackerPlugin.kt'));
 fs.copyFileSync(path.join(__dirname,'..','native','DriveBackupPlugin.kt'),path.join(javaDir,'DriveBackupPlugin.kt'));
+fs.copyFileSync(path.join(__dirname,'..','native','LogReminderPlugin.kt'),path.join(javaDir,'LogReminderPlugin.kt'));
 const ma=path.join(javaDir,'MainActivity.java');
 let j=fs.readFileSync(ma,'utf8');
 if(!j.includes('AppIconPlugin')){
@@ -100,6 +101,7 @@ if(!j.includes('AppIconPlugin')){
         registerPlugin(WaterReminderPlugin.class);
         registerPlugin(WalkTrackerPlugin.class);
         registerPlugin(DriveBackupPlugin.class);
+        registerPlugin(LogReminderPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }`);
@@ -140,6 +142,11 @@ const big=(bg,fg,d)=>`<vector xmlns:android="http://schemas.android.com/apk/res/
 `;
 fs.writeFileSync(path.join(dr,'ic_large_water.xml'),big('#FF4FC3F7','#FFFFFFFF',DROP));
 fs.writeFileSync(path.join(dr,'ic_large_walk.xml'),big('#FF5CF2A6','#FF00391F',WALKER));
+// ...and for logging reminders: a moon (sleep) and a fork and knife (meals)
+const MOON='M12.34,2.02C6.59,1.82 2,6.42 2,12c0,5.52 4.48,10 10,10c3.71,0 6.93,-2.02 8.66,-5.02C13.15,16.73 8.57,8.55 12.34,2.02z';
+const MEAL='M11,9H9V2H7v7H5V2H3v7c0,2.12 1.66,3.84 3.75,3.97V22h2.5v-9.03C11.34,12.84 13,11.12 13,9V2h-2V9zM16,6v8h2.5v8H21V2C18.24,2 16,4.24 16,6z';
+fs.writeFileSync(path.join(dr,'ic_large_sleep.xml'),big('#FFB39DDB','#FF21005D',MOON));
+fs.writeFileSync(path.join(dr,'ic_large_meal.xml'),big('#FFFFB74D','#FF3E2400',MEAL));
 
 // Water reminders are posted by WaterReminderPlugin: alarm, notification-button and restart receivers
 m=fs.readFileSync(mf,'utf8');
@@ -148,6 +155,20 @@ if(!m.includes('WaterAlarmReceiver')){
         <receiver android:name=".WaterAlarmReceiver" android:exported="false" />
         <receiver android:name=".WaterActionReceiver" android:exported="false" />
         <receiver android:name=".WaterBootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>`);
+  fs.writeFileSync(mf,m);
+}
+// Logging reminders (sleep, meals): alarm, "Later" button and restart receivers
+m=fs.readFileSync(mf,'utf8');
+if(!m.includes('LogAlarmReceiver')){
+  m=m.replace('</application>',`        <receiver android:name=".LogAlarmReceiver" android:exported="false" />
+        <receiver android:name=".LogActionReceiver" android:exported="false" />
+        <receiver android:name=".LogBootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />

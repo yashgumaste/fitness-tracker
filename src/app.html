@@ -3305,6 +3305,124 @@ Reply ONLY with valid JSON (no markdown):
     return()=>{gone=true;clearTimeout(t);window.removeEventListener('lm-resume',run);};
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[storageReady,waterCfg.on,waterCfg.start,waterCfg.end,waterCfg.every,lastDrink]);
+  // ── Logging reminders: a good-morning sleep check-in and a nudge after your usual meal times ──
+  const logCfg={on:true,sleep:true,Breakfast:true,Lunch:true,Snack:true,Dinner:true,after:45,...(prefs.logrem||{})};
+  const [logPlan,setLogPlan]=useState(null);
+  const LOG_KINDS=[['sleep','😴','Sleep','Good-morning check-in'],['Breakfast','🍳','Breakfast'],['Lunch','🍛','Lunch'],['Snack','🍎','Snack'],['Dinner','🍽️','Dinner']];
+  const isWeekend=day=>[0,6].includes(new Date(day+'T12:00:00').getDay());
+  // Your usual time for each meal and for waking up, from the last 4 weeks (weekdays and weekends apart when there's enough)
+  function usualTimes(){
+    const med=a=>{const s=[...a].sort((x,y)=>x-y);return s.length?s[Math.floor(s.length/2)]:null;};
+    const from=calAddDays(TODAY,-28),out={};
+    const pick=(wk,we,def,defWe)=>({wd:wk.length>=3?med(wk):wk.length+we.length>=3?med([...wk,...we]):def,
+      we:we.length>=2?med(we):wk.length+we.length>=3?med([...wk,...we])+(we.length?0:30):defWe,n:wk.length+we.length});
+    MEAL_TYPES.forEach(mt=>{const wk=[],we=[];
+      dietEntries.forEach(e=>{if(e.mealType!==mt)return;const {ts,approx}=mealTime(e);if(approx)return;const d=new Date(ts),k=localDate(d);if(k<from||k>TODAY)return;
+        (isWeekend(k)?we:wk).push(d.getHours()*60+d.getMinutes());});
+      const def=hm2m(MEAL_HOUR[mt]);out[mt]=pick(wk,we,def,def+(mt==='Breakfast'?60:30));});
+    {const wk=[],we=[];Object.entries(sleepLog).forEach(([k,s])=>{if(k<from||!s||!s.wake||!sleepMin(s))return;(isWeekend(k)?we:wk).push(hm2m(s.wake));});
+      out.sleep=pick(wk,we,6*60+30,7*60+30);}
+    return out;
+  }
+  // The message for each reminder: playful, and about your day when the app knows something worth saying
+  function logMessage(kind,day,at){
+    const n=(profile.name||'').trim().split(/\s+/)[0]||'there';
+    const dt=new Date(at),wd=dt.getDay(),min=dt.getHours()*60+dt.getMinutes();
+    const seed=[...(day+kind)].reduce((a,c)=>a*31+c.charCodeAt(0)>>>0,7);const pick=a=>a[seed%a.length];
+    const yd=calAddDays(day,-1);
+    // what we know about "yesterday" is only complete if the plan is made late in the day
+    const ydDone=yd<TODAY||new Date().getHours()>=20;
+    if(kind==='sleep'){
+      const U=usualTimes(),late=min>=8*60+30||(isWeekend(day)&&U.sleep.we>=U.sleep.wd+60);
+      const title=wd===0?(late?`Lazy Sunday morning, ${n}? 😴`:`Happy Sunday, ${n}! ☀️`)
+        :wd===6?(late?`Slow Saturday start, ${n}? 😴`:`Happy Saturday, ${n}! 🌤️`)
+        :wd===1?pick([`Morning, ${n}. Monday again! ☕`,`New week, ${n}! 🚀`,`Rise and shine, ${n}, it's Monday ☕`])
+        :wd===5?pick([`Friday at last, ${n}! 🎉`,`Morning, ${n}! It's Friday 🎉`])
+        :min<6*60+30?`Up early, ${n}! 🌅`
+        :pick([`Good morning, ${n}! ☀️`,`Rise and shine, ${n}! 🌞`,`Morning, ${n}! 🌤️`,`Hey ${n}, good morning! 👋`]);
+      let hi=null,q=pick(['How did you sleep?','How was your sleep?','Did you sleep well?']);
+      if(ydDone){
+        const mv=moveDay(yd),fl=fitLogs[yd],din=(dietGrouped[yd]||[]).filter(e=>e.mealType==='Dinner').map(e=>mealTime(e)).filter(x=>!x.approx).map(x=>x.ts);
+        const gps=mv.walks.filter(w=>w.src==='gps').sort((a,b)=>b.km-a.km)[0];
+        const prev=sleepLog[yd],prevMin=sleepMin(prev);
+        const lateDin=din.length?Math.max(...din):0,ldH=lateDin?new Date(lateDin).getHours():0;
+        if(fl&&fl._dayComplete)hi=`After yesterday's ${getDayInfo(yd)?.label||'workout'}, a good night's rest is where the progress happens 💪`;
+        else if(lateDin&&(ldH>=22||ldH<4)){hi=`Dinner was late last night (${fmtTime(lateDin)}).`;q='Did it get in the way of your sleep?';}
+        else if(gps&&gps.km>=2)hi=`That ${gps.km.toFixed(1)} km ${gps.name.toLowerCase()} yesterday was great 🗺️`;
+        else if(mv.steps>=WALK_GOAL.day)hi=`${fmtN(mv.steps)} steps yesterday 👟 Your legs earned a good night.`;
+        else if(prevMin&&prevMin<6*60)hi=`Hope it was better than the ${fmtHM(prevMin)} the night before.`;
+        else if(mv.src==='hc'&&mv.steps>0&&mv.steps<WALK_GOAL.day*0.4&&yd<TODAY)hi=`Quiet day yesterday (${fmtN(mv.steps)} steps). Today's a fresh start.`;
+      }
+      if(!hi&&wd===1)hi=pick(['Let’s set the tone for the week.','A good week starts with a good night.']);
+      if(!hi&&wd===0&&late)hi='Hope you slept in properly.';
+      return {title,body:`${hi?hi+' ':''}${q} Tap to log it.`};
+    }
+    const m=macrosOf(day),known=day===TODAY;   // today's food so far is only known for today's reminders
+    const left=Math.max(0,GOALS.calories.max-rnd(m.cal)),proLeft=Math.max(0,GOALS.protein.target-rnd(m.pro));
+    if(kind==='Breakfast'){
+      const title=wd===0?`Sunday breakfast, ${n}? 🥞`:wd===6?`Weekend breakfast, ${n}? 🍳`:pick([`Breakfast time, ${n}? 🍳`,`Fuel up, ${n}! 🥣`,`Had breakfast, ${n}? ☕`]);
+      const mv=known?moveDay(day):null,w=mv&&mv.walks.find(x=>x.start<min);
+      const body=w?`Nice ${w.name.toLowerCase()} this morning 🚶 Refuel with some protein, then log what you had.`
+        :isWeekend(day)?'Something special? Log it, no judgement 😄'
+        :pick([`Log it so the coach can plan your day. A protein start (eggs, paneer, dahi) makes ${GOALS.protein.target} g much easier.`,'Log what you had while you remember it.','A good breakfast sets up the whole day. What did you have?']);
+      return {title,body};
+    }
+    if(kind==='Lunch'){
+      const title=wd===5?`Friday lunch, ${n}? 🍛`:pick([`Lunch break, ${n}? 🍛`,`Lunch done, ${n}? 🥗`,`How was lunch, ${n}? 🍱`]);
+      const body=known&&m.cal>0?`You're at ${rnd(m.pro)} g protein so far, ${proLeft} g to go. Log your lunch so the coach can keep count.`
+        :pick(['Log your lunch while you remember it.','Snap a quick log of your lunch. It takes 10 seconds.','What was on the plate? Log it.']);
+      return {title,body};
+    }
+    if(kind==='Snack')return {title:pick([`Snack o'clock, ${n}? 🍎`,`Evening chai time? ☕`,`Little something, ${n}? 🍪`]),
+      body:known&&m.cal>0?`About ${fmtN(left)} kcal left for today. Had something? Log it. Didn't? Ignore me 😄`:'Had something? Log it. Didn’t? Ignore me 😄'};
+    const mv=known?moveDay(day):null;
+    const title=wd===6||wd===0?`Weekend dinner, ${n}? 🍽️`:pick([`Dinner done, ${n}? 🍽️`,`How was dinner, ${n}? 🍲`,`Dinner time, ${n}! 🍛`]);
+    const body=known&&m.cal>0?`Log it to close the day. You had about ${fmtN(left)} kcal and ${proLeft} g protein left${mv&&mv.steps?`, and ${fmtN(mv.steps)} steps so far`:''}.`
+      :pick(['Log it to close the day. The coach will tell you how today went.','Last log of the day: what was for dinner?']);
+    return {title,body};
+  }
+  // Today's and tomorrow's reminders, minus anything already logged (meals logged later in the day count too)
+  function planLogItems(){
+    if(!logCfg.on)return [];
+    const U=usualTimes(),now=Date.now(),out=[];
+    for(const day of [TODAY,calAddDays(TODAY,1)]){
+      const ms=m=>new Date(day+'T00:00:00').getTime()+m*60000,we=isWeekend(day);
+      if(logCfg.sleep&&!sleepMin(sleepLog[day])){const at=ms(Math.min(11*60,Math.max(6*60,(we?U.sleep.we:U.sleep.wd)+30)));
+        if(at>now+60000)out.push({at,kind:'sleep',day,...logMessage('sleep',day,at)});}
+      const logged=new Set((dietGrouped[day]||[]).map(e=>e.mealType));
+      MEAL_TYPES.forEach((mt,i)=>{if(!logCfg[mt])return;
+        if(MEAL_TYPES.slice(i).some(x=>logged.has(x)))return;   // this meal, or a later one, is already in
+        const at=ms(Math.min(23*60,Math.max(6*60,(we?U[mt].we:U[mt].wd)+(mt==='Snack'?Math.max(60,+logCfg.after):+logCfg.after))));
+        if(at>now+60000)out.push({at,kind:mt,day,...logMessage(mt,day,at)});});
+    }
+    return out.sort((a,b)=>a.at-b.at);
+  }
+  const logSig=JSON.stringify([logCfg,TODAY,dietEntries.length,dietEntries.map(e=>e.mealType+e.timestamp).join().length,Object.keys(sleepLog).length,sleepLog[TODAY]?.wake,profile.name,
+    fitLogs[TODAY]?._dayComplete,Math.round(moveDay(TODAY).steps/1000),Object.keys(tracks).length]);
+  useEffect(()=>{
+    if(!storageReady||!window.LMNative?.planLogs)return;
+    let gone=false;
+    const run=()=>window.LMNative.planLogs(planLogItems()).then(r=>{if(gone)return;setLogPlan(r);
+      if(logCfg.on&&!r.ok&&r.reason==='notifications')showToast('Allow notifications to get logging reminders','var(--warn)');}).catch(()=>{});
+    const t=setTimeout(run,1200);window.addEventListener('lm-resume',run);
+    return()=>{gone=true;clearTimeout(t);window.removeEventListener('lm-resume',run);};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[storageReady,logSig]);
+  // a reminder that's still showing goes away once its thing is logged
+  useEffect(()=>{if(!storageReady||!window.LMNative?.clearLog)return;
+    if(sleepMin(sleepLog[TODAY]))window.LMNative.clearLog('sleep');
+    (dietGrouped[TODAY]||[]).forEach(e=>window.LMNative.clearLog(e.mealType));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[storageReady,logSig]);
+  // opened by tapping a reminder: go straight to the right log screen
+  const logOpenRef=useRef(null);
+  logOpenRef.current=k=>{setTab('home');window.scrollTo(0,0);
+    if(k==='sleep'){const U=usualTimes(),w=isWeekend(TODAY)?U.sleep.we:U.sleep.wd;const sl=sleepLog[TODAY]||{};
+      openSheet('sleep',{date:TODAY},{bed:sl.bed||'23:00',wake:sl.wake||m2hm(w),q:sl.q||0,wakes:sl.wakes||0,open:null});}
+    else openFood(TODAY,k);};
+  useEffect(()=>{if(!storageReady)return;window.__lmLogOpen=k=>logOpenRef.current(k);
+    if(window.__lmLogOpenQueued){const k=window.__lmLogOpenQueued;window.__lmLogOpenQueued=null;setTimeout(()=>logOpenRef.current(k),500);}
+    return()=>{window.__lmLogOpen=null;};},[storageReady]);
   const openFood=(date,meal)=>{setMealType(meal||defaultMeal());openSheet('food',{date},{text:'',date:date||calAddDays(TODAY,-1)});};
   const openMeal=id=>openSheet('meal',{id},{edit:false});
   const openWalk=(date,slot)=>{const sl=slot||(new Date().getHours()<15?'morning':'night');const w=walkLog[date]?.[sl]||{};
@@ -4289,6 +4407,41 @@ Reply ONLY with valid JSON (no markdown):
       </div>
     </>);
   }
+  function renderLogSettings(){
+    const c=logCfg;const setL=f=>setPrefs(p=>({...p,logrem:{...c,...f}}));
+    const native=window.LMNative?.isNative;const U=usualTimes();
+    const items=planLogItems();const nx=items[0];
+    const when=at=>{const d=new Date(at);return `${localDate(d)===TODAY?'today':'tomorrow'} ${fmt12(m2hm(d.getHours()*60+d.getMinutes()))}`;};
+    const fmtM=m=>fmt12(m2hm(m));
+    return(<>
+      <div className="x-card" style={{display:'flex',flexDirection:'column',gap:12}}>
+        <div className="x-sub">A good-morning check-in to log your sleep, and a nudge after your usual meal times if you haven’t logged yet. Tap it to log straight away.</div>
+        <Seg items={[['off','Off'],['on','On']]} value={c.on?'on':'off'} onChange={v=>setL({on:v==='on'})}/>
+        {c.on&&nx&&<div style={{background:'var(--s4)',borderRadius:22,padding:'12px 14px',display:'flex',gap:12,alignItems:'flex-start'}}>
+            <Shape kind="cookie9" size={40} fill={nx.kind==='sleep'?'var(--violet-c)':'var(--amber-c)'} color={nx.kind==='sleep'?'var(--on-violet-c)':'var(--on-amber-c)'} font={19}>{nx.kind==='sleep'?'🌙':'🍽️'}</Shape>
+            <div style={{flex:1,minWidth:0}}><div className="x-eyebrow" style={{marginBottom:3}}>Next · {when(nx.at)}</div>
+            <b style={{display:'block'}}>{nx.title}</b><div className="x-sub" style={{marginTop:2}}>{nx.body}</div></div></div>}
+        {c.on&&<>
+          <div className="x-list">
+            {LOG_KINDS.map(([k,em,l,sub])=>{const u=U[k];const nextK=items.find(x=>x.kind===k);
+              return(<button key={k} className="x-item" onClick={()=>setL({[k]:!c[k]})} style={{minHeight:64}}>
+                <span style={{fontSize:24,width:34,textAlign:'center'}}>{em}</span>
+                <span style={{flex:1,minWidth:0}}><span className="t" style={{display:'block'}}>{l}</span>
+                  <span className="s" style={{display:'block'}}>{k==='sleep'?'Up at':'Usually'} {fmtM(u.wd)}{u.we!==u.wd?`, weekends ${fmtM(u.we)}`:''}</span>
+                  {c[k]&&nextK&&<span className="s" style={{display:'block',color:'var(--pri)'}}>Reminder {when(nextK.at)}</span>}</span>
+                <span className={`m3-switch${c[k]?' on':''}`} aria-checked={!!c[k]} role="switch"><span className="m3-switch-thumb"/></span>
+              </button>);})}
+          </div>
+          <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Remind me this long after the usual time</div>
+          <div className="x-chips">{[[30,'30 min'],[45,'45 min'],[60,'1 h'],[90,'1 h 30']].map(([m,l])=><button key={m} className={`x-chip${+c.after===m?' on':''}`} onClick={()=>setL({after:m})}>{l}</button>)}</div>
+          <div className="x-sub">Usual times are learned from when you log (last 4 weeks, weekdays and weekends apart). The sleep check-in comes 30 minutes after you usually wake up. Nothing comes if you’ve already logged it (or a later meal), or before 6 AM or after 11 PM. “Later” asks again in 30 minutes.</div>
+          {native&&<button className="x-btn outline" onClick={()=>{const k='sleep',at=Date.now();const msg=logMessage(k,TODAY,new Date(TODAY+'T'+m2hm((isWeekend(TODAY)?U.sleep.we:U.sleep.wd)+30)+':00').getTime());
+            window.LMNative.testLog({kind:k,...msg}).then(ok=>showToast(ok?'Test reminder sent':'Notifications are blocked',ok?'var(--ok)':'var(--warn)'));}}>Send a test reminder</button>}
+          {!native&&<div className="x-sub">Reminders work in the Android app.</div>}
+        </>}
+      </div>
+    </>);
+  }
   function renderMoveSettings(){
     const c=moveCfg;const setM=f=>setPrefs(p=>({...p,move:{...c,...f}}));
     const native=window.LMNative?.isNative;
@@ -4381,6 +4534,7 @@ Reply ONLY with valid JSON (no markdown):
       ['goals','🎯','Goals',`${fmtN(G.calMin)}–${fmtN(G.calMax)} kcal · ${G.protein} g protein · ${G.steps/1000}k steps`,'amber'],
       ['ai','✨','AI',prov==='claude'?'Claude (your key)':'Free (Gemini)','pri'],
       ['reminders','💧','Water reminders',waterCfg.on?`Every ${waterCfg.every} min, ${fmt12(waterCfg.start)}–${fmt12(waterCfg.end)}`:'Off','sky'],
+      ['logrem','🔔','Logging reminders',logCfg.on?LOG_KINDS.filter(([k])=>logCfg[k]).map(([,,l])=>l).join(', ')||'Nothing picked':'Off','violet'],
       ['move','🚶','Move reminders',moveCfg.on?`After ${moveCfg.mins>=60?(moveCfg.mins/60)+' h':moveCfg.mins+' min'} still, ${fmt12(moveCfg.start)}–${fmt12(moveCfg.end)}`:'Off','mint'],
       ['health','❤️','Health Connect',window.LMNative?.isNative?(hcOn?'Connected':'Not connected'):'Android app only','pink'],
       ['look','🎨','Theme & colour',`${{system:'Follows phone',light:'Light',dark:'Dark'}[themeMode]} · ${(ACCENTS.find(([h])=>h.toLowerCase()===accent.toLowerCase())||[0,'Custom'])[1]}`,'mint'],
@@ -4451,6 +4605,7 @@ Reply ONLY with valid JSON (no markdown):
     }
     if(settingsPage==='ai')content=<div className="x-wrap" style={{paddingTop:0}}>{renderAISettings()}</div>;
     if(settingsPage==='reminders')content=<div className="x-wrap" style={{paddingTop:0}}>{renderWaterSettings()}</div>;
+    if(settingsPage==='logrem')content=<div className="x-wrap" style={{paddingTop:0}}>{renderLogSettings()}</div>;
     if(settingsPage==='move')content=<div className="x-wrap" style={{paddingTop:0}}>{renderMoveSettings()}</div>;
     if(settingsPage==='health')content=renderHealthSettings();
     if(settingsPage==='look')content=<div className="x-wrap" style={{paddingTop:0}}>
