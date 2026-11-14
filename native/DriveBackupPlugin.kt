@@ -42,7 +42,7 @@ import java.util.concurrent.TimeUnit
  * Backups to the person's own Google Drive, in its hidden app-data folder (drive.appdata):
  * sign in with the Google account picker, back up now, automatic daily/weekly/monthly backups
  * (WorkManager, optionally Wi-Fi only), list backups and restore one. Keeps the newest 30.
- * A backup holds every file of the app's on-phone store (files/store/*.json).
+ * A backup holds every file of the app's on-phone store (every .json file in files/store).
  */
 @CapacitorPlugin(name = "DriveBackup")
 class DriveBackupPlugin : Plugin() {

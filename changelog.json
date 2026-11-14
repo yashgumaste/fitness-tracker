@@ -27,6 +27,17 @@
     },
     {
       "text": "Fixed the water glass: when it was more than about 60% full, the water floated with a gap at the bottom. It now fills right down to the bottom, in the small glass and the big one."
+    },
+    {
+      "text": "Record a hike: tap 🥾 Hike on the Steps page (or Start a hike in +). While you hike you see distance, time, pace, steps, climb so far, your height above sea level, speed and a live height chart. It works with no mobile signal; only the map background needs internet.",
+      "img": "docs/whatsnew/hike-recording.png"
+    },
+    {
+      "text": "Each hike has its own page: the route, an elevation profile, a speed chart, elevation gain and loss, highest and lowest point, climbing speed (metres up an hour), the steepest slope, moving time and rest time, pace and climb for each km, steps, stride and calories that count the climb. Hikes go to Health Connect as hiking.",
+      "img": "docs/whatsnew/hike-details.png"
+    },
+    {
+      "text": "Climb is measured with your phone's air-pressure sensor when it has one, which is much steadier than GPS height. On Android 14 and newer, heights are above sea level."
     }
   ],
   "releases": [
