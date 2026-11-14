@@ -17,6 +17,9 @@
     {
       "text": "Google Drive backup, like WhatsApp: in Settings → Data & backup, sign in with Google once. The app then backs up by itself (daily, weekly or monthly, on Wi-Fi or also mobile data) to a hidden folder in your own Drive, keeping the last 30. Back up now any time, or restore any backup on a new phone.",
       "img": "docs/whatsnew/drive-backup.png"
+    },
+    {
+      "text": "The coach now looks at everything you log, everywhere it appears (Home, food history, workout review and weekly analysis): every meal with its macros, water, sleep, weight, how you felt, walks (recorded, found from your steps or added by hand), all your steps and workouts. It weighs what you ate against what you burned. The coach card also shows on days with no meals logged."
     }
   ],
   "releases": [

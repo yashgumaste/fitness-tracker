@@ -2335,7 +2335,7 @@ async function handleDietAdd(text,at){
   }
 
   async function fetchInsight(){
-    if(!todayDiet.length)return;
+    if(!buildTimeline(TODAY).length)return;
     setShowInsight(true);setInsightLoading(true);setAiInsight('');setInsightDay(TODAY);
     try{
       // When did the pain start? (earliest pain onset in the last 3 days; logged time if no onset given)
@@ -2404,6 +2404,9 @@ async function handleDietAdd(text,at){
 USER'S RECENT FOOD LOG (last 3 days — the trigger could be 12-36 hours before symptoms):
 ${allRecentFoods}
 
+EVERYTHING ELSE LOGGED TODAY (water, sleep, walks, workout, feelings — in time order):
+${dayLog(TODAY,painSince)}
+
 SYMPTOMS LOGGED:
 ${recentSymptomsText}
 
@@ -2422,15 +2425,15 @@ Be direct and medically grounded. Protein and fat loss goals are paused — reco
         prompt=`You are a nutrition and gut health coach. Give 3 focused, honest coaching sentences about TODAY (${TODAY}).
 
 USER CONTEXT:
-- Goal: Fat loss, 1700-1850 kcal/day, 100g protein/day
+- Goal: ${{lose:'Fat loss',maintain:'Maintain weight, get fitter',gain:'Build muscle'}[profile.goal]||'Fat loss'}, ${GOALS.calories.min}-${GOALS.calories.max} kcal/day, ${GOALS.protein.target}g protein/day, ${fmtN(WALK_GOAL.day)} steps/day, ${fmtL(WATER_GOAL.ml)} water/day, sleep 7–9 h${currentBF?`; body fat ${currentBF}% (goal ${BF_GOAL[0]}-${BF_GOAL[1]}%)`:''}${latestWeight?`; weight ${latestWeight.w} kg`:''}
 - Indian diet (rotis, dal, sabji, dahi, paneer, etc.)
+- It is now ${fmtTime(Date.now())}; the day is not over.
 
-TODAY'S MEALS:
-${todayLog}
-Total: ${rnd(todayMacros.cal)}kcal, ${rnd(todayMacros.pro)}g protein
-${moveSummary(TODAY)?`MOVEMENT TODAY (goal ${fmtN(WALK_GOAL.day)} steps a day; walks found from the phone's steps or added by hand): ${moveSummary(TODAY)}\n`:''}${sleepText(sleepLog[TODAY])?`SLEEP LAST NIGHT (goal 7–9 h): ${sleepText(sleepLog[TODAY])}\n`:''}${waterMl(TODAY)?`WATER SO FAR TODAY (with times): ${waterDesc(TODAY)}\n`:''}
-YESTERDAY'S MEALS:
-${ydLog}
+EVERYTHING LOGGED TODAY, in time order (every meal, drink, walk, workout, sleep, weigh-in and feeling; walks were recorded with GPS, found from the phone's steps or added by hand):
+${dayLog(TODAY,painSince)}
+
+YESTERDAY, EVERYTHING LOGGED:
+${dayLog(ydKey)}
 ${ydGasRisk.length>0?`Yesterday had gas-risk foods: ${ydGasRisk.join(', ')} — may still be causing discomfort today`:''}
 
 RECENT SYMPTOMS LOGGED:
@@ -2438,8 +2441,10 @@ ${recentSymptomsText||'None logged'}
 ${hasSevereYesterday&&!todaySyms.length?`NOTE: yesterday's symptoms were NOT logged again today, so they may have settled. Do not re-analyse yesterday's meals or triggers — this insight is about TODAY. Just judge whether today's meals were gentle enough for someone recovering, naming any heavy, oily or spicy items.\n`:''}
 GAS-RISK FOODS TODAY: ${gasRiskToday.length>0?gasRiskToday.join(', '):'None flagged'}
 ${painSince?'\n'+TIMING_RULE+'\n':''}
+Use ALL of the logs above, not just the meals: weigh food against everything burned (walks, everyday steps, workout), and let sleep, water and feelings shape the advice. Only mention things that were actually logged.
+
 Give exactly 3 sentences:
-1. Nutritional quality + protein/calorie assessment today (mention specific foods)
+1. Nutritional quality + protein/calorie assessment today (mention specific foods), taking today's activity and calories burned into account
 2. Gut/body pattern: if illness signs are logged (feverish, cold, sore throat, cough, body ache, headache), first consider a viral infection or getting run-down (poor sleep, stress, hard training) rather than food — suggest rest, fluids, warm light meals and skipping intense workouts until better, and to see a doctor if fever is 102 °F+ or lasts over 3 days. Otherwise: if gas-risk foods eaten today OR yesterday, call them out by name. If symptoms logged recently, connect to specific foods. If stomach pain is logged, use its region and duration (e.g. upper-middle = acidity, left side/navel = gas, upper-right after oily food = gallbladder); if it has lasted over 2-3 days or is severe, say plainly to see a doctor.
 3. One concrete actionable suggestion for next meal or tomorrow.
 
@@ -2453,7 +2458,7 @@ Be specific, mention actual food names, be direct.`;
   }
 
   async function fetchInsightForDate(dk, entries){
-    if(!entries.length) return;
+    if(!buildTimeline(dk).length) return;
     setShowDayInsight(p=>({...p,[dk]:true}));
     setDayInsights(p=>({...p,[dk]:{text:'',loading:true}}));
     try{
@@ -2466,9 +2471,9 @@ Be specific, mention actual food names, be direct.`;
       const hasSevere=(symptomLog[dk]||[]).some(s=>SEVERE.includes(s.id)||(s.id==='pain'&&s.level==='severe'));
       let prompt;
       if(hasSevere){
-        prompt=`Gut health recovery coach. User had ${(symptomLog[dk]||[]).some(s=>s.id==='loose')?'loose motion':(symptomLog[dk]||[]).some(s=>s.id==='pain')?'stomach pain':'nausea'} on ${dk}.\nMeals that day:\n${log}\nSymptoms: ${syms||'none'}\n${painSince?TIMING_RULE+'\n':''}\n3 sentences: 1. Most likely food trigger from this day's log. 2. What to eat for recovery. 3. What to avoid. Be specific, name actual foods.`;
+        prompt=`Gut health recovery coach. User had ${(symptomLog[dk]||[]).some(s=>s.id==='loose')?'loose motion':(symptomLog[dk]||[]).some(s=>s.id==='pain')?'stomach pain':'nausea'} on ${dk}.\nEverything logged that day, in time order:\n${dayLog(dk,painSince)}\nThe day before:\n${dayLog(calAddDays(dk,-1))}\nSymptoms: ${syms||'none'}\n${painSince?TIMING_RULE+'\n':''}\n3 sentences: 1. Most likely food trigger from this day's log. 2. What to eat for recovery. 3. What to avoid. Be specific, name actual foods.`;
       } else {
-        prompt=`Nutrition coach. Review this day's eating:\n${log}\nTotal: ${rnd(macros.cal)}kcal, ${rnd(macros.pro)}g protein, ${rnd(macros.carbs)}g carbs.\nSymptoms logged: ${syms||'none'}\n${sleepText(sleepLog[dk])?'Sleep the night before: '+sleepText(sleepLog[dk])+'\n':''}${waterMl(dk)?'Water (with times): '+waterDesc(dk)+'\n':''}${moveSummary(dk)?'Walks: '+moveSummary(dk)+' (goal 10,000 steps/day)\n':''}${painSince?TIMING_RULE+'\n':''}${(symptomLog[dk]||[]).some(s=>ILLNESS_IDS.includes(s.id))?'Illness signs were logged (fever/cold/aches): weigh infection, poor sleep and stress against food, and favour rest, fluids and light meals.\n':''}Goal: fat loss, 1700-1850 kcal, 100g protein, Indian diet.\n3 sentences: 1. How well this day aligned with fat loss goal. 2. Biggest gap or win. 3. One specific improvement.`;
+        prompt=`Health and nutrition coach. Review this whole day (${dk}). Everything logged, in time order — every meal, drink, walk (GPS-recorded, found from phone steps or added by hand), workout, sleep, weigh-in and feeling:\n${dayLog(dk,painSince)}\nUse all of it, not just the meals: weigh food against what was burned, and let sleep, water and feelings shape the advice. Only mention what was logged.\n${painSince?TIMING_RULE+'\n':''}${(symptomLog[dk]||[]).some(s=>ILLNESS_IDS.includes(s.id))?'Illness signs were logged (fever/cold/aches): weigh infection, poor sleep and stress against food, and favour rest, fluids and light meals.\n':''}Goal: ${{lose:'fat loss',maintain:'maintain weight, get fitter',gain:'build muscle'}[profile.goal]||'fat loss'}, ${GOALS.calories.min}-${GOALS.calories.max} kcal, ${GOALS.protein.target}g protein, ${fmtN(WALK_GOAL.day)} steps, Indian diet.\n3 sentences: 1. How well this day (food and activity together) aligned with the goal. 2. Biggest gap or win. 3. One specific improvement.`;
       }
       const text=await callAI(prompt,400);
       setDayInsights(p=>({...p,[dk]:{text:text||'No insight.',loading:false}}));
@@ -2751,7 +2756,10 @@ Be specific, mention actual food names, be direct.`;
 USER CONTEXT:
 - Week ${weekNum} of 12-week plan (Phase ${phase}: ${phase===1?'Foundation — learning movements':phase===2?'Progression — adding weight':'Strength — pushing limits'})
 - Goal: ${{lose:'Fat loss',maintain:'Maintain weight, get fitter',gain:'Build muscle'}[profile.goal]||'Fat loss'}${currentBF?`, ${currentBF}% → ${BF_GOAL[0]}-${BF_GOAL[1]}% body fat`:''}${profile.targetKg?`, goal weight ${profile.targetKg} kg`:targetWeightAt18?`, ${targetWeightAt24}-${targetWeightAt18} kg target`:''}${profile.gender?`, ${profile.gender==='female'?'woman':profile.gender==='male'?'man':'adult'}`:''}${bodySaved?`, age ${bodyMeasure.age}`:''}
-- Today's diet: ${dietStr}
+- Daily targets: ${GOALS.calories.min}-${GOALS.calories.max} kcal, ${GOALS.protein.target}g protein, ${fmtN(WALK_GOAL.day)} steps
+
+EVERYTHING LOGGED THAT DAY, in time order (meals with macros, drinks, walks, workout, sleep, weigh-in, feelings) and totals:
+${dayLog(date)}
 
 TODAY'S WORKOUT (${dayInfo?.label||'session'}):
 ${exSummary}
@@ -2762,7 +2770,7 @@ ${customStr}
 SLEEP THE NIGHT BEFORE (goal 7–9 h; short or broken sleep means lower recovery): ${sleepText(sleepLog[date])||'not logged'}
 WATER THAT DAY: ${waterDesc(date)||'not logged'}
 
-PACED WALKS (these count as the day's walking cardio — treadmill/incline/easy-walk items above are marked done when a walk was logged) (plan: 2 walks a day, each ~3,400 steps / 2 km / 30 min; 10,000 steps a day):
+PACED WALKS (these count as the day's walking cardio — treadmill/incline/easy-walk items above are marked done when a walk was logged) (plan: 2 walks a day, each ~${fmtN(WALK_GOAL.steps)} steps / ${WALK_GOAL.km} km / ${WALK_GOAL.min} min; ${fmtN(WALK_GOAL.day)} steps a day):
 ${walksStr}
 
 Walking reference: brisk = ~100+ steps/min and 5-6 km/h (pace 10-12 min/km); ~4 km/h is easy strolling.
@@ -2770,7 +2778,7 @@ Walking reference: brisk = ~100+ steps/min and 5-6 km/h (pace 10-12 min/km); ~4 
 Give a JSON response ONLY (no markdown):
 {
   "rating": "💪 Strong"|"✅ Solid"|"⚠️ Light"|"🎯 Getting started",
-  "summary": "<2 sentences: what went well today, counting walks as part of the day's training>",
+  "summary": "<2 sentences: what went well today, counting walks, everyday steps and the day's food, sleep and water as part of training and recovery>",
   "walk_insight": ${wm.length?`"<2-3 sentences on the walks: judge pace, speed and cadence against brisk walking and against the last 7 days; say whether it was brisk enough for fat burning and one concrete way to improve (e.g. cadence target, pace target, extra minutes)>"`:'null'},
   "top_win": "<the single best thing about this session, specific>",
   "focus_next": "<one specific thing to improve or push next session>",
@@ -2872,7 +2880,7 @@ USER PROFILE:
 - Goal: ${{lose:'Fat loss',maintain:'Maintain weight, get fitter',gain:'Build muscle'}[profile.goal]||'Fat loss'}${currentBF?` from ${currentBF}% → ${BF_GOAL[0]}-${BF_GOAL[1]}% body fat`:''}
 - Target weight: ${profile.targetKg?profile.targetKg+' kg':targetWeightAt18?targetWeightAt18+'–'+targetWeightAt24+' kg':'not set'} | Start: ${startW||'?'} kg | Current: ${curW||'?'} kg
 - Primary focus: reduce waist circumference (currently ${bodyMeasure.waistCm}cm) — visceral/abdominal fat
-- Daily targets: 1700–1850 kcal, ≥100g protein. Prioritize compound lifts + cardio for fat loss
+- Daily targets: ${GOALS.calories.min}–${GOALS.calories.max} kcal, ≥${GOALS.protein.target}g protein, ${fmtN(WALK_GOAL.day)} steps. Prioritize compound lifts + cardio for fat loss
 - Program week: ${weekNum} (${totalDays} days since start)
 - Total sessions completed: ${fitSessions}
 - Diet follows Indian food patterns (roti, dal, sabji, dahi, paneer, eggs etc.)
@@ -2897,6 +2905,12 @@ ${missedDays.length>0?missedDays.map(d=>`${fmtDate(d)} — ${getDayInfo(d).label
 
 Last completed session: ${lastSessionDate?`${fmtDate(lastSessionDate)} (${daysSinceLastSession} days ago)`:'No sessions logged'}
 
+EVERY DAY, LAST 7 DAYS (meals, steps and walks, workouts, sleep, water, weight, feelings):
+${Array.from({length:7},(_,i)=>dayBrief(calAddDays(TODAY,i-6))).join('\n')}
+
+TODAY IN FULL, in time order:
+${dayLog(TODAY)}
+
 DIET — LAST 7 LOGGED DAYS:
 ${dietSummary||'No data'}
 
@@ -2914,6 +2928,7 @@ SCORING RULES (be strict and honest):
 - If protein is below 90g on more than 3 of last 7 days: diet = "needs work"
 - Score 7+ only if both diet AND fitness are genuinely on track this week
 - Do NOT give "okay" or "good" fitness if sessions have clearly been missed recently
+- Walks (GPS-recorded or found from phone steps) and daily steps are real training: count them in fitness wins and gaps, and weigh calories eaten against calories burned
 
 Reply ONLY with valid JSON (no markdown):
 {
@@ -3133,6 +3148,47 @@ Reply ONLY with valid JSON (no markdown):
     const sug=info?getWorkout(info.type,getWeekNum(day),day,!hasCompletedBefore(day)):null;
     return {info,sug,adapted:!!ad?.adapted,reason:ad?.reason||null};
   }
+  // Everything logged on a day, in time order, for the coach: every meal, walk, workout, drink, sleep, weigh-in and feeling, then the totals
+  function dayLog(day,painSince){
+    const mv=moveDay(day),out=[];
+    const at=ts=>fmtTime(ts);
+    buildTimeline(day).forEach(it=>{
+      const t=(it.approx?'~':'')+at(it.ts);
+      if(it.kind==='meal'){const e=it.entry,m=entryMacros(e);
+        const flags=[e.carbHeavy?'CARB-HEAVY':'',e.gasRisk?'GAS-RISK':''].filter(Boolean).join(',');
+        out.push(`${painSince?mealTag(e,painSince):t} · ${e.mealType}: ${e.food} — ${rnd(m.cal)} kcal, ${rnd(m.pro)} g protein, ${rnd(m.carbs)} g carbs, ${rnd(m.fat)} g fat${flags?` [${flags}]`:''}`);}
+      else if(it.kind==='walk'){const w=mv.walks.find(x=>'w'+x.id===it.id);if(!w)return;
+        const pace=w.min&&w.km?w.min/w.km:null;
+        let s=`${t} · ${w.name} (${w.src==='gps'?'recorded with GPS':w.src==='hc'?'found from phone steps':'added by hand'}): ${w.end?fmtSpan(w.start,w.end)+', ':''}${w.min?w.min+' min, ':''}${fmtN(w.steps)} steps, ${w.km.toFixed(2)} km`+
+          `${pace?`, pace ${fmtPace(pace)} min/km (${(60/pace).toFixed(1)} km/h)`:''}${w.cadence?`, ${w.cadence} steps/min`:''}, ~${w.kcal} kcal`;
+        if(w.src==='gps'&&w.stats){const st=w.stats;s+=`${st.gain>=3?`, climbed ${Math.round(st.gain)} m`:''}${st.maxKmh?`, top speed ${st.maxKmh.toFixed(1)} km/h`:''}${st.splits.length>1?`, km splits ${st.splits.filter(x=>!x.part).map(x=>fmtPaceS(x.sec)).join(' ')}`:''}`;}
+        out.push(s);}
+      else if(it.kind==='workout'){const fl=fitLogs[day]||{},{sug,info}=daySug(day);
+        const exs=(sug?.exercises||[]).map(ex=>{const l=fl[ex.id]||{};const sl=l.setLog||[];
+          if(sl.length)return `${ex.name} ${sl.map(x=>`${x.reps}${x.weight?`×${x.weight}${x.wUnit||'kg'}`:''}`).join(', ')}${l.done?'':' (unfinished)'}`;
+          if(!l.done)return null;
+          return `${ex.name} ${l.sets||ex.sets}×${l.reps||ex.reps}${ex.unit&&ex.unit!=='reps'?' '+ex.unit:''}${l.weight?` @ ${l.weight}${l.weightUnit||'kg'}`:''}`;}).filter(Boolean);
+        const cus=(fl._custom||[]).map(a=>`${a.name||'Extra'} ${(a.sets||[]).map(x=>`${x.reps}${x.weight?`×${x.weight}${x.wUnit||'kg'}`:''}`).join(', ')}`);
+        const kcal=(sug?.exercises||[]).reduce((a,ex)=>{const l=fl[ex.id]||{};return a+(l.done?calcCal(ex.id,l.sets||ex.sets,l.reps||ex.reps).kcal:0);},0);
+        out.push(`${t} · Workout, ${info?.label||'session'} (${fl._dayComplete?'complete':'in progress'}): ${[...exs,...cus].join('; ')||'nothing ticked yet'}${kcal?`, ~${kcal} kcal`:''}${fl._note?`. Note: "${fl._note}"`:''}`);}
+      else if(it.kind==='water')out.push(`${t} · Water ${fmtL(it.ml)}${it.n>1?` (${it.n} drinks)`:''}, ${fmtL(it.run)} so far`);
+      else if(it.kind==='feel')out.push(`${t} · Feeling: ${symptomText(it.entry,day)}`);
+      else out.push(`${t} · ${it.kind==='sleep'?'Sleep: ':it.kind==='weight'?'Weight: ':''}${it.title}${it.meta&&it.kind!=='weight'?' ('+it.meta+')':''}`);
+    });
+    if(!out.length)return 'Nothing logged';
+    const m=macrosOf(day),fl=fitLogs[day]||{},{sug}=daySug(day);
+    const gym=(sug?.exercises||[]).reduce((a,ex)=>{const l=fl[ex.id]||{};return a+(l.done?calcCal(ex.id,l.sets||ex.sets,l.reps||ex.reps).kcal:0);},0);
+    out.push(`TOTALS: eaten ${rnd(m.cal)} kcal (goal ${GOALS.calories.min}-${GOALS.calories.max}), ${rnd(m.pro)} g protein (goal ${GOALS.protein.target}), ${rnd(m.carbs)} g carbs, ${rnd(m.fat)} g fat`+
+      ` · ${mv.steps?`steps ${fmtN(mv.steps)} of ${fmtN(WALK_GOAL.day)}, ${mv.km.toFixed(1)} km${mv.src==='hc'?' (phone count)':''}`:'steps not recorded'}`+
+      ` · burned by activity ~${mv.kcal+gym} kcal${mv.kcal+gym?` (walks ${mv.walkKcal}, everyday steps ${mv.otherKcal}${gym?`, gym ${gym}`:''})`:''}`+
+      ` · water ${waterMl(day)?`${fmtL(waterMl(day))} of ${fmtL(WATER_GOAL.ml)}`:'not logged'}`);
+    return out.join('\n');
+  }
+  // One line per day for the weekly coach
+  function dayBrief(day){const m=macrosOf(day),mv=moveDay(day),fl=fitLogs[day],sl=sleepLog[day],sy=symptomLog[day]||[];
+    return `${fmtDate(day)}: ${(dietGrouped[day]||[]).length?`${rnd(m.cal)} kcal, ${rnd(m.pro)} g protein`:'no meals logged'} · ${mv.steps?fmtN(mv.steps)+' steps':'steps not recorded'}${mv.walks.length?` (${mv.walks.map(w=>`${w.name} ${w.min||'?'} min`).join(', ')})`:''}`+
+      `${fl&&(fl._dayComplete||Object.keys(fl).some(k=>!k.startsWith('_')&&fl[k]?.done)||(fl._custom||[]).length)?` · workout ${fl._dayComplete?'done':'partly done'}`:''}`+
+      `${sleepMin(sl)?` · slept ${sleepText(sl)}`:''}${waterMl(day)?` · water ${fmtL(waterMl(day))}`:''}${weightLog[day]?` · ${weightLog[day]} kg`:''}${sy.length?` · felt: ${sy.map(s=>symptomText(s,day)).join(', ')}`:''}`;}
   const defaultMeal=()=>{const h=new Date().getHours();return h<11?'Breakfast':h<16?'Lunch':h<19?'Snack':'Dinner';};
   function openSheet(type,params={},d={}){if(!sheet)sheetBack.current={y:window.scrollY,k:tab+dietView+fitView};setSheet({type,...params});setDraft(d);setArm(false);}
   function closeSheet(){setSheet(null);setDraft({});setArm(false);}
@@ -3306,7 +3362,7 @@ Reply ONLY with valid JSON (no markdown):
 
   function renderCoach(day){
     const es=dietGrouped[day]||[];
-    if(!es.length)return null;
+    if(!es.length&&!buildTimeline(day).length)return null;
     const isT=day===TODAY;
     const open=isT?(showInsight&&insightDay===TODAY):!!showDayInsight[day];
     const loading=isT?insightLoading:dayInsights[day]?.loading;
