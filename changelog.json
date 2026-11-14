@@ -13,6 +13,10 @@
     },
     {
       "text": "Recorded walks go to Health Connect with their route, steps and distance, so they show in Google Health. Tap Allow once on a walk's page to share routes."
+    },
+    {
+      "text": "Google Drive backup, like WhatsApp: in Settings → Data & backup, sign in with Google once. The app then backs up by itself (daily, weekly or monthly, on Wi-Fi or also mobile data) to a hidden folder in your own Drive, keeping the last 30. Back up now any time, or restore any backup on a new phone.",
+      "img": "docs/whatsnew/drive-backup.png"
     }
   ],
   "releases": [

@@ -207,6 +207,15 @@
   /* ── Open a web page (updates, API console) ── */
   function openUrl(url){if(Browser)Browser.open({url});else window.open(url,'_blank');}
 
+  /* ── Google Drive backup (hidden app folder in your own Drive) ── */
+  const DB=plug('DriveBackup');
+  const drive={
+    available:()=>!!DB,
+    signIn:()=>DB.signIn(),signOut:()=>DB.signOut(),status:()=>DB?DB.status():Promise.resolve({}),
+    backupNow:()=>DB.backupNow(),schedule:(freq,wifiOnly)=>DB.schedule({freq,wifiOnly}),
+    list:()=>DB.list().then(r=>r.files||[]),restore:id=>DB.restore({id})
+  };
+
   /* ── Recording a walk (GPS + steps, foreground service) ── */
   const WT=plug('WalkTracker');
   if(WT)WT.addListener('open',()=>{if(window.__lmWalkOpen)window.__lmWalkOpen();else window.__lmWalkOpenQueued=true;});
@@ -327,6 +336,6 @@
   window.LMNative={hc,provider,setProvider:p=>{try{localStorage.setItem('lm-ai-provider',p);}catch(_){}},hasFreeKey,
     setGeminiKey:async k=>{gemKeyCache=k||null;await kv.set('gemini_key',k||null);},hasGeminiKey:async()=>!!(await kv.get('gemini_key')),
 isNative,kv,ask,usage,MODELS,setKey:async k=>{keyCache=k||null;await kv.set('anthropic_key',k||null);},hasKey:async()=>!!(await apiKey()),
-    walk,planWater,testNotification,takeLoggedWater,planMove,testMove,shareBackup,openUrl,bars,setIcon,iconFor,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
+    walk,drive,planWater,testNotification,takeLoggedWater,planMove,testMove,shareBackup,openUrl,bars,setIcon,iconFor,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
     releasesUrl:'https://github.com/'+REPO+'/releases/latest'};
 })();
