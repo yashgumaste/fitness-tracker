@@ -124,6 +124,20 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   await step('Water logged from notification buttons',async()=>{
     await p.evaluate(()=>{window.LMNative.takeLoggedWater=async()=>{const r=window.__q||[];window.__q=[];return r;};window.__q=[{ts:Date.now()-60000,ml:250}];window.dispatchEvent(new Event('lm-resume'));});
     await W(900);await expect('logged from the reminder');});
+  await step('Google Drive backup',async()=>{
+    await p.evaluate(()=>{const st={email:null,freq:'daily',wifiOnly:true,last:0,lastSize:0,error:null};window.__drive=[];
+      window.LMNative.drive={available:()=>true,status:async()=>({...st}),
+        signIn:async()=>{st.email='tester@gmail.com';return{...st};},signOut:async()=>{st.email=null;return{...st};},
+        schedule:async(f,w)=>{st.freq=f;st.wifiOnly=w;window.__drive.push('schedule:'+f+':'+w);return{...st};},
+        backupNow:async()=>{st.last=Date.now();st.lastSize=48000;window.__drive.push('backup');return{...st};},
+        list:async()=>[{id:'b1',name:'fitness-backup-1.json',size:'48000',createdTime:new Date().toISOString()}],
+        restore:async id=>{window.__drive.push('restore:'+id);return{files:9};}};});
+    await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Data & backup');await W();
+    await click('.x-btn','Sign in with Google');await W(600);await expect('tester@gmail.com');await expect('KB');
+    await click('.x-seg button','Weekly');await click('.x-seg button','Wi-Fi or mobile data');
+    await click('.x-btn','Restore from Drive');await W(300);await expect('latest');
+    const log=await p.evaluate(()=>window.__drive.join(','));if(!/backup/.test(log)||!/schedule:weekly:false/.test(log))throw new Error('drive calls: '+log);
+    await click('.x-btn','Close');await p.click('[aria-label="Back to settings"]');await W();});
   await step('Move reminders',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Move reminders');
     await click('.x-seg button','On');await expect('Remind me after sitting for');await click('.x-chip','45 min');await click('.x-seg button','Off');
     await p.click('[aria-label="Back to settings"]');await W();});

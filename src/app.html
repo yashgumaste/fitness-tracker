@@ -4254,6 +4254,54 @@ Reply ONLY with valid JSON (no markdown):
       </div>
     </>);
   }
+  // ── Google Drive backup (WhatsApp-style) ──
+  const [driveSt,setDriveSt]=useState(null);const [driveBusy,setDriveBusy]=useState(false);
+  const [driveList,setDriveList]=useState(null);const [restoreAsk,setRestoreAsk]=useState(null);
+  const refreshDrive=()=>{const D=window.LMNative?.drive;if(D&&D.available())D.status().then(setDriveSt).catch(()=>{});};
+  useEffect(()=>{if(storageReady)refreshDrive();},[storageReady,settingsPage]);
+  function renderDriveBackup(){
+    const D=window.LMNative?.drive;const st=driveSt||{};
+    if(!D||!D.available())return(<div className="x-card"><b>Google Drive backup</b><div className="x-sub">Automatic backups to your Google Drive work in the Android app.</div></div>);
+    const when=st.last?new Date(st.last).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}):'Never';
+    const run=async(f,ok)=>{setDriveBusy(true);try{const r=await f();if(r&&'freq' in r)setDriveSt(r);if(ok)showToast(ok,'var(--ok)');}
+      catch(e){showToast(e&&e.code==='SIGN_IN'?'Sign in to Google again':e&&e.code==='CANCELLED'?'Sign-in cancelled':'Drive: '+((e&&e.message)||'something went wrong'),'var(--warn)');refreshDrive();}
+      setDriveBusy(false);};
+    const row=(l,v,extra)=>(<div style={{display:'flex',alignItems:'center',gap:10}}><div style={{flex:1,minWidth:0}}>
+      <div style={{fontSize:12.5,fontWeight:750,color:'var(--fg2)'}}>{l}</div><div style={{fontWeight:750,overflow:'hidden',textOverflow:'ellipsis'}}>{v}</div></div>{extra}</div>);
+    return(<div className="x-card" style={{display:'flex',flexDirection:'column',gap:14}}>
+      <div style={{display:'flex',alignItems:'center',gap:12}}>
+        <Shape kind="cookie9" size={48} fill="var(--sky-c)" color="var(--on-sky-c)" font={22}>☁️</Shape>
+        <div style={{flex:1,minWidth:0}}><b style={{fontSize:17}}>Google Drive backup</b>
+          <div className="x-sub" style={{fontSize:13}}>Saved in a hidden folder of your own Drive. Only this app can see it.</div></div></div>
+      {!st.email?<>
+        <button className="x-btn" disabled={driveBusy} onClick={()=>run(async()=>{await D.signIn();await D.schedule('daily',true);try{await D.backupNow();}catch(_){ }return D.status();},'Signed in · first backup done')}>
+          {driveBusy?'Signing in…':'Sign in with Google'}</button>
+        <div className="x-sub" style={{fontSize:12.5}}>Pick your Google account. Backups then happen by themselves every day on Wi-Fi.</div></>
+      :<>
+        {row('Google account',st.email,<button className="x-btn sm ghost" disabled={driveBusy} onClick={()=>run(async()=>{await D.signIn();return D.status();},'Account changed')}>Change</button>)}
+        {row('Last backup',`${when}${st.lastSize?` · ${Math.max(1,Math.round(st.lastSize/1024))} KB`:''}`,
+          <button className="x-btn sm" disabled={driveBusy} onClick={()=>run(async()=>{await D.backupNow();return D.status();},'Backed up to Drive ✓')}>{driveBusy?'…':'Back up'}</button>)}
+        {st.error&&<div style={{fontWeight:700,fontSize:13,color:'var(--amber)'}}>⚠ {st.error}</div>}
+        <div><div style={{fontSize:12.5,fontWeight:750,color:'var(--fg2)',marginBottom:6}}>Automatic backups</div>
+          <Seg items={[['off','Off'],['daily','Daily'],['weekly','Weekly'],['monthly','Monthly']]} value={st.freq||'daily'} onChange={v=>run(()=>D.schedule(v,st.wifiOnly!==false))}/></div>
+        <div><div style={{fontSize:12.5,fontWeight:750,color:'var(--fg2)',marginBottom:6}}>Back up over</div>
+          <Seg items={[['wifi','Wi-Fi only'],['any','Wi-Fi or mobile data']]} value={st.wifiOnly===false?'any':'wifi'} onChange={v=>run(()=>D.schedule(st.freq||'daily',v==='wifi'))}/></div>
+        {!driveList?<button className="x-btn tonal" disabled={driveBusy} onClick={()=>run(async()=>{setDriveList(await D.list());return null;})}>Restore from Drive…</button>
+          :<div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <div style={{display:'flex',alignItems:'center'}}><b style={{flex:1}}>Your backups</b><button className="x-btn sm ghost" onClick={()=>{setDriveList(null);setRestoreAsk(null);}}>Close</button></div>
+            {!driveList.length&&<div className="x-sub">No backups in Drive yet.</div>}
+            {driveList.map((f,i)=>{const t=new Date(f.createdTime);const ask=restoreAsk===f.id;
+              return(<button key={f.id} className="x-item" onClick={()=>{if(!ask){setRestoreAsk(f.id);return;}
+                  run(async()=>{await D.restore(f.id);showToast('Restored · restarting','var(--ok)');setTimeout(()=>location.reload(),900);return null;});}}
+                style={{display:'flex',alignItems:'center',gap:10,textAlign:'left',background:ask?'var(--amber-c)':undefined,color:ask?'var(--on-amber-c)':undefined}}>
+                <span style={{flex:1}}><b style={{display:'block'}}>{t.toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}{i===0?' · latest':''}</b>
+                  <span style={{fontSize:12.5,fontWeight:650}}>{ask?'Tap again to replace everything on this phone with this backup':`${Math.max(1,Math.round((+f.size||0)/1024))} KB`}</span></span>
+                <span aria-hidden="true">{ask?'⚠':'↺'}</span></button>);})}
+          </div>}
+        <button className="x-btn ghost" style={{color:'var(--fg2)'}} disabled={driveBusy} onClick={()=>run(()=>D.signOut(),'Signed out · backups stay in your Drive')}>Sign out</button>
+      </>}
+    </div>);
+  }
   function renderSettingsX(){
     const G={...DEFAULT_GOALS,...(prefs.goals||{})};
     const gd=goalDraft||Object.fromEntries(Object.entries(G).map(([k,v])=>[k,String(v)]));
@@ -4280,7 +4328,7 @@ Reply ONLY with valid JSON (no markdown):
       ['move','🚶','Move reminders',moveCfg.on?`After ${moveCfg.mins>=60?(moveCfg.mins/60)+' h':moveCfg.mins+' min'} still, ${fmt12(moveCfg.start)}–${fmt12(moveCfg.end)}`:'Off','mint'],
       ['health','❤️','Health Connect',window.LMNative?.isNative?(hcOn?'Connected':'Not connected'):'Android app only','pink'],
       ['look','🎨','Theme & colour',`${{system:'Follows phone',light:'Light',dark:'Dark'}[themeMode]} · ${(ACCENTS.find(([h])=>h.toLowerCase()===accent.toLowerCase())||[0,'Custom'])[1]}`,'mint'],
-      ['data','💾','Data & backup',`${dietEntries.length} meals · save to Drive or restore`,'amber'],
+      ['data','💾','Data & backup',driveSt&&driveSt.email?(driveSt.last?`Drive · backed up ${new Date(driveSt.last).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}`:'Drive · no backup yet'):`${dietEntries.length} meals · back up to Google Drive`,'amber'],
       ['app','ℹ️','About & updates',`Version ${window.LMNative?.version||''}`,'violet']];
     if(!settingsPage)return(
       <div>
@@ -4370,9 +4418,11 @@ Reply ONLY with valid JSON (no markdown):
 
     </div>;
     if(settingsPage==='data')content=<div className="x-wrap" style={{paddingTop:0}}>
+          {renderDriveBackup()}
+          <div className="x-eyebrow" style={{margin:'6px 4px 0'}}>Other ways</div>
           <div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
             <div className="x-sub">Saved on this phone (and in Android's own Google backup) · {dietEntries.length} meals · {fitSessions} workouts · {Object.keys(walkLog).length} walk days · {Object.keys(sleepLog).length} nights · {Object.keys(waterLog).length} water days · {Object.keys(weightLog).length} weigh-ins</div>
-            <button className="x-btn" onClick={()=>window.LMNative.shareBackup(buildExport()).then(()=>showToast('Backup ready — pick Drive to save it','var(--ok)')).catch(e=>showToast('Could not share: '+e.message,'var(--warn)'))}>💾 Save backup to Drive…</button>
+            <button className="x-btn" onClick={()=>window.LMNative.shareBackup(buildExport()).then(()=>showToast('Backup ready — pick Drive to save it','var(--ok)')).catch(e=>showToast('Could not share: '+e.message,'var(--warn)'))}>💾 Save a backup file…</button>
             <label className="x-btn tonal" style={{position:'relative'}}>📂 Restore from a backup file
               <input type="file" accept="application/json,.json,text/plain" style={{position:'absolute',inset:0,opacity:0,width:'100%'}}
                 onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>importFromPaste(String(r.result));r.readAsText(f);e.target.value='';}}/></label>

@@ -65,6 +65,7 @@ dependencies {
     implementation "androidx.health.connect:connect-client:1.1.0"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
     implementation "androidx.work:work-runtime-ktx:2.10.1"
+    implementation "com.google.android.gms:play-services-auth:21.3.0"
 }
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(android.compileOptions.targetCompatibility.toString())) }
@@ -84,6 +85,7 @@ fs.copyFileSync(path.join(__dirname,'..','native','AppUpdatePlugin.java'),path.j
 fs.copyFileSync(path.join(__dirname,'..','native','MoveReminderPlugin.kt'),path.join(javaDir,'MoveReminderPlugin.kt'));
 fs.copyFileSync(path.join(__dirname,'..','native','WaterReminderPlugin.kt'),path.join(javaDir,'WaterReminderPlugin.kt'));
 fs.copyFileSync(path.join(__dirname,'..','native','WalkTrackerPlugin.kt'),path.join(javaDir,'WalkTrackerPlugin.kt'));
+fs.copyFileSync(path.join(__dirname,'..','native','DriveBackupPlugin.kt'),path.join(javaDir,'DriveBackupPlugin.kt'));
 const ma=path.join(javaDir,'MainActivity.java');
 let j=fs.readFileSync(ma,'utf8');
 if(!j.includes('AppIconPlugin')){
@@ -97,6 +99,7 @@ if(!j.includes('AppIconPlugin')){
         registerPlugin(MoveReminderPlugin.class);
         registerPlugin(WaterReminderPlugin.class);
         registerPlugin(WalkTrackerPlugin.class);
+        registerPlugin(DriveBackupPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }`);
