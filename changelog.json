@@ -38,6 +38,10 @@
     },
     {
       "text": "Climb is measured with your phone's air-pressure sensor when it has one, which is much steadier than GPS height. On Android 14 and newer, heights are above sea level."
+    },
+    {
+      "text": "A new logo: an apple with a lightning bolt, for food as energy. It's one simple shape, so it's easy to spot in the notification bar. The home-screen icon still follows your accent colour.",
+      "img": "docs/whatsnew/new-logo.png"
     }
   ],
   "releases": [

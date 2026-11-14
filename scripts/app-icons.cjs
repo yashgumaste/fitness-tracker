@@ -1,6 +1,6 @@
 // Launcher icons in every accent colour. The app switches between them (see AppIconPlugin.java) so the
 // home-screen icon matches the accent picked in Settings. Each icon is an adaptive icon: black background,
-// accent "cookie" shape with a dark dumbbell, plus a monochrome layer for Android's themed icons.
+// the logo (apple with a bolt cut out) in the accent colour, plus a monochrome layer for Android's themed icons.
 const fs=require('fs'),path=require('path');
 
 const ACCENTS=[['cyan','#00FFFF'],['teal','#00E5B0'],['mint','#5CF2A6'],['lime','#B6F36A'],['lemon','#FFE04A'],['amber','#FFC247'],
@@ -9,37 +9,34 @@ const ACCENTS=[['cyan','#00FFFF'],['teal','#00E5B0'],['mint','#5CF2A6'],['lime',
   ...Array.from({length:24},(_,i)=>{const h=i*15,f=n=>{const k=(n+h/30)%12;return Math.round(255*(.5-.5*Math.max(-1,Math.min(k-3,9-k,1))));};
     return['h'+String(h).padStart(3,'0'),'#'+[f(0),f(8),f(4)].map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase()];})];
 
-// geometry in a 108×108 adaptive-icon canvas (safe zone = central 66)
-const C=54,R=31;
-const f=n=>n.toFixed(2);
-function cookie(){let d='';for(let i=0;i<360;i+=2){const t=i*Math.PI/180;const r=R*(1+0.05*Math.cos(12*t))/1.05;d+=(i?'L':'M')+f(C+r*Math.cos(t))+','+f(C+r*Math.sin(t));}return d+'Z';}
-// rounded rectangle centred at (cx,cy) in dumbbell space, rotated -35° about the icon centre, scaled to the cookie
-function rrect(x,y,w,h,rad){
-  const s=R/400,a=-35*Math.PI/180,pts=[];
-  const corner=(cx,cy,start)=>{for(let k=0;k<=6;k++){const t=(start+k*15)*Math.PI/180;pts.push([cx+rad*Math.cos(t),cy+rad*Math.sin(t)]);}};
-  corner(x+w-rad,y+rad,270);corner(x+w-rad,y+h-rad,0);corner(x+rad,y+h-rad,90);corner(x+rad,y+rad,180);
-  return pts.map(([px,py],i)=>{const X=px*s,Y=py*s;const rx=X*Math.cos(a)-Y*Math.sin(a),ry=X*Math.sin(a)+Y*Math.cos(a);
-    return(i?'L':'M')+f(C+rx)+','+f(C+ry);}).join('')+'Z';
-}
-const BELL=[rrect(-170,-26,340,52,26),rrect(-230,-110,62,220,31),rrect(168,-110,62,220,31),rrect(-290,-70,50,140,25),rrect(240,-70,50,140,25)].join('');
-const dark=hex=>{const n=parseInt(hex.slice(1),16);return '#'+[n>>16&255,n>>8&255,n&255].map(v=>Math.round(v*0.12).toString(16).padStart(2,'0')).join('').toUpperCase();};
+// The logo: an apple with a lightning bolt cut out (food as energy), and a separate leaf. One colour, no overlaps,
+// so it stays readable down to the status bar. Drawn on a 24×24 grid.
+const APPLE='M12 7.6C10.3 6.3 7.6 6.1 5.8 7.7C3.6 9.7 3.6 13.9 5.4 17.1C6.8 19.7 8.8 21.6 10.6 21.2C11.3 21 11.6 20.7 12 20.7C12.4 20.7 12.7 21 13.4 21.2C15.2 21.6 17.2 19.7 18.6 17.1C20.4 13.9 20.4 9.7 18.2 7.7C16.4 6.1 13.7 6.3 12 7.6Z';
+const BOLT='M13.6 8.6L8.2 14.9H11.5L10.4 19.6L15.8 13.1H12.5Z';
+const LEAF='M12.9 5.6C12.9 3.4 14.5 1.9 16.8 1.9C16.8 4.1 15.2 5.6 12.9 5.6Z';
+const LOGO={apple:APPLE,bolt:BOLT,leaf:LEAF,body:APPLE+BOLT};   // body is drawn even-odd, so the bolt is a hole
+// in the 108×108 adaptive-icon canvas the logo is scaled to sit inside the 66-unit safe zone
+const glyph=fill=>`  <group android:scaleX="2.5" android:scaleY="2.5" android:translateX="24" android:translateY="24.6">
+    <path android:fillColor="${fill}" android:fillType="evenOdd" android:pathData="${LOGO.body}"/>
+    <path android:fillColor="${fill}" android:pathData="${LOGO.leaf}"/>
+  </group>
+`;
 const vec=paths=>`<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">\n${paths}</vector>\n`;
 
 function write(res){
   const dr=path.join(res,'drawable'),any=path.join(res,'mipmap-anydpi-v26'),mm=path.join(res,'mipmap');
   for(const d of [dr,any,mm,path.join(res,'values')])fs.mkdirSync(d,{recursive:true});
   fs.writeFileSync(path.join(res,'values','icon_colors.xml'),'<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <color name="ic_bg_black">#000000</color>\n</resources>\n');
-  // themed-icon silhouette: cookie with the dumbbell cut out
-  fs.writeFileSync(path.join(dr,'ic_mono.xml'),vec(`  <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="${cookie()}${BELL}"/>\n`));
-  // notification icon: the same silhouette, cropped to the cookie so it fills the small status-bar slot
-  fs.writeFileSync(path.join(dr,'ic_stat_app.xml'),`<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="64" android:viewportHeight="64">
-  <group android:translateX="-22" android:translateY="-22">
-    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="${cookie()}${BELL}"/>
-  </group>
+  // themed-icon silhouette (Android tints it to match the wallpaper)
+  fs.writeFileSync(path.join(dr,'ic_mono.xml'),vec(glyph('#FFFFFFFF')));
+  // notification icon: the logo in white, filling the status-bar slot
+  fs.writeFileSync(path.join(dr,'ic_stat_app.xml'),`<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+  <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="${LOGO.body}"/>
+  <path android:fillColor="#FFFFFFFF" android:pathData="${LOGO.leaf}"/>
 </vector>
 `);
   for(const [name,hex] of ACCENTS){
-    fs.writeFileSync(path.join(dr,`ic_fg_${name}.xml`),vec(`  <path android:fillColor="${hex}" android:pathData="${cookie()}"/>\n  <path android:fillColor="${dark(hex)}" android:pathData="${BELL}"/>\n`));
+    fs.writeFileSync(path.join(dr,`ic_fg_${name}.xml`),vec(glyph(hex)));
     fs.writeFileSync(path.join(any,`ic_launcher_${name}.xml`),`<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
   <background android:drawable="@color/ic_bg_black"/>
@@ -77,4 +74,4 @@ function manifest(m,pkg){
   return m.replace('</application>',aliases+'\n    </application>');
 }
 
-module.exports={ACCENTS,write,manifest};
+module.exports={ACCENTS,LOGO,write,manifest};
