@@ -33,7 +33,8 @@ jobs:
         run: |
           # the changelog commit CI makes after each release doesn't count as a change
           LAST=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
-          N=$(git log --no-merges --format=%s ${LAST:+$LAST..}HEAD | grep -vc '^Changelog:' || true)
+          # only changes to the app itself count (not docs, CLAUDE.md, the workflow or the changelog commit)
+          N=$(git log --no-merges --format= --name-only ${LAST:+$LAST..}HEAD | grep -cE '^(src/|native/|scripts/|assets/|package\.json|capacitor\.config\.json)' || true)
           if [ "${N:-0}" = "0" ]; then echo "changed=false" >> $GITHUB_OUTPUT; echo "No changes — skipping tonight's build"
           else echo "changed=true" >> $GITHUB_OUTPUT; echo "$N change(s) since ${LAST:-the start}"; fi
 
