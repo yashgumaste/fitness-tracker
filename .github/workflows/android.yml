@@ -4,7 +4,7 @@ name: Build Android app
 # Run it by hand from the Actions tab (Run workflow) for an urgent build.
 on:
   schedule:
-    - cron: '30 20 * * *'
+    - cron: '30 2 * * *'   # 8:00 AM IST backup; the nightly build is started at 1:41 AM IST by a scheduled Claude task
   workflow_dispatch:
     inputs:
       publish:
