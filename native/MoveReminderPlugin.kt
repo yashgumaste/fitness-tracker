@@ -81,6 +81,15 @@ class MoveReminderPlugin : Plugin() {
         val r = JSObject(); r.put("on", on); if (reason != null) r.put("reason", reason); call.resolve(r)
     }
 
+    /** lines / phoneLines: [{title, body}] fun texts written by the app from your day; "{sat}" becomes the sitting time */
+    @PluginMethod
+    fun lines(call: PluginCall) {
+        val e = MoveCheck.prefs(context).edit()
+        call.getArray("lines")?.let { e.putString("lines", it.toString()) }
+        call.getArray("phoneLines")?.let { e.putString("phoneLines", it.toString()) }
+        e.apply(); call.resolve()
+    }
+
     @PluginMethod
     fun test(call: PluginCall) {
         val ok = MoveCheck.notify(context, 60, true)
@@ -96,7 +105,18 @@ object MoveCheck {
     private const val WORK = "move-check"
     private const val CHANNEL = "move"
 
-    private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    /** The next of the app's fun lines for this kind of sitting (title, body), in turn, or null for the plain text. */
+    private fun nextLine(c: Context, onPhone: Boolean, sat: String): Pair<String, String>? {
+        val p = prefs(c)
+        fun list(k: String) = try { JSONArray(p.getString(k, "[]")) } catch (e: Exception) { JSONArray() }
+        val a = list(if (onPhone) "phoneLines" else "lines").let { if (it.length() == 0) list("lines") else it }
+        if (a.length() == 0) return null
+        val i = p.getInt("lineIdx", 0); p.edit().putInt("lineIdx", i + 1).apply()
+        val o = a.optJSONObject(i % a.length()) ?: return null
+        return Pair(o.optString("title").replace("{sat}", sat), o.optString("body").replace("{sat}", sat))
+    }
 
     fun save(c: Context, on: Boolean, call: PluginCall) {
         prefs(c).edit()
@@ -222,11 +242,15 @@ object MoveCheck {
         val open = c.packageManager.getLaunchIntentForPackage(c.packageName)?.apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP }
         val pi = if (open != null) PendingIntent.getActivity(c, 7100, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE) else null
         val sat = if (mins >= 60 && mins % 60 == 0) "${mins / 60} hour${if (mins > 60) "s" else ""}" else "$mins minutes"
+        val fun_ = nextLine(c, onPhone, sat)
+        val title = (if (test) "Test: " else "") + (fun_?.first?.takeIf { it.isNotBlank() } ?: "Time to move 🚶")
+        val body = fun_?.second ?: if (onPhone) "You've been on your phone for about $sat without moving. A 5-minute walk helps." else "You've hardly moved in $sat. A 5-minute walk helps."
         val n = NotificationCompat.Builder(c, CHANNEL)
             .setSmallIcon(Water.smallIcon(c)).setColor(0xFF5CF2A6.toInt())
             .setLargeIcon(Water.largeIcon(c, "ic_large_walk"))
-            .setContentTitle(if (test) "Test: time to move 🚶" else "Time to move 🚶")
-            .setContentText(if (onPhone) "You've been on your phone for about $sat without moving. A 5-minute walk helps." else "You've hardly moved in $sat. A 5-minute walk helps.")
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
             .setContentIntent(pi)
             .build()

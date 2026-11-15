@@ -246,6 +246,11 @@
   /* ── Move reminders: a background check of the phone's step counter (native plugin) ── */
   const Move=plug('MoveReminder');
   const hm=t=>{const [h,m]=String(t||'0:0').split(':').map(Number);return (h||0)*60+(m||0);};
+  // fun, context-based reminder texts (and the water buttons) written by the app from your day
+  function reminderExtras(x){
+    if(WR&&WR.extras)WR.extras({lines:x.water||[],btns:x.btns||[]}).catch(()=>{});
+    const MR=plug('MoveReminder');if(MR&&MR.lines)MR.lines({lines:x.move||[],phoneLines:x.movePhone||[]}).catch(()=>{});
+  }
   async function planMove(cfg){
     if(!Move)return{ok:false,reason:'web'};
     try{
@@ -357,6 +362,6 @@
   window.LMNative={hc,provider,setProvider:p=>{try{localStorage.setItem('lm-ai-provider',p);}catch(_){}},hasFreeKey,
     setGeminiKey:async k=>{gemKeyCache=k||null;await kv.set('gemini_key',k||null);},hasGeminiKey:async()=>!!(await kv.get('gemini_key')),
 isNative,kv,ask,usage,MODELS,setKey:async k=>{keyCache=k||null;await kv.set('anthropic_key',k||null);},hasKey:async()=>!!(await apiKey()),
-    walk,drive,planLogs,testLog,clearLog,planWater,testNotification,takeLoggedWater,planMove,testMove,shareBackup,openUrl,bars,setIcon,iconFor,logo:LOGO,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
+    walk,drive,planLogs,testLog,clearLog,planWater,reminderExtras,testNotification,takeLoggedWater,planMove,testMove,shareBackup,openUrl,bars,setIcon,iconFor,logo:LOGO,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
     releasesUrl:'https://github.com/'+REPO+'/releases/latest'};
 })();

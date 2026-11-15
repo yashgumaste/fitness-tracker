@@ -153,6 +153,11 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   await step('Move reminders',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Move reminders');
     await click('.x-seg button','On');await expect('Remind me after sitting for');await click('.x-chip','45 min');await click('.x-seg button','Off');
     await p.click('[aria-label="Back to settings"]');await W();});
+  await step('Water in sips, gulps & glasses',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Water reminders');
+    await click('button','Sips, gulps & glasses');await expect('Your gulp is about');await p.click('[aria-label="Back to settings"]');await W();
+    await tab(0);await expect('+1 gulp');const before=await p.evaluate(()=>document.body.innerText.match(/([\d.]+)\s*(ml|L)\b/)?.[0]);
+    await click('.x-btn','+1 glass');await W(600);
+    await tab(4);await click('.x-item','Water reminders');await click('button','ml');await p.click('[aria-label="Back to settings"]');await W();await tab(0);await expect('+250');});
   await step('Logging reminders',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Logging reminders');
     await expect('Remind me this long after');await expect('Next ·');await click('.x-item','Snack');await click('.x-chip','1 h');
     await p.click('[aria-label="Back to settings"]');await W();});
