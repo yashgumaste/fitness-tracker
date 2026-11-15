@@ -194,12 +194,20 @@ object Water {
 
     private val LINES = arrayOf("Time for a glass of water", "Sip break: log it with one tap", "Your body will thank you: have some water", "Stay topped up: a glass now?")
 
-    /** The two buttons: (ml, label), from the app (e.g. "🥛 1 glass" or "🥛 250 ml"). */
+    /** The two buttons: your two favourite amounts (ml, label). The app sends its top amounts with how often
+     *  you log them; drinks logged from reminders since the app last looked are added here, so a new habit
+     *  (say, gulps) moves up even before you open the app. */
     private fun buttons(c: Context): List<Pair<Int, String>> {
-        val a = try { JSONArray(prefs(c).getString("btns", "[]")) } catch (e: Exception) { JSONArray() }
-        val out = ArrayList<Pair<Int, String>>()
-        for (i in 0 until a.length()) { val o = a.optJSONObject(i) ?: continue; val ml = o.optInt("ml"); if (ml > 0) out.add(Pair(ml, o.optString("label", "$ml ml"))) }
-        return if (out.size >= 2) out.take(2) else listOf(Pair(250, "🥛 250 ml"), Pair(500, "🍶 500 ml"))
+        val p = prefs(c)
+        val a = try { JSONArray(p.getString("btns", "[]")) } catch (e: Exception) { JSONArray() }
+        val q = try { JSONArray(p.getString("queue", "[]")) } catch (e: Exception) { JSONArray() }
+        val extra = HashMap<Int, Double>()
+        for (i in 0 until q.length()) { val ml = q.optJSONObject(i)?.optInt("ml") ?: 0; if (ml > 0) extra[ml] = (extra[ml] ?: 0.0) + 1.0 }
+        val out = ArrayList<Triple<Int, String, Double>>()
+        for (i in 0 until a.length()) { val o = a.optJSONObject(i) ?: continue; val ml = o.optInt("ml")
+            if (ml > 0) out.add(Triple(ml, o.optString("label", "$ml ml"), o.optDouble("score", 0.0) + (extra[ml] ?: 0.0))) }
+        if (out.size < 2) return listOf(Pair(250, "🥛 250 ml"), Pair(500, "🍶 500 ml"))
+        return out.sortedByDescending { it.third }.take(2).map { Pair(it.first, it.second) }
     }
 
     /** The next of the app's fun lines (title, body), in turn, or null to use the plain ones. */
