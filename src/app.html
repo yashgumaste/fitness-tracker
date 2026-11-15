@@ -1796,6 +1796,8 @@ function App(){
   const setProfile=f=>setPrefs(p=>({...p,profile:{...(p.profile||{}),...f}}));
   const BF_GOAL=profile.gender==='female'?[25,31]:[18,24];
   const [goalDraft,setGoalDraft]=useState(null);
+  const [goalEdit,setGoalEdit]=useState(null);   // null = showing goals; {goal,activity,targetKg} = editing
+  useEffect(()=>{setGoalEdit(null);setGoalDraft(null);},[settingsPage]);
   const [animKey,setAnimKey]=useState(0);
   const [chartRange,setChartRange]=useState('2W'); // '1W','2W','4W','ALL'
 
@@ -4592,8 +4594,13 @@ Reply ONLY with valid JSON (no markdown):
       const n=Object.fromEntries(Object.entries(gd).map(([k,v])=>[k,parseFloat(v)]));
       if(Object.values(n).some(v=>!(v>0))){showToast('Every goal needs a number above 0','var(--warn)');return;}
       if(n.calMin>n.calMax){showToast('Calorie minimum is above the maximum','var(--warn)');return;}
-      setPrefs(p=>({...p,goals:n,goalsSet:true}));setGoalDraft(null);showToast('Goals saved','var(--ok)');
+      const tk=goalEdit&&goalEdit.targetKg!=null&&goalEdit.targetKg!==''?parseFloat(goalEdit.targetKg):null;
+      if(goalEdit&&goalEdit.targetKg&&!(tk>20&&tk<300)){showToast('Goal weight looks off','var(--warn)');return;}
+      if(goalEdit)setProfile({goal:goalEdit.goal,activity:goalEdit.activity,targetKg:tk});
+      setPrefs(p=>({...p,goals:n,goalsSet:true}));setGoalDraft(null);setGoalEdit(null);window.scrollTo(0,0);showToast('Goals saved','var(--ok)');
     };
+    const startGoalEdit=draft=>{setGoalEdit({goal:profile.goal,activity:profile.activity,targetKg:profile.targetKg??''});if(draft)setGoalDraft(draft);};
+    const cancelGoalEdit=()=>{setGoalEdit(null);setGoalDraft(null);window.scrollTo(0,0);};
     const accent=prefs.accent||'#00FFFF';
     const bm=bodyMeasure||{};
     const goalRows=[['🔥','Calories — lowest','calMin','kcal'],['🔥','Calories — highest','calMax','kcal'],['💪','Protein','protein','g'],
@@ -4643,36 +4650,61 @@ Reply ONLY with valid JSON (no markdown):
 
     </div>;
     if(settingsPage==='goals'){
-      const sug=suggestTargets({weightKg:latestWeight?.w||(bodySaved?bm.weightKg:0),heightCm:bodySaved?bm.heightCm:0,age:bm.age,gender:profile.gender,goal:profile.goal,activity:profile.activity,steps:G.steps});
-      content=<div className="x-wrap" style={{paddingTop:0}}>
-        <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Working towards</div>
-        <Seg items={[['lose','🔥 Lose fat'],['maintain','⚖️ Maintain'],['gain','💪 Build']]} value={profile.goal} onChange={v=>setProfile({goal:v})}/>
-        <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Day to day</div>
-        <Seg items={[['sitting','🪑 Sitting'],['light','🚶 Bit active'],['active','🏃 Active']]} value={profile.activity} onChange={v=>setProfile({activity:v})}/>
-        <div className="x-item" style={{borderRadius:24,background:'var(--s2)'}}>
-          <span style={{fontSize:20,width:28,textAlign:'center'}}>🎯</span>
-          <label htmlFor="g-target" style={{flex:1,fontWeight:700,fontSize:15}}>Goal weight</label>
-          <input id="g-target" type="text" inputMode="decimal" className="x-field" placeholder={targetWeightAt18?String(targetWeightAt18):'—'} value={profile.targetKg??''}
-            onChange={e=>setProfile({targetKg:e.target.value.replace(',','.').replace(/[^0-9.]/g,'')||null})} style={{width:100,textAlign:'right',padding:'9px 12px'}}/>
-          <span style={{width:40,fontSize:12,fontWeight:750,color:'var(--fg3)'}}>kg</span>
-        </div>
-        {bodySaved&&<button className="x-card pri" onClick={()=>setGoalDraft({...gd,calMin:String(sug.calMin),calMax:String(sug.calMax),protein:String(sug.protein),water:String(sug.water)})}
+      const sug=suggestTargets({weightKg:latestWeight?.w||(bodySaved?bm.weightKg:0),heightCm:bodySaved?bm.heightCm:0,age:bm.age,gender:profile.gender,goal:goalEdit?.goal||profile.goal,activity:goalEdit?.activity||profile.activity,steps:G.steps});
+      const sugDraft={...gd,calMin:String(sug.calMin),calMax:String(sug.calMax),protein:String(sug.protein),water:String(sug.water)};
+      const sugDiff=bodySaved&&['calMin','calMax','protein','water'].some(k=>String(sugDraft[k])!==String(gd[k]));
+      const GOAL_L={lose:'🔥 Lose fat',maintain:'⚖️ Maintain',gain:'💪 Build'},ACT_L={sitting:'🪑 Sitting',light:'🚶 Bit active',active:'🏃 Active'};
+      const show=(k,v)=>k==='water'?fmtL(+v):k==='walkKm'?String(+v):fmtN(+v);
+      const sugCard=sugDiff&&<button className="x-card pri" onClick={()=>goalEdit?setGoalDraft(sugDraft):startGoalEdit(sugDraft)}
           style={{display:'flex',gap:12,alignItems:'center',textAlign:'left',borderRadius:22}}>
           <Shape kind="sunny" size={40} fill="rgba(0,0,0,.25)" font={18}>💡</Shape>
           <span style={{flex:1,fontWeight:700,color:'var(--fg)'}}>Suggested: {fmtN(sug.calMin)}–{fmtN(sug.calMax)} kcal · {sug.protein} g protein · {fmtL(sug.water)} water</span>
-          <span className="x-chip" style={{background:'var(--bg)'}}>Use</span></button>}
+          <span className="x-chip" style={{background:'var(--bg)'}}>Use</span></button>;
+      const row=(em,l,v,u,key)=>(<div key={key||l} className="x-item" style={{minHeight:60}}>
+          <span style={{fontSize:20,width:28,textAlign:'center'}}>{em}</span>
+          <span style={{flex:1,fontWeight:700,fontSize:15}}>{l}</span>
+          <b className="x-num" style={{fontSize:18}}>{v}</b>{u&&<span style={{width:40,fontSize:12,fontWeight:750,color:'var(--fg3)'}}>{u}</span>}</div>);
+      content=!goalEdit?<div className="x-wrap" style={{paddingTop:0}}>
+        <button className="x-btn tonal" onClick={()=>startGoalEdit()} style={{height:52}}>✏️  Edit goals</button>
+        <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Working towards</div>
+        <div className="x-list">
+          {row('🎯','Goal',GOAL_L[profile.goal]||'—','','goal')}
+          {row('🏃','Day to day',ACT_L[profile.activity]||'—','','act')}
+          {row('⚖️','Goal weight',profile.targetKg?String(profile.targetKg):'—',profile.targetKg?'kg':'','tw')}
+        </div>
+        {sugCard}
         <div className="x-eyebrow" style={{margin:'6px 2px 0'}}>Daily goals</div>
-          <div className="x-list">
-            {goalRows.map(([em,l,k,u])=>(
-              <div key={k} className="x-item">
-                <span style={{fontSize:20,width:28,textAlign:'center'}}>{em}</span>
-                <label htmlFor={'g-'+k} style={{flex:1,fontWeight:700,fontSize:15}}>{l}</label>
-                <input id={'g-'+k} type="text" inputMode="decimal" className="x-field" value={gd[k]} onChange={e=>setG(k,e.target.value)} style={{width:100,textAlign:'right',padding:'9px 12px'}}/>
-                <span style={{width:40,fontSize:12,fontWeight:750,color:'var(--fg3)'}}>{u}</span>
-              </div>))}
-          </div>
-          {dirty&&<div style={{display:'flex',gap:8,justifyContent:'flex-end'}}><button className="x-btn outline" onClick={()=>setGoalDraft(null)}>Cancel</button><button className="x-btn" onClick={saveGoals}>Save goals</button></div>}
-
+        <div className="x-list">{goalRows.map(([em,l,k,u])=>row(em,l,show(k,G[k]),k==='water'?'':u,k))}</div>
+      </div>
+      :<div className="x-wrap" style={{paddingTop:0}}>
+        <div style={{position:'sticky',top:8,zIndex:5,display:'flex',gap:8,alignItems:'center',padding:'8px 10px',borderRadius:28,background:'var(--s3)',boxShadow:'0 6px 18px rgba(0,0,0,.25)'}}>
+          <span style={{flex:1,fontWeight:800,paddingLeft:6}}>Editing goals</span>
+          <button className="x-btn outline sm" onClick={cancelGoalEdit}>Cancel</button>
+          <button className="x-btn sm" onClick={saveGoals}>Save</button>
+        </div>
+        <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Working towards</div>
+        <Seg items={[['lose','🔥 Lose fat'],['maintain','⚖️ Maintain'],['gain','💪 Build']]} value={goalEdit.goal} onChange={v=>setGoalEdit(e=>({...e,goal:v}))}/>
+        <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Day to day</div>
+        <Seg items={[['sitting','🪑 Sitting'],['light','🚶 Bit active'],['active','🏃 Active']]} value={goalEdit.activity} onChange={v=>setGoalEdit(e=>({...e,activity:v}))}/>
+        <div className="x-item" style={{borderRadius:24,background:'var(--s2)'}}>
+          <span style={{fontSize:20,width:28,textAlign:'center'}}>⚖️</span>
+          <label htmlFor="g-target" style={{flex:1,fontWeight:700,fontSize:15}}>Goal weight</label>
+          <input id="g-target" type="text" inputMode="decimal" className="x-field" placeholder={targetWeightAt18?String(targetWeightAt18):'—'} value={goalEdit.targetKg??''}
+            onChange={e=>{const v=e.target.value.replace(',','.').replace(/[^0-9.]/g,'');setGoalEdit(x=>({...x,targetKg:v}));}} style={{width:100,textAlign:'right',padding:'9px 12px'}}/>
+          <span style={{width:40,fontSize:12,fontWeight:750,color:'var(--fg3)'}}>kg</span>
+        </div>
+        {sugCard}
+        <div className="x-eyebrow" style={{margin:'6px 2px 0'}}>Daily goals</div>
+        <div className="x-list">
+          {goalRows.map(([em,l,k,u])=>(
+            <div key={k} className="x-item">
+              <span style={{fontSize:20,width:28,textAlign:'center'}}>{em}</span>
+              <label htmlFor={'g-'+k} style={{flex:1,fontWeight:700,fontSize:15}}>{l}</label>
+              <input id={'g-'+k} type="text" inputMode="decimal" className="x-field" value={gd[k]} onChange={e=>setG(k,e.target.value)} style={{width:100,textAlign:'right',padding:'9px 12px'}}/>
+              <span style={{width:40,fontSize:12,fontWeight:750,color:'var(--fg3)'}}>{u}</span>
+            </div>))}
+        </div>
+        <div style={{display:'flex',gap:8}}><button className="x-btn outline" style={{flex:1}} onClick={cancelGoalEdit}>Cancel</button><button className="x-btn" style={{flex:1.4}} onClick={saveGoals}>Save goals</button></div>
       </div>;
     }
     if(settingsPage==='ai')content=<div className="x-wrap" style={{paddingTop:0}}>{renderAISettings()}</div>;
