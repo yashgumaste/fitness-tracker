@@ -35,7 +35,13 @@ jobs:
           LAST=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
           # only changes to the app itself count (not docs, CLAUDE.md, the workflow or the changelog commit)
           N=$(git log --no-merges --format= --name-only ${LAST:+$LAST..}HEAD | grep -cE '^(src/|native/|scripts/|assets/|package\.json|capacitor\.config\.json)' || true)
-          if [ "${N:-0}" = "0" ]; then echo "changed=false" >> $GITHUB_OUTPUT; echo "No changes — skipping tonight's build"
+          # GitHub's own schedule is only a backup for a night the 1:41 AM build didn't happen. It often runs hours
+          # late, so if a release went out in the last 20 hours, it skips: no daytime builds.
+          REL=$(git log -1 --format=%ct --grep='^Changelog: ' 2>/dev/null || true)
+          AGE=$(( $(date +%s) - ${REL:-0} ))
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -n "$REL" ] && [ "$AGE" -lt 72000 ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT; echo "Released $((AGE/3600)) h ago by the nightly build — backup not needed"
+          elif [ "${N:-0}" = "0" ]; then echo "changed=false" >> $GITHUB_OUTPUT; echo "No changes — skipping tonight's build"
           else echo "changed=true" >> $GITHUB_OUTPUT; echo "$N change(s) since ${LAST:-the start}"; fi
 
   build:
