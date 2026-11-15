@@ -4719,7 +4719,6 @@ Reply ONLY with valid JSON (no markdown):
               <Shape kind="cookie9" size={52} fill="var(--pri)" color="var(--on-pri)" font={24}>🎁</Shape>
               <div style={{flex:1,minWidth:0}}><div className="x-eyebrow" style={{color:'inherit',opacity:.75}}>Update ready</div><h2 style={{margin:0}}>Version {update.latest}</h2></div>
             </div>
-            {whatsNew(update.items)}
             {(!dl||dl.state==='failed')&&<>
               {dl&&<div style={{fontWeight:700}}>The download didn’t finish. Check your internet and try again.</div>}
               <button className="x-btn" style={{background:'var(--pri)',color:'var(--on-pri)'}} onClick={()=>getUpdate(update)}>⬇ {dl?'Try again':'Download & install'}</button></>}
@@ -4730,6 +4729,8 @@ Reply ONLY with valid JSON (no markdown):
               <div style={{fontWeight:700}}>Downloaded ✓ — tap Install on the next screen. Your data stays.</div>
               <button className="x-btn" style={{background:'var(--pri)',color:'var(--on-pri)'}} onClick={()=>window.LMNative.installUpdate()}>Install now</button></>}
             {!dl&&<div style={{fontSize:13,opacity:.8}}>The first time, Android may ask you to allow Fitness Tracker to install apps.</div>}
+            <div className="x-eyebrow" style={{color:'inherit',opacity:.75,marginTop:4}}>What’s new in {update.latest}</div>
+            {whatsNew(update.items)}
           </div>}
           <div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
             <div style={{display:'flex',alignItems:'center',gap:14}}>
@@ -4752,7 +4753,7 @@ Reply ONLY with valid JSON (no markdown):
             <div className="x-eyebrow">Previous versions</div>
             {prevRels.map((r,i)=><div key={r.version} style={{display:'flex',flexDirection:'column',gap:8,paddingTop:i?14:0,borderTop:i?'1px solid var(--line)':'none'}}>
               <div style={{display:'flex',alignItems:'baseline',gap:8}}><b style={{fontSize:18}}>{r.version}</b><span className="x-sub">{fmtRelDate(r.date)}</span></div>
-              {whatsNew(r.items,false)}
+              {whatsNew(r.items,r.version===latestRel)}
             </div>)}
             <button className="x-btn ghost" onClick={()=>window.LMNative.openUrl(window.LMNative.releasesUrl)}>All releases on GitHub</button>
           </div>}
@@ -5618,6 +5619,7 @@ Reply ONLY with valid JSON (no markdown):
   const appVer=window.LMNative?.version||'';
   const curRel=(CL.releases||[]).find(r=>r.version===appVer);
   const prevRels=(CL.releases||[]).filter(r=>r.version!==appVer);
+  const latestRel=(CL.releases||[])[0]?.version; // the newest release keeps its pictures; older ones are text only
   const imgUrl=i=>i.img?(/^https?:/.test(i.img)?i.img:(window.LMNative?.rawBase||'')+i.img):null;
   const fmtRelDate=d=>{try{return new Date(d+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});}catch(_){return d;}};
   const whatsNew=(items,pics=true)=><div style={{display:'flex',flexDirection:'column',gap:12}}>

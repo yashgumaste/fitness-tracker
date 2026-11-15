@@ -1,5 +1,9 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "When an update is ready, the Download & install button is now at the top, above the list of what's new. The newest version's pictures stay in What's new (Settings → About & updates) after you install it."
+    }
+  ],
   "releases": [
     {
       "version": "1.20",
