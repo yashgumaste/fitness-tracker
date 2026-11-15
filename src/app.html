@@ -3439,9 +3439,33 @@ Reply ONLY with valid JSON (no markdown):
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[storageReady,waterCfg.on,waterCfg.start,waterCfg.end,waterCfg.every,lastDrink]);
   // ── Logging reminders: a good-morning sleep check-in and a nudge after your usual meal times ──
-  const logCfg={on:true,sleep:true,Breakfast:true,Lunch:true,Snack:true,Dinner:true,after:45,...(prefs.logrem||{})};
+  const logCfg={on:true,sleep:true,Breakfast:true,Lunch:true,Snack:true,Dinner:true,bedtime:true,after:45,...(prefs.logrem||{})};
   const [logPlan,setLogPlan]=useState(null);
-  const LOG_KINDS=[['sleep','😴','Sleep','Good-morning check-in'],['Breakfast','🍳','Breakfast'],['Lunch','🍛','Lunch'],['Snack','🍎','Snack'],['Dinner','🍽️','Dinner']];
+  const LOG_KINDS=[['sleep','😴','Sleep','Good-morning check-in'],['Breakfast','🍳','Breakfast'],['Lunch','🍛','Lunch'],['Snack','🍎','Snack'],['Dinner','🍽️','Dinner'],['bedtime','🌙','Bedtime','Wind-down reminder']];
+  // ── Bedtime: when to sleep tonight to wake up on time with enough sleep ──
+  // Sleep you need, by age (7–9 h for adults): under 18 → 9 h, 18–25 → 8 h, older → 7 h 30.
+  // Plus 30 min if last night was under 6 h (sleep debt), plus 15 min after a hard day (hike, big walk, full workout).
+  function sleepNeed(night){
+    const age=+(profile.age||bodyMeasure?.age||30),base=age<18?540:age<26?480:450;
+    const last=sleepMin(sleepLog[night]),mv=moveDay(night),fl=fitLogs[night];
+    const debt=last&&last<360?30:0;
+    const hike=mv.walks.find(w=>w.kind==='hike'),hard=!!(hike||mv.steps>=WALK_GOAL.day*1.2||(fl&&fl._dayComplete));
+    return {base,need:Math.min(570,base+debt+(hard?15:0)),debt,last,hard,hike,steps:mv.steps,gym:!!(fl&&fl._dayComplete)};
+  }
+  // Tomorrow's wake-up time: same weekday last week → this morning (if tomorrow is the same kind of day) → usual → default
+  function wakePlan(night){
+    const wd=calAddDays(night,1),lastWk=calAddDays(wd,-7),dayName=new Date(wd+'T12:00:00').toLocaleDateString('en-IN',{weekday:'long'});
+    const ok=s=>s&&s.wake&&sleepMin(s);
+    if(ok(sleepLog[lastWk]))return {wd,min:hm2m(sleepLog[lastWk].wake),src:'lastweek',dayName};
+    if(isWeekend(wd)===isWeekend(night)&&ok(sleepLog[night]))return {wd,min:hm2m(sleepLog[night].wake),src:'today',dayName};
+    const U=usualTimes(),n=Object.values(sleepLog).filter(ok).length;
+    return {wd,min:isWeekend(wd)?U.sleep.we:U.sleep.wd,src:n>=3?'usual':'default',dayName};
+  }
+  function bedPlan(night){
+    const w=wakePlan(night),sn=sleepNeed(night);
+    const wakeMs=new Date(w.wd+'T00:00:00').getTime()+w.min*60000,bedMs=wakeMs-sn.need*60000;
+    return {...w,...sn,wakeMs,bedMs,at:bedMs-30*60000};
+  }
   const isWeekend=day=>[0,6].includes(new Date(day+'T12:00:00').getDay());
   // Your usual time for each meal and for waking up, from the last 4 weeks (weekdays and weekends apart when there's enough)
   function usualTimes(){
@@ -3460,6 +3484,27 @@ Reply ONLY with valid JSON (no markdown):
   // The message for each reminder: playful, and about your day when the app knows something worth saying
   function logMessage(kind,day,at){
     const n=(profile.name||'').trim().split(/\s+/)[0]||'there';
+    if(kind==='bedtime'){
+      const b=bedPlan(day),wdw=new Date(b.wd+'T12:00:00').getDay();
+      const seed=[...(day+kind)].reduce((a,c)=>a*31+c.charCodeAt(0)>>>0,7);const pick=a=>a[seed%a.length];
+      const coffee=(dietGrouped[day]||[]).filter(e=>/\b(chai|tea|coffee|latte|cappuccino|espresso|cola|energy drink)\b/i.test(e.food||'')).map(e=>mealTime(e)).filter(x=>!x.approx&&new Date(x.ts).getHours()>=16).map(x=>x.ts).sort((a,c)=>c-a)[0];
+      const dinner=(dietGrouped[day]||[]).filter(e=>e.mealType==='Dinner').map(e=>mealTime(e)).filter(x=>!x.approx).map(x=>x.ts).sort((a,c)=>c-a)[0];
+      const src=b.src==='lastweek'?` like last ${b.dayName}`:b.src==='today'?' like this morning':b.src==='usual'?` as usual on ${isWeekend(b.wd)?'weekends':'weekdays'}`:'';
+      const why=b.debt||b.hard?` (${fmtHM(b.base)}${b.debt?' + 30 min to repay last night':''}${b.hard?` + 15 min for today’s ${b.hike?'hike':'effort'}`:''})`:'';
+      const title=b.debt?`Sleep debt collector calling 💸`
+        :b.hike?`Your legs filed for overtime 🥾`
+        :coffee?`That ${fmtTime(coffee)} ☕ is still partying 🎉`
+        :wdw===1?`Monday’s coming, ${n} 😤`
+        :(wdw===6||wdw===0)&&!isWeekend(day)?'Weekend tomorrow 🎉'
+        :b.gym?'Muscles grow in bed, not the gym 💪'
+        :pick([`Wind-down time, ${n} 🌙`,'Lights out in 30 min 🌙','Your bed called. It misses you 🛏️',`Phone down soon, ${n} 📵`]);
+      const ctx=b.debt?`Last night was only ${fmtHM(b.last)}. `
+        :b.hike?`After today’s ${b.hike.name.toLowerCase()}, sleep is how your legs get paid. `
+        :coffee?'Caffeine lasts 5–6 hours, so give yourself extra wind-down time. '
+        :wdw===1?'Meet the week rested, not wrecked. '
+        :dinner&&new Date(dinner).getHours()>=22?`Dinner was late (${fmtTime(dinner)}), so go easy and let it settle. `:'';
+      return {title,body:`${ctx}To be up at ${fmtTime(b.wakeMs)}${src} with ${fmtHM(b.need)} of sleep${why}, lights out by ${fmtTime(b.bedMs)}. Start winding down: dim the screens 📵`};
+    }
     const dt=new Date(at),wd=dt.getDay(),min=dt.getHours()*60+dt.getMinutes();
     const seed=[...(day+kind)].reduce((a,c)=>a*31+c.charCodeAt(0)>>>0,7);const pick=a=>a[seed%a.length];
     const yd=calAddDays(day,-1);
@@ -3522,6 +3567,10 @@ Reply ONLY with valid JSON (no markdown):
       const ms=m=>new Date(day+'T00:00:00').getTime()+m*60000,we=isWeekend(day);
       if(logCfg.sleep&&!sleepMin(sleepLog[day])){const at=ms(Math.min(11*60,Math.max(6*60,(we?U.sleep.we:U.sleep.wd)+30)));
         if(at>now+60000)out.push({at,kind:'sleep',day,...logMessage('sleep',day,at)});}
+      if(logCfg.bedtime&&!sleepMin(sleepLog[calAddDays(day,1)])){const b=bedPlan(day);
+        // missed the 30-min warning but lights-out is still 15+ min away: nudge in 5 min
+        const at=b.at>now+60000?b.at:b.bedMs-now>=15*60000?now+5*60000:0;
+        if(at)out.push({at,kind:'bedtime',day,...logMessage('bedtime',day,at)});}
       const logged=new Set((dietGrouped[day]||[]).map(e=>e.mealType));
       MEAL_TYPES.forEach((mt,i)=>{if(!logCfg[mt])return;
         if(MEAL_TYPES.slice(i).some(x=>logged.has(x)))return;   // this meal, or a later one, is already in
@@ -3550,6 +3599,7 @@ Reply ONLY with valid JSON (no markdown):
   // opened by tapping a reminder: go straight to the right log screen
   const logOpenRef=useRef(null);
   logOpenRef.current=k=>{setTab('home');window.scrollTo(0,0);
+    if(k==='bedtime')return;
     if(k==='sleep'){const U=usualTimes(),w=isWeekend(TODAY)?U.sleep.we:U.sleep.wd;const sl=sleepLog[TODAY]||{};
       openSheet('sleep',{date:TODAY},{bed:sl.bed||'23:00',wake:sl.wake||m2hm(w),q:sl.q||0,wakes:sl.wakes||0,open:null});}
     else openFood(TODAY,k);};
@@ -4599,17 +4649,19 @@ Reply ONLY with valid JSON (no markdown):
         {c.on&&<>
           <div className="x-list">
             {LOG_KINDS.map(([k,em,l,sub])=>{const u=U[k];const nextK=items.find(x=>x.kind===k);
+              const bp=k==='bedtime'?bedPlan(new Date().getHours()<4?calAddDays(TODAY,-1):TODAY):null;
               return(<button key={k} className="x-item" onClick={()=>setL({[k]:!c[k]})} style={{minHeight:64}}>
                 <span style={{fontSize:24,width:34,textAlign:'center'}}>{em}</span>
                 <span style={{flex:1,minWidth:0}}><span className="t" style={{display:'block'}}>{l}</span>
-                  <span className="s" style={{display:'block'}}>{k==='sleep'?'Up at':'Usually'} {fmtM(u.wd)}{u.we!==u.wd?`, weekends ${fmtM(u.we)}`:''}</span>
+                  {bp?<span className="s" style={{display:'block'}}>Lights out {fmtTime(bp.bedMs)} for {fmtHM(bp.need)} · up {fmtTime(bp.wakeMs)} {bp.src==='lastweek'?`like last ${bp.dayName}`:bp.src==='today'?'like this morning':bp.src==='usual'?'as usual':''}</span>
+                  :<span className="s" style={{display:'block'}}>{k==='sleep'?'Up at':'Usually'} {fmtM(u.wd)}{u.we!==u.wd?`, weekends ${fmtM(u.we)}`:''}</span>}
                   {c[k]&&nextK&&<span className="s" style={{display:'block',color:'var(--pri)'}}>Reminder {when(nextK.at)}</span>}</span>
                 <span className={`m3-switch${c[k]?' on':''}`} aria-checked={!!c[k]} role="switch"><span className="m3-switch-thumb"/></span>
               </button>);})}
           </div>
           <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Remind me this long after the usual time</div>
           <div className="x-chips">{[[30,'30 min'],[45,'45 min'],[60,'1 h'],[90,'1 h 30']].map(([m,l])=><button key={m} className={`x-chip${+c.after===m?' on':''}`} onClick={()=>setL({after:m})}>{l}</button>)}</div>
-          <div className="x-sub">Usual times are learned from when you log (last 4 weeks, weekdays and weekends apart). The sleep check-in comes 30 minutes after you usually wake up. Nothing comes if you’ve already logged it (or a later meal), or before 6 AM or after 11 PM. “Later” asks again in 30 minutes.</div>
+          <div className="x-sub">Usual times are learned from when you log (last 4 weeks, weekdays and weekends apart). The sleep check-in comes 30 minutes after you usually wake up. Bedtime comes 30 minutes before lights-out: tomorrow’s wake-up time (same weekday last week, else this morning, else your usual) minus the sleep you need for your age (8 h up to 25, 7 h 30 after), plus 30 min after a short night and 15 min after a hard day. Nothing comes if you’ve already logged it (or a later meal), or before 6 AM or after 11 PM. “Later” asks again in 30 minutes.</div>
           {native&&<button className="x-btn outline" onClick={()=>{const k='sleep',at=Date.now();const msg=logMessage(k,TODAY,new Date(TODAY+'T'+m2hm((isWeekend(TODAY)?U.sleep.we:U.sleep.wd)+30)+':00').getTime());
             window.LMNative.testLog({kind:k,...msg}).then(ok=>showToast(ok?'Test reminder sent':'Notifications are blocked',ok?'var(--ok)':'var(--warn)'));}}>Send a test reminder</button>}
           {!native&&<div className="x-sub">Reminders work in the Android app.</div>}
