@@ -4131,10 +4131,7 @@ Reply ONLY with valid JSON (no markdown):
   }
 
   function renderFoodHistory(){
-    // start from the first day anything was logged: food, walks, workouts, sleep, water, weight or feelings
-    const anyKeys=[...dietDayKeys,...Object.keys(fitLogs),...Object.keys(sleepLog),...Object.keys(waterLog),...Object.keys(weightLog),...Object.keys(symptomLog),
-      ...Object.values(tracks).map(t=>localDate(new Date(t.start)))].filter(k=>/^\d{4}-\d{2}-\d{2}$/.test(k)&&k<=TODAY).sort();
-    const firstKey=anyKeys.length?anyKeys[0]:null;
+    const firstKey=dietDayKeys.length?dietDayKeys[0]:null;
     const allDays=[];
     if(firstKey){let d=TODAY;while(d>=firstKey){allDays.push(d);d=calAddDays(d,-1);}}
     const weekAgo=calAddDays(TODAY,-7);
@@ -4152,9 +4149,7 @@ Reply ONLY with valid JSON (no markdown):
         {allDays.slice(0,histLimit).map(dk=>{
           const es=dietGrouped[dk]||[];
           const dt=new Date(dk+'T00:00:00');
-          const tl=buildTimeline(dk),mv=moveDay(dk);
-          const actLine=[mv.steps?`🚶 ${fmtN(mv.steps)} steps`:null,mv.kcal?`🔥 ~${fmtN(mv.kcal)} kcal burned`:null,waterMl(dk)?`💧 ${fmtL(waterMl(dk))}`:null].filter(Boolean).join('  ·  ');
-          if(!es.length&&!tl.length)return(
+          if(!es.length)return(
             <button key={dk} className="x-item" style={{borderRadius:24,background:'var(--s1)',boxShadow:'inset 0 0 0 1.5px var(--line)',minHeight:64}} onClick={()=>openFood(dk,'Breakfast')}>
               <Shape kind="cookie12" size={42} fill="var(--s3)" color="var(--fg2)" font={15}><b>{dt.getDate()}</b></Shape>
               <span style={{flex:1}}><span className="t" style={{display:'block'}}>{dk===TODAY?'Today':dateNice(dk)}</span><span className="s">Nothing logged</span></span>
@@ -4173,13 +4168,11 @@ Reply ONLY with valid JSON (no markdown):
                   <div style={{fontWeight:820,fontSize:17}}>{dk===TODAY?'Today':dt.toLocaleDateString('en-IN',{weekday:'long'})}</div>
                   <div className="x-sub">{dt.toLocaleDateString('en-IN',{month:'long',year:'numeric'})}</div>
                 </div>
-                {!es.length?<button className="x-chip dash" onClick={()=>openFood(dk,'Breakfast')}>+ Log food</button>:
                 <div style={{textAlign:'right'}}>
                   <div className="x-num" style={{fontSize:24,color:calOk?'var(--mint)':tot.cal>GOALS.calories.max?'var(--err)':'var(--amber)'}}>{fmtN(tot.cal)}</div>
                   <div style={{fontSize:12,fontWeight:700,color:'var(--fg2)'}}>kcal · <span style={{color:proOk?'var(--violet)':'var(--fg2)'}}>{rnd(tot.pro)} g protein</span></div>
-                </div>}
+                </div>
               </div>
-              {actLine&&<div style={{padding:'0 16px 10px',fontSize:13,fontWeight:700,color:'var(--fg2)'}}>{actLine}</div>}
               {tot.cal>0&&<div style={{padding:'0 16px 12px',display:'flex',flexDirection:'column',gap:6}}>
                 <div style={{fontSize:11.5,fontWeight:800,letterSpacing:'.06em',textTransform:'uppercase',color:'var(--fg2)'}}>Where the calories came from</div>
                 <div style={{display:'flex',gap:3}} aria-hidden="true">
@@ -4193,7 +4186,10 @@ Reply ONLY with valid JSON (no markdown):
                     </div>)}
                 </div>
               </div>}
-              <div style={{padding:'0 8px 8px',marginTop:-8}}>{renderTimeline(dk)}</div>
+              <div style={{padding:'0 8px 8px'}}>{es.map(renderEntry)}</div>
+              {syms.length>0&&<div className="x-chips" style={{padding:'0 16px 10px'}}>
+                {syms.map(e=>{const sx=SYMPTOMS.find(x=>x.id===e.id);return sx?<button key={e.ts} className={`x-chip ${sx.id==='good'?'mint':'pink'}`} onClick={()=>openFeel(dk,e.id)}>{sx.emoji} {sx.label}{COUNT_IDS.includes(sx.id)&&(e.count||1)>1?` ×${e.count}`:''}</button>:null;})}
+              </div>}
               {showDayInsight[dk]&&<div style={{padding:'0 12px 12px'}}>{renderCoach(dk)}</div>}
               <div className="x-chips" style={{padding:'4px 16px 16px'}}>
                 <button className="x-chip pri" onClick={()=>openFood(dk,'Breakfast')}>+ Food</button>
