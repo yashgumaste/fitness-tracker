@@ -3548,9 +3548,10 @@ Reply ONLY with valid JSON (no markdown):
         <div style={{fontWeight:800,marginTop:8}}>Nothing logged {day===TODAY?'yet today':'this day'}</div>
         <div className="x-sub">Tap + to log a meal, walk, weigh-in or feeling</div>
       </div>);
-    const parts=[['Early hours',0,5],['Morning',5,12],['Afternoon',12,17],['Evening',17,21],['Night',21,24]];
+    // newest first: night at the top, latest entry first within each part of the day
+    const parts=[['Night',21,24],['Evening',17,21],['Afternoon',12,17],['Morning',5,12],['Early hours',0,5]];
     return parts.map(([lab,a,b])=>{
-      const its=items.filter(it=>{const h=new Date(it.ts).getHours();return h>=a&&h<b;});
+      const its=items.filter(it=>{const h=new Date(it.ts).getHours();return h>=a&&h<b;}).sort((x,y)=>y.ts-x.ts);
       if(!its.length)return null;
       return(<div key={lab}>
         <div className="x-tl-group">{lab}</div>
