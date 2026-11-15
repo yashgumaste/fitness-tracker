@@ -87,7 +87,11 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   await step('Settings',async()=>{await tab(4);for(const t of ['Profile','Body','Goals','AI','Water reminders','Logging reminders','Move reminders','Health Connect','Theme & colour','Data & backup','About & updates']){
       await click('.x-item',t);await W();if(!(await p.$('[aria-label="Back to settings"]')))throw new Error(t+' page did not open');
       await p.click('[aria-label="Back to settings"]');await W();}
-    await click('.x-item','Goals');await expect('Daily goals');await expect('Goal weight');await p.click('[aria-label="Back to settings"]');});
+    await click('.x-item','Goals');await expect('Daily goals');await expect('Goal weight');
+    if(await p.$('#g-calMin'))throw new Error('Goals should show values, not fields, until Edit');
+    await click('.x-btn','Edit goals');await expect('Editing goals');await p.fill('#g-calMin','1234');await p.fill('#g-target','72');
+    await click('.x-btn','Save');await W(400);await expect('1,234');if(await p.$('#g-calMin'))throw new Error('Still editing after Save');
+    await p.click('[aria-label="Back to settings"]');});
   await step('Steps page',async()=>{await tab(0);await p.click('[aria-label="Steps and walks"]');await W(500);
     await expect('By the hour');await expect('Brisk morning walk');await expect('Evening stroll');await expect('Everyday movement');await expect('kcal burned by moving');
     for(const v of ['Week','Month','Year']){await click('.x-seg button',v);await expect('Average a day');}
