@@ -2977,7 +2977,7 @@ Reply ONLY with valid JSON (no markdown):
       // one automatic retry for a blank or garbled reply (not for a used-up allowance, a bad key or no internet)
       let parsed=null,lastErr=null;
       for(let i=0;i<2&&!parsed;i++){
-        try{const raw=await callAI(prompt,900,'smart',true);parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());}
+        try{const raw=await callAI(prompt,1500,'smart',true);parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());}
         catch(e){lastErr=e;if(/allowance|key|internet|Add your/i.test(e?.message||''))break;}
       }
       if(!parsed)throw lastErr||new Error('No reply');
