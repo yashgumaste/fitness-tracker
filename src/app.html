@@ -3123,6 +3123,17 @@ Reply ONLY with valid JSON (no markdown):
   const NAT_DRINKS=[['💧','1 sip',sipMl],['💦','1 gulp',gulpMl],['🌊','3 gulps',gulpMl*3],['🥛','1 glass',250],['🍶','1 bottle',500],['🧴','1 L bottle',1000]];
   const waterWord=ml=>{if(!natWater)return fmtL(ml);const d=NAT_DRINKS.find(x=>x[2]===ml);if(d)return d[1];
     if(ml%250===0)return `${ml/250} glasses`;const g=Math.max(1,Math.round(ml/gulpMl));return `${g} gulp${g===1?'':'s'}`;};
+  // Your favourite amounts: how often each amount was logged over the last 3 weeks, recent days counting more
+  // (a week ago counts half). Start logging gulps and gulps move to the front within days.
+  const waterEmoji=ml=>ml<=sipMl?'💧':ml<=gulpMl*1.5?'💦':ml<200?'🌊':ml<=300?'🥛':ml<=600?'🍶':'🧴';
+  const favWater=(()=>{const sc={},now=Date.now();
+    Object.entries(waterLog).forEach(([d,xs])=>{if(d<calAddDays(TODAY,-21))return;(xs||[]).forEach(x=>{const ml=+x.ml;if(!(ml>0))return;
+      sc[ml]=(sc[ml]||0)+Math.pow(0.5,Math.max(0,now-(+x.ts||now))/(7*864e5));});});
+    const defs=natWater?[250,gulpMl,500]:[250,500,gulpMl];
+    defs.forEach((ml,i)=>{if(!sc[ml])sc[ml]=0.001*(3-i);});        // defaults fill in, in this order, until you've logged enough
+    return Object.entries(sc).map(([ml,v])=>({ml:+ml,score:v})).sort((a,b)=>b.score-a.score).slice(0,5);})();
+  const waterBtns=favWater.slice(0,2).map(f=>[f.ml,waterEmoji(f.ml),natWater?'+'+waterWord(f.ml):'+'+(f.ml>=1000?fmtL(f.ml):f.ml)]);
+  const favFirst=list=>[...list].sort((a,b)=>{const ia=favWater.findIndex(f=>f.ml===a[2]),ib=favWater.findIndex(f=>f.ml===b[2]);return (ia<0?99:ia)-(ib<0?99:ib);});
   // ── Fun reminder texts (Zomato/Swiggy style): one fact from today or yesterday that matters for the reminder ──
   function funLines(){
     const n=(profile.name||'').trim().split(/\s+/)[0]||'';
@@ -3178,9 +3189,9 @@ Reply ONLY with valid JSON (no markdown):
     if(big&&big.w==='today')P.unshift({title:`Scrolling after a ${fmtN(big.kcal)}-kcal ${big.e.mealType.toLowerCase()}? 📱🍛`,body:'Walk and scroll later. Your digestion will thank you.'});
     // facts first, then the evergreen ones; keep a handful so they rotate
     return {water:W.slice(0,8),move:M.slice(0,7),movePhone:P.slice(0,4),
-      btns:natWater?[{ml:250,label:'🥛 1 glass'},{ml:500,label:'🍶 1 bottle'}]:[{ml:250,label:'🥛 250 ml'},{ml:500,label:'🍶 500 ml'}]};
+      btns:favWater.map(f=>({ml:f.ml,score:+f.score.toFixed(3),label:`${waterEmoji(f.ml)} ${natWater?waterWord(f.ml):fmtL(f.ml)}`}))};
   }
-  const funSig=JSON.stringify([TODAY,dietEntries.length,Object.values(symptomLog).flat().length,Math.round(moveDay(TODAY).steps/2000),Object.keys(tracks).length,
+  const funSig=JSON.stringify([TODAY,favWater.map(f=>f.ml).join(),dietEntries.length,Object.values(symptomLog).flat().length,Math.round(moveDay(TODAY).steps/2000),Object.keys(tracks).length,
     waterMl(calAddDays(TODAY,-1)),fitLogs[TODAY]?._dayComplete,sleepLog[TODAY]?.wake,natWater,profile.name]);
   useEffect(()=>{if(!storageReady||!window.LMNative?.reminderExtras)return;
     const run=()=>{try{window.LMNative.reminderExtras(funLines());}catch(e){console.warn(e);}};
@@ -3188,7 +3199,6 @@ Reply ONLY with valid JSON (no markdown):
     return()=>{clearTimeout(t);window.removeEventListener('lm-resume',run);};
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[storageReady,funSig]);
-  const waterBtns=natWater?[[gulpMl,'💦','+1 gulp'],[250,'🥛','+1 glass']]:[[250,'🥛','+250'],[500,'🍶','+500']];
   const waterDesc=day=>{const ws=[...(waterLog[day]||[])].sort((a,b)=>a.ts-b.ts);if(!ws.length)return '';
     return `${fmtL(waterMl(day))} of ${fmtL(WATER_GOAL.ml)} goal — ${ws.map(x=>`${fmt12(hmOf(x.ts))} ${fmtL(x.ml)}`).join(', ')}`;};
   function addWater(day,ml,hm,quiet){const ts=hm?new Date(day+'T'+hm+':00').getTime():day===TODAY?Date.now():new Date(day+'T13:00:00').getTime();
@@ -3357,10 +3367,10 @@ Reply ONLY with valid JSON (no markdown):
           <div className="x-num" style={{fontSize:28,color:'var(--fg)'}}>How much did you drink?</div>
           <div style={{fontWeight:700,color:'var(--fg2)',marginTop:4}}>{fmtL(b.total)} of {fmtL(WATER_GOAL.ml)} so far today</div></div>
         <div style={{display:'flex',gap:12,width:'100%'}}>
-          {[[250,'🥛','Glass','1 glass'],[500,'🍶','Bottle','1 bottle']].map(([ml,e,l,nl])=>
-            <button key={ml} onClick={()=>waterActRef.current(ml)} aria-label={natWater?nl:`${ml} ml`}
-              style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'14px 8px',border:'none',borderRadius:ml===250?'32px 16px 32px 16px':'16px 32px 16px 32px',background:'var(--sky)',color:'var(--bg)',cursor:'pointer'}}>
-              <span style={{fontSize:30}}>{e}</span><b className="x-num" style={{fontSize:24}}>{natWater?nl:`${ml} ml`}</b>{!natWater&&<span style={{fontWeight:700,fontSize:13}}>{l}</span>}</button>)}
+          {favWater.slice(0,2).map((f,i)=>{const ml=f.ml,nl=waterWord(ml),dr=DRINKS.find(x=>x[2]===ml);
+            return <button key={ml} onClick={()=>waterActRef.current(ml)} aria-label={natWater?nl:`${ml} ml`}
+              style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'14px 8px',border:'none',borderRadius:i===0?'32px 16px 32px 16px':'16px 32px 16px 32px',background:'var(--sky)',color:'var(--bg)',cursor:'pointer'}}>
+              <span style={{fontSize:30}}>{waterEmoji(ml)}</span><b className="x-num" style={{fontSize:24}}>{natWater?nl:fmtL(ml)}</b>{!natWater&&dr&&<span style={{fontWeight:700,fontSize:13}}>{dr[1]}</span>}</button>;})}
         </div>
         {!b.other?<button className="x-btn ghost" style={{color:'var(--sky)'}} onClick={()=>setBigWater(x=>({...x,other:true}))}>Other amount</button>
           :<div style={{display:'flex',flexDirection:'column',gap:10,width:'100%'}}>
@@ -5159,12 +5169,12 @@ Reply ONLY with valid JSON (no markdown):
           quick={date===TODAY?[['Now',hmOf(Date.now())],['30 min ago',hmOf(Date.now()-1800000)],['1 h ago',hmOf(Date.now()-3600000)],['2 h ago',hmOf(Date.now()-7200000)]]:[['Morning','08:00'],['Noon','12:00'],['Evening','18:00']]}/>}
         <div className="x-eyebrow" style={{margin:'16px 2px 8px'}}>Add a drink</div>
         {natWater?<div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:6}}>
-          {NAT_DRINKS.map(([em,lab,ml])=>(
+          {favFirst(NAT_DRINKS).map(([em,lab,ml])=>(
             <button key={lab} onClick={()=>add(ml)} style={{border:'none',background:'var(--s2)',color:'var(--fg)',borderRadius:20,padding:'12px 2px',display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
               <span style={{fontSize:24,lineHeight:1}}>{em}</span><b style={{fontSize:14}}>{lab}</b></button>))}
         </div>
         :<div style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(0,1fr))',gap:6}}>
-          {DRINKS.map(([em,lab,ml])=>(
+          {favFirst(DRINKS).map(([em,lab,ml])=>(
             <button key={ml} onClick={()=>add(ml)} style={{border:'none',background:'var(--s2)',color:'var(--fg)',borderRadius:20,padding:'10px 2px',display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
               <span style={{fontSize:24,lineHeight:1}}>{em}</span><b style={{fontSize:13}}>{fmtL(ml)}</b><span style={{fontSize:10.5,fontWeight:700,color:'var(--fg3)'}}>{lab}</span></button>))}
         </div>}

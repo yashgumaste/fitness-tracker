@@ -9,6 +9,9 @@
     {
       "text": "Log water the way you drink it: in Settings → Water reminders, choose Sips, gulps & glasses. The buttons then say +1 gulp, +1 glass, 1 bottle, and the reminder's buttons say 1 glass and 1 bottle. Your gulp size comes from your weight (and gender if set). Everything is still saved in ml.",
       "img": "docs/whatsnew/water-gulps.png"
+    },
+    {
+      "text": "Water buttons learn your habits: the amounts you log most (recent days count more) come first on the Home water card, in the amount picker, at the top of Add water, and on the reminder's buttons. Start logging gulps and +1 gulp moves to the front within a few days."
     }
   ],
   "releases": [
