@@ -2990,7 +2990,7 @@ Reply ONLY with valid JSON (no markdown):
   const latestWeight=(()=>{const e=Object.entries(weightLog).filter(([,v])=>v).sort((a,b)=>a[0].localeCompare(b[0]));return e.length?{date:e[e.length-1][0],w:parseFloat(e[e.length-1][1])}:null;})();
   const fmtN=n=>Math.round(n||0).toLocaleString('en-IN');
   const dayLabel=k=>k===TODAY?'Today':k===calAddDays(TODAY,-1)?'Yesterday':new Date(k+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
-  const KIND={meal:['var(--amber-c)','var(--amber)'],walk:['var(--mint-c)','var(--mint)'],workout:['var(--pri-c)','var(--pri)'],weight:['var(--violet-c)','var(--violet)'],feel:['var(--pink-c)','var(--pink)'],sleep:['var(--night-c)','var(--night)'],water:['var(--sky-c)','var(--sky)']};
+  const KIND={meal:['var(--amber-c)','var(--amber)'],walk:['var(--mint-c)','var(--mint)'],rec:['var(--mint)','#00391f'],workout:['var(--pri-c)','var(--pri)'],weight:['var(--violet-c)','var(--violet)'],feel:['var(--pink-c)','var(--pink)'],sleep:['var(--night-c)','var(--night)'],water:['var(--sky-c)','var(--sky)']};
 
   // Everything about a day's movement: walks found in the phone's steps + walks you added, all steps, distance and calories
   const moveCache=useRef({});
@@ -3116,7 +3116,7 @@ Reply ONLY with valid JSON (no markdown):
       items.push({kind:'meal',id:'m'+e.id,ts,approx,entry:e,emoji:e.emoji||MEAL_ICONS[e.mealType]||'🍽️',title:e.food,
         meta:`${e.mealType} · ${fmtN(m.cal)} kcal · ${fmtN(m.pro)} g protein`});});
     moveDay(day).walks.forEach(w=>{
-      items.push({kind:'walk',id:'w'+w.id,ts:at(m2hm(w.start)),approx:w.src==='manual'&&!w.timed,slot:w.slot,src:w.src,emoji:w.kind==='run'?'🏃':'🚶',
+      items.push({kind:'walk',id:'w'+w.id,ts:at(m2hm(w.start)),approx:w.src==='manual'&&!w.timed,slot:w.slot,src:w.src,emoji:w.kind==='run'?'🏃':w.kind==='hike'?'🥾':'🚶',
         title:w.name,meta:[w.end?fmtSpan(w.start,w.end):null,w.min?`${w.min} min`:null,`${fmtN(w.steps)} steps`,`${w.km.toFixed(1)} km`,`~${w.kcal} kcal`].filter(Boolean).join(' · ')});});
     const fl=fitLogs[day];
     if(fl){
@@ -3136,9 +3136,13 @@ Reply ONLY with valid JSON (no markdown):
         else{grp={ts:x.ts,last:x.ts,ml:+x.ml||0,n:1,run};items.push(grp);}});
       items.forEach(g=>{if(g.run!=null&&!g.kind){Object.assign(g,{kind:'water',id:'wa'+g.ts,emoji:'💧',title:`Water · ${fmtL(g.ml)}`,
         meta:`${g.n>1?g.n+' drinks · ':''}${fmtL(g.run)} so far · ${Math.round(g.run/WATER_GOAL.ml*100)}% of ${fmtL(WATER_GOAL.ml)}`});}});}
+    // a walk or hike being recorded right now
+    if(day===TODAY&&rec&&rec.start&&rec.state&&rec.state!=='idle'){const hk=rec.kind==='hike';
+      items.push({kind:'rec',id:'rec',ts:rec.start,emoji:hk?'🥾':'🚶',title:`${rec.state==='paused'?'Paused':'Recording'} ${hk?'hike':'walk'} · now`,
+        meta:[`${((rec.distanceM||0)/1000).toFixed(2)} km`,fmtDur((rec.movingMs||0)/1000),hk&&rec.gainM>=1?`↑ ${Math.round(rec.gainM)} m`:null,rec.steps?`${fmtN(rec.steps)} steps`:null].filter(Boolean).join(' · ')});}
     if(weightLog[day])items.push({kind:'weight',id:'wt',ts:at('07:30'),approx:true,emoji:'⚖️',title:`${weightLog[day]} kg`,meta:'Body weight'});
     (symptomLog[day]||[]).forEach(e=>{const sx=SYMPTOMS.find(x=>x.id===e.id);
-      items.push({kind:'feel',id:'f'+e.ts,ts:e.since&&localDate(new Date(e.since))===day?e.since:e.ts,entry:e,emoji:sx?.emoji||'😶',title:sx?.label||e.id,meta:symptomText(e,day).replace((sx?.label||'')+' ','')||'Feeling'});});
+      items.push({kind:'feel',id:'f'+e.ts,ts:e.since&&localDate(new Date(e.since))===day?e.since:e.ts,entry:e,emoji:sx?.emoji||'😶',title:sx?.label||e.id,meta:(t=>!t||t===sx?.label?'Feeling':t)(symptomText(e,day).replace((sx?.label||'')+' ',''))});});
     return items.sort((a,b)=>a.ts-b.ts);
   }
 
@@ -3169,7 +3173,7 @@ Reply ONLY with valid JSON (no markdown):
   ═══════════════════════════════════════════════════════════════ */
   const dateNice=k=>new Date(k+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
   const dateLong=k=>new Date(k+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
-  const SHAPE_OF={meal:'cookie9',walk:'sunny',workout:'cookie6',weight:'cookie4',feel:'flower',sleep:'clover',water:'cookie12'};
+  const SHAPE_OF={meal:'cookie9',walk:'sunny',rec:'sunny',workout:'cookie6',weight:'cookie4',feel:'flower',sleep:'clover',water:'cookie12'};
   function macrosOf(day){return (dietGrouped[day]||[]).reduce((a,e)=>{const m=entryMacros(e);return{cal:a.cal+m.cal,pro:a.pro+m.pro,carbs:a.carbs+m.carbs,fat:a.fat+m.fat};},{cal:0,pro:0,carbs:0,fat:0});}
   function daySug(day){
     const base=getDayInfo(day);
@@ -3472,6 +3476,7 @@ Reply ONLY with valid JSON (no markdown):
   function openItem(it,day){
     if(it.kind==='meal')openMeal(it.entry.id);
     else if(it.kind==='walk')openAct(day,it.id.slice(1));
+    else if(it.kind==='rec'){setRecOpen(true);window.scrollTo(0,0);}
     else if(it.kind==='weight')openWeight(day);
     else if(it.kind==='feel')openFeel(day,it.entry.id);
     else if(it.kind==='sleep')openSleep(day);
@@ -3976,7 +3981,10 @@ Reply ONLY with valid JSON (no markdown):
   }
 
   function renderFoodHistory(){
-    const firstKey=dietDayKeys.length?dietDayKeys[0]:null;
+    // start from the first day anything was logged: food, walks, workouts, sleep, water, weight or feelings
+    const anyKeys=[...dietDayKeys,...Object.keys(fitLogs),...Object.keys(sleepLog),...Object.keys(waterLog),...Object.keys(weightLog),...Object.keys(symptomLog),
+      ...Object.values(tracks).map(t=>localDate(new Date(t.start)))].filter(k=>/^\d{4}-\d{2}-\d{2}$/.test(k)&&k<=TODAY).sort();
+    const firstKey=anyKeys.length?anyKeys[0]:null;
     const allDays=[];
     if(firstKey){let d=TODAY;while(d>=firstKey){allDays.push(d);d=calAddDays(d,-1);}}
     const weekAgo=calAddDays(TODAY,-7);
@@ -3994,7 +4002,9 @@ Reply ONLY with valid JSON (no markdown):
         {allDays.slice(0,histLimit).map(dk=>{
           const es=dietGrouped[dk]||[];
           const dt=new Date(dk+'T00:00:00');
-          if(!es.length)return(
+          const tl=buildTimeline(dk),mv=moveDay(dk);
+          const actLine=[mv.steps?`🚶 ${fmtN(mv.steps)} steps`:null,mv.kcal?`🔥 ~${fmtN(mv.kcal)} kcal burned`:null,waterMl(dk)?`💧 ${fmtL(waterMl(dk))}`:null].filter(Boolean).join('  ·  ');
+          if(!es.length&&!tl.length)return(
             <button key={dk} className="x-item" style={{borderRadius:24,background:'var(--s1)',boxShadow:'inset 0 0 0 1.5px var(--line)',minHeight:64}} onClick={()=>openFood(dk,'Breakfast')}>
               <Shape kind="cookie12" size={42} fill="var(--s3)" color="var(--fg2)" font={15}><b>{dt.getDate()}</b></Shape>
               <span style={{flex:1}}><span className="t" style={{display:'block'}}>{dk===TODAY?'Today':dateNice(dk)}</span><span className="s">Nothing logged</span></span>
@@ -4013,11 +4023,13 @@ Reply ONLY with valid JSON (no markdown):
                   <div style={{fontWeight:820,fontSize:17}}>{dk===TODAY?'Today':dt.toLocaleDateString('en-IN',{weekday:'long'})}</div>
                   <div className="x-sub">{dt.toLocaleDateString('en-IN',{month:'long',year:'numeric'})}</div>
                 </div>
+                {!es.length?<button className="x-chip dash" onClick={()=>openFood(dk,'Breakfast')}>+ Log food</button>:
                 <div style={{textAlign:'right'}}>
                   <div className="x-num" style={{fontSize:24,color:calOk?'var(--mint)':tot.cal>GOALS.calories.max?'var(--err)':'var(--amber)'}}>{fmtN(tot.cal)}</div>
                   <div style={{fontSize:12,fontWeight:700,color:'var(--fg2)'}}>kcal · <span style={{color:proOk?'var(--violet)':'var(--fg2)'}}>{rnd(tot.pro)} g protein</span></div>
-                </div>
+                </div>}
               </div>
+              {actLine&&<div style={{padding:'0 16px 10px',fontSize:13,fontWeight:700,color:'var(--fg2)'}}>{actLine}</div>}
               {tot.cal>0&&<div style={{padding:'0 16px 12px',display:'flex',flexDirection:'column',gap:6}}>
                 <div style={{fontSize:11.5,fontWeight:800,letterSpacing:'.06em',textTransform:'uppercase',color:'var(--fg2)'}}>Where the calories came from</div>
                 <div style={{display:'flex',gap:3}} aria-hidden="true">
@@ -4031,10 +4043,7 @@ Reply ONLY with valid JSON (no markdown):
                     </div>)}
                 </div>
               </div>}
-              <div style={{padding:'0 8px 8px'}}>{es.map(renderEntry)}</div>
-              {syms.length>0&&<div className="x-chips" style={{padding:'0 16px 10px'}}>
-                {syms.map(e=>{const sx=SYMPTOMS.find(x=>x.id===e.id);return sx?<button key={e.ts} className={`x-chip ${sx.id==='good'?'mint':'pink'}`} onClick={()=>openFeel(dk,e.id)}>{sx.emoji} {sx.label}{COUNT_IDS.includes(sx.id)&&(e.count||1)>1?` ×${e.count}`:''}</button>:null;})}
-              </div>}
+              <div style={{padding:'0 8px 8px',marginTop:-8}}>{renderTimeline(dk)}</div>
               {showDayInsight[dk]&&<div style={{padding:'0 12px 12px'}}>{renderCoach(dk)}</div>}
               <div className="x-chips" style={{padding:'4px 16px 16px'}}>
                 <button className="x-chip pri" onClick={()=>openFood(dk,'Breakfast')}>+ Food</button>
