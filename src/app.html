@@ -4697,10 +4697,11 @@ Reply ONLY with valid JSON (no markdown):
           </div>
           <button className="x-card" onClick={()=>setPrefs(p=>({...p,iconAccent:!p.iconAccent}))} role="switch" aria-checked={!!prefs.iconAccent}
               style={{display:'flex',alignItems:'center',gap:14,textAlign:'left',border:'none',color:'var(--fg)',cursor:'pointer'}}>
-            {window.LMNative?.logo&&<span style={{width:52,height:52,borderRadius:'50%',background:'#000',display:'grid',placeItems:'center',flex:'none'}}>
-              <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path fill={prefs.iconAccent?accent:'#00FFFF'} fillRule="evenodd" d={window.LMNative.logo.body}/><path fill={prefs.iconAccent?accent:'#00FFFF'} d={window.LMNative.logo.leaf}/></svg></span>}
+            {window.LMNative?.logo&&(()=>{const c0=prefs.iconAccent?accent:'#00FFFF',c=sysLight?iconOnWhite(c0):c0;   // the launcher follows the phone's light/dark mode
+              return <span style={{width:52,height:52,borderRadius:'50%',background:sysLight?'#fff':'#000',boxShadow:'inset 0 0 0 1px var(--line)',display:'grid',placeItems:'center',flex:'none'}}>
+              <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path fill={c} fillRule="evenodd" d={window.LMNative.logo.body}/><path fill={c} d={window.LMNative.logo.leaf}/></svg></span>;})()}
             <span style={{flex:1,minWidth:0}}><b style={{display:'block',fontSize:16}}>App icon in accent colour</b>
-              <span className="x-sub" style={{display:'block'}}>{prefs.iconAccent?'The home-screen icon matches your accent (the closest of 36 colours). It changes when you leave the app.':'Off: the home-screen icon stays cyan.'}</span></span>
+              <span className="x-sub" style={{display:'block'}}>{prefs.iconAccent?'The home-screen icon matches your accent (the closest of 36 colours). It changes when you leave the app.':'Off: the home-screen icon stays cyan.'} White background when your phone is in light mode, black in dark mode.</span></span>
             <span className={`m3-switch${prefs.iconAccent?' on':''}`}><span className="m3-switch-thumb"/></span>
           </button>
 
@@ -4744,7 +4745,7 @@ Reply ONLY with valid JSON (no markdown):
           </div>}
           <div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
             <div style={{display:'flex',alignItems:'center',gap:14}}>
-              {window.LMNative?.logo&&<span style={{width:56,height:56,borderRadius:18,background:'#000',display:'grid',placeItems:'center',flex:'none'}}>
+              {window.LMNative?.logo&&<span style={{width:56,height:56,borderRadius:18,background:isLight?'#fff':'#000',boxShadow:'inset 0 0 0 1px var(--line)',display:'grid',placeItems:'center',flex:'none'}}>
                 <svg viewBox="0 0 24 24" width="36" height="36" aria-label="Fitness Tracker logo"><path fill="var(--pri)" fillRule="evenodd" d={window.LMNative.logo.body}/><path fill="var(--pri)" d={window.LMNative.logo.leaf}/></svg></span>}
               <div style={{flex:1}}><b style={{display:'block',fontSize:18}}>Fitness Tracker</b><span className="x-sub">Version {window.LMNative?.version}</span></div></div>
             <button className="x-btn tonal" disabled={updChecking} onClick={async()=>{
@@ -6008,6 +6009,8 @@ const rgb2hex=(r,g,b)=>'#'+[r,g,b].map(x=>Math.round(Math.max(0,Math.min(255,x))
 function rgb2hsv(r,g,b){r/=255;g/=255;b/=255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;let h=0;
   if(d){h=mx===r?((g-b)/d)%6:mx===g?(b-r)/d+2:(r-g)/d+4;h*=60;if(h<0)h+=360;}return [h,mx?d/mx:0,mx];}
 function hsv2rgb(h,s,v){const f=n=>{const k=(n+h/60)%6;return v-v*s*Math.max(0,Math.min(k,4-k,1));};return [f(5)*255,f(3)*255,f(1)*255];}
+// the launcher icon on white (phone in light mode): the accent deepened to ≥ 3:1, same as scripts/app-icons.cjs
+const iconOnWhite=hex=>{const c=hex2rgb(hex);let k=1;while(k>0.2&&lum(...c.map(x=>x*k))>0.3)k-=0.01;return rgb2hex(...c.map(x=>Math.round(x*k)));};
 const lum=(r,g,b)=>{const c=x=>{x/=255;return x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4);};return 0.2126*c(r)+0.7152*c(g)+0.0722*c(b);};
 function ColorPicker({initial,onApply,onCancel}){
   const [hsv,setHsv]=useState(()=>rgb2hsv(...hex2rgb(initial)));

@@ -12,6 +12,10 @@
     },
     {
       "text": "Timelines on Home and in Food → History show the newest entry at the top."
+    },
+    {
+      "text": "The app icon follows your phone's light or dark mode: a white background with a deeper colour in light mode, black with the bright colour in dark mode.",
+      "img": "docs/whatsnew/icon-light-dark.png"
     }
   ],
   "releases": [

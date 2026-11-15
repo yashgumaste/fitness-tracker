@@ -21,12 +21,25 @@ const glyph=fill=>`  <group android:scaleX="2.5" android:scaleY="2.5" android:tr
     <path android:fillColor="${fill}" android:pathData="${LOGO.leaf}"/>
   </group>
 `;
+// In light mode the icon sits on white, so the accent is deepened until it stands out (≥ 3:1 against white);
+// in dark mode it's the bright accent on black. Android picks drawable/ or drawable-night/ by the phone's theme.
+const lin=x=>{x/=255;return x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4);};
+const lumOf=([r,g,b])=>0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b);
+function onWhite(hex){
+  const rgb=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));
+  if(lumOf(rgb)<=0.3)return hex;
+  const mx=Math.max(...rgb)||1;let k=1;
+  while(k>0.2&&lumOf(rgb.map(c=>c*k))>0.3)k-=0.01;   // same hue and saturation, less brightness
+  return '#'+rgb.map(c=>Math.round(c*k).toString(16).padStart(2,'0')).join('').toUpperCase();
+}
 const vec=paths=>`<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">\n${paths}</vector>\n`;
 
 function write(res){
-  const dr=path.join(res,'drawable'),any=path.join(res,'mipmap-anydpi-v26'),mm=path.join(res,'mipmap');
-  for(const d of [dr,any,mm,path.join(res,'values')])fs.mkdirSync(d,{recursive:true});
-  fs.writeFileSync(path.join(res,'values','icon_colors.xml'),'<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <color name="ic_bg_black">#000000</color>\n</resources>\n');
+  const dr=path.join(res,'drawable'),drn=path.join(res,'drawable-night'),any=path.join(res,'mipmap-anydpi-v26'),mm=path.join(res,'mipmap');
+  for(const d of [dr,drn,any,mm,path.join(res,'values'),path.join(res,'values-night')])fs.mkdirSync(d,{recursive:true});
+  // icon background: white in light mode, black in dark mode
+  fs.writeFileSync(path.join(res,'values','icon_colors.xml'),'<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <color name="ic_bg">#FFFFFF</color>\n</resources>\n');
+  fs.writeFileSync(path.join(res,'values-night','icon_colors.xml'),'<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <color name="ic_bg">#000000</color>\n</resources>\n');
   // themed-icon silhouette (Android tints it to match the wallpaper)
   fs.writeFileSync(path.join(dr,'ic_mono.xml'),vec(glyph('#FFFFFFFF')));
   // notification icon: the logo in white, filling the status-bar slot
@@ -36,10 +49,11 @@ function write(res){
 </vector>
 `);
   for(const [name,hex] of ACCENTS){
-    fs.writeFileSync(path.join(dr,`ic_fg_${name}.xml`),vec(glyph(hex)));
+    fs.writeFileSync(path.join(dr,`ic_fg_${name}.xml`),vec(glyph(onWhite(hex))));
+    fs.writeFileSync(path.join(drn,`ic_fg_${name}.xml`),vec(glyph(hex)));
     fs.writeFileSync(path.join(any,`ic_launcher_${name}.xml`),`<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-  <background android:drawable="@color/ic_bg_black"/>
+  <background android:drawable="@color/ic_bg"/>
   <foreground android:drawable="@drawable/ic_fg_${name}"/>
   <monochrome android:drawable="@drawable/ic_mono"/>
 </adaptive-icon>
@@ -47,7 +61,7 @@ function write(res){
     // older Android (before adaptive icons)
     fs.writeFileSync(path.join(mm,`ic_launcher_${name}.xml`),`<?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-  <item android:drawable="@color/ic_bg_black"/>
+  <item android:drawable="@color/ic_bg"/>
   <item android:drawable="@drawable/ic_fg_${name}"/>
 </layer-list>
 `);
@@ -74,4 +88,4 @@ function manifest(m,pkg){
   return m.replace('</application>',aliases+'\n    </application>');
 }
 
-module.exports={ACCENTS,LOGO,write,manifest};
+module.exports={ACCENTS,LOGO,onWhite,write,manifest};
