@@ -3777,8 +3777,8 @@ Reply ONLY with valid JSON (no markdown):
           !isT&&<button className="x-btn sm outline" onClick={()=>set({date:TODAY,sel:null})} style={{alignSelf:'center'}}>Back to today</button>)}
         {isT&&(rec?<Nudge emoji="🔴" text={`Recording · ${((rec.distanceM||0)/1000).toFixed(2)} km`} action="Open" onClick={()=>setRecOpen(true)}/>
           :<div style={{display:'flex',gap:10}}>
-            <button className="x-btn" onClick={()=>startRecording('walk')} style={{flex:1.2,height:60,borderRadius:'30px 12px 12px 30px',fontSize:17}}>▶  Start a walk</button>
-            <button className="x-btn tonal" onClick={()=>startRecording('hike')} style={{flex:1,height:60,borderRadius:'12px 30px 30px 12px',fontSize:17}}>🥾  Hike</button></div>)}
+            <button className="x-btn" onClick={()=>startRecording('walk')} style={{flex:1,height:60,borderRadius:'30px 12px 12px 30px',fontSize:16}}>▶  Start a walk</button>
+            <button className="x-btn tonal" onClick={()=>startRecording('hike')} style={{flex:1,height:60,borderRadius:'12px 30px 30px 12px',fontSize:16}}>▶  Start a hike</button></div>)}
         <div className="x-card mint sa" style={{display:'flex',flexDirection:'column',gap:12}}>
           <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap'}}>
             <span className="x-num" style={{fontSize:52,color:'var(--fg)',lineHeight:1}}>{fmtN(mv.steps)}</span>
