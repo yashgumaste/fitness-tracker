@@ -1,37 +1,42 @@
 {
-  "unreleased": [
-    {
-      "text": "When an update is ready, the Download & install button is now at the top, above the list of what's new. The newest version's pictures stay in What's new (Settings → About & updates) after you install it."
-    },
-    {
-      "text": "Food → History now shows each day's full timeline in time order: meals together with walks and hikes, workouts, water, sleep, weight and how you felt, plus that day's steps and calories burned. Days with activity but no food show up too.",
-      "img": "docs/whatsnew/history-timeline.png"
-    },
-    {
-      "text": "A walk or hike you're recording shows on today's timeline as it happens. Tap it to go back to the live screen. Hikes have a 🥾 boot on the timeline."
-    },
-    {
-      "text": "Timelines on Home and in Food → History show the newest entry at the top."
-    },
-    {
-      "text": "The app icon follows your phone's light or dark mode: a white background with a deeper colour in light mode, black with the bright colour in dark mode.",
-      "img": "docs/whatsnew/icon-light-dark.png"
-    },
-    {
-      "text": "The Steps page buttons now read Start a walk and Start a hike, and the Fitness page has ▶ Walk and ▶ Hike instead of a plain Start."
-    },
-    {
-      "text": "One opening screen instead of two: the app's loading screen now continues Android's own splash with the same apple in the same place and colour (your accent colour if App icon in accent colour is on), white in light mode and black in dark mode. A wavy progress line shows if loading takes a moment."
-    },
-    {
-      "text": "Settings → Goals shows your goals as plain numbers. Tap Edit goals to change them, then Save (or Cancel). Nothing changes until you save, and the suggested goals fill in the fields for you to check first.",
-      "img": "docs/whatsnew/goals-edit.png"
-    },
-    {
-      "text": "When the weekly review or the coach can't answer, it now says why (for example, the free AI has used up its allowance for now, or there's no internet) instead of always blaming the connection. The weekly review also retries once by itself if the AI sends back a blank or broken reply."
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.21",
+      "date": "2026-11-15",
+      "items": [
+        {
+          "text": "When an update is ready, the Download & install button is now at the top, above the list of what's new. The newest version's pictures stay in What's new (Settings → About & updates) after you install it."
+        },
+        {
+          "text": "Food → History now shows each day's full timeline in time order: meals together with walks and hikes, workouts, water, sleep, weight and how you felt, plus that day's steps and calories burned. Days with activity but no food show up too.",
+          "img": "docs/whatsnew/history-timeline.png"
+        },
+        {
+          "text": "A walk or hike you're recording shows on today's timeline as it happens. Tap it to go back to the live screen. Hikes have a 🥾 boot on the timeline."
+        },
+        {
+          "text": "Timelines on Home and in Food → History show the newest entry at the top."
+        },
+        {
+          "text": "The app icon follows your phone's light or dark mode: a white background with a deeper colour in light mode, black with the bright colour in dark mode.",
+          "img": "docs/whatsnew/icon-light-dark.png"
+        },
+        {
+          "text": "The Steps page buttons now read Start a walk and Start a hike, and the Fitness page has ▶ Walk and ▶ Hike instead of a plain Start."
+        },
+        {
+          "text": "One opening screen instead of two: the app's loading screen now continues Android's own splash with the same apple in the same place and colour (your accent colour if App icon in accent colour is on), white in light mode and black in dark mode. A wavy progress line shows if loading takes a moment."
+        },
+        {
+          "text": "Settings → Goals shows your goals as plain numbers. Tap Edit goals to change them, then Save (or Cancel). Nothing changes until you save, and the suggested goals fill in the fields for you to check first.",
+          "img": "docs/whatsnew/goals-edit.png"
+        },
+        {
+          "text": "When the weekly review or the coach can't answer, it now says why (for example, the free AI has used up its allowance for now, or there's no internet) instead of always blaming the connection. The weekly review also retries once by itself if the AI sends back a blank or broken reply."
+        }
+      ]
+    },
     {
       "version": "1.20",
       "date": "2026-11-15",
