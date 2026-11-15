@@ -20,6 +20,7 @@ const out=esbuild.transformSync(jsx,{loader:'jsx',minify:true,target:'es2019',le
 html=html.slice(0,i)+'<script>'+out.code+'</script>'+html.slice(j+9);
 // What's new: the changelog travels inside the app, so the history works offline
 const cl=fs.readFileSync(path.join(root,'changelog.json'),'utf8');JSON.parse(cl);
+{const L=require('./app-icons.cjs').LOGO;html=html.replace('__LOGO_BODY__',L.body).replace('__LOGO_LEAF__',L.leaf);}
 html=html.replace('</head>',()=>`<script>window.LM_CHANGELOG=${cl.replace(/</g,'\\u003c')};</script>\n</head>`);
 fs.writeFileSync(path.join(www,'index.html'),html);
 fs.writeFileSync(path.join(www,'native.js'),fs.readFileSync(path.join(root,'src/native.js'),'utf8').replace(/__APP_VERSION__/g,version).replace('__ICON_COLORS__',JSON.stringify(require('./app-icons.cjs').ACCENTS)).replace('__LOGO__',JSON.stringify(require('./app-icons.cjs').LOGO)).replace('__GEMINI_FREE_KEY__',process.env.GEMINI_FREE_KEY||'__GEMINI_FREE_KEY__'));

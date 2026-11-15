@@ -19,6 +19,9 @@
     },
     {
       "text": "The Steps page buttons now read Start a walk and Start a hike, and the Fitness page has ▶ Walk and ▶ Hike instead of a plain Start."
+    },
+    {
+      "text": "One opening screen instead of two: the app's loading screen now continues Android's own splash with the same apple in the same place and colour (your accent colour if App icon in accent colour is on), white in light mode and black in dark mode. A wavy progress line shows if loading takes a moment."
     }
   ],
   "releases": [
