@@ -70,23 +70,28 @@
     const key=await geminiKey();
     if(!key)throw new Error('The free AI is not set up in this build — add a Gemini key or switch to Claude in Settings → AI');
     const model=GEMINI[kind==='fast'?'fast':'smart'];
-    const send=thinking=>fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{method:'POST',
+    const send=(thinking,room)=>fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{method:'POST',
       headers:{'content-type':'application/json','x-goog-api-key':key},
       body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],
-        // room for the model's own reasoning plus the answer
-        generationConfig:{maxOutputTokens:maxTokens*3+1024,...(json?{responseMimeType:'application/json'}:{}),...(thinking?{thinkingConfig:thinking}:{})}})});
+        // room for the model's own reasoning plus the answer (its thinking counts against the same budget)
+        generationConfig:{maxOutputTokens:room||maxTokens*3+1024,...(json?{responseMimeType:'application/json'}:{}),...(thinking?{thinkingConfig:thinking}:{})}})});
+    // ask with as little thinking as this model allows (models differ in which setting they accept)
+    const sendLeast=async room=>{let x=await send({thinkingBudget:0},room);if(x.status===400)x=await send({thinkingLevel:'minimal'},room);if(x.status===400)x=await send(null,room);return x;};
     let r;
     try{r=await send({thinkingLevel:'low'});}catch(e){throw new Error('No internet connection — try again');}
-    if(r.status===400)r=await send({thinkingBudget:0});
-    if(r.status===400)r=await send(null);
+    if(r.status===400)r=await sendLeast();
     if(!r.ok){
       const t=await r.text();let msg=t.slice(0,160);try{msg=JSON.parse(t).error.message;}catch(_){}
       if(r.status===429)throw new Error((gemKeyCache?'Your Gemini key':'The free AI')+' has used up its allowance for now — try again later, or add your own key in Settings → AI');
       if(r.status===400&&/API key/i.test(msg)||r.status===403)throw new Error('Gemini key not accepted — check Settings → AI');
       throw new Error('AI error '+r.status+': '+msg);
     }
-    const d=await r.json();
-    const u=d.usageMetadata||{};recordUsage(model,{input_tokens:u.promptTokenCount||0,output_tokens:(u.candidatesTokenCount||0)+(u.thoughtsTokenCount||0)});
+    let d=await r.json();
+    const use=x=>{const u=x.usageMetadata||{};recordUsage(model,{input_tokens:u.promptTokenCount||0,output_tokens:(u.candidatesTokenCount||0)+(u.thoughtsTokenCount||0)});};use(d);
+    // the answer was cut off because thinking used up the room: ask again with twice the room and no thinking
+    if(((d.candidates||[])[0]||{}).finishReason==='MAX_TOKENS'){
+      try{const r2=await sendLeast(Math.min(16384,(maxTokens*3+1024)*2));if(r2.ok){d=await r2.json();use(d);}}catch(_){}
+    }
     const parts=(((d.candidates||[])[0]||{}).content||{}).parts||[];
     const text=parts.filter(x=>!x.thought).map(x=>x.text||'').join('').trim();
     if(!text)throw new Error('The free AI returned nothing — try again');
