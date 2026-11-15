@@ -1,5 +1,9 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "Smarter move reminders: they now come when you've most likely been sitting with your phone (using it, or with it in your pocket), not when it was just lying on a table while you were up and about. Walking a few steps, even carrying the phone to another room, starts the sitting time again. If you were on your phone the whole time, the reminder says so."
+    }
+  ],
   "releases": [
     {
       "version": "1.21",

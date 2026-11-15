@@ -12,6 +12,8 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
+import android.os.PowerManager
+import android.app.KeyguardManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -38,8 +40,13 @@ import kotlin.coroutines.resume
 
 /**
  * Move reminders: every ~15 minutes (even with the app closed) a background job reads the phone's
- * step counter. If you've taken fewer than [MoveCheck.MIN_STEPS] steps over the chosen sitting time,
- * inside your chosen hours, it sends one "time for a short walk" notification.
+ * step counter and notes what the phone is doing:
+ *  - screen on and unlocked: you're using it, so almost certainly sitting with it (weight 1.0)
+ *  - screen off but held or in a pocket (small movements, not lying flat): probably sitting (0.6)
+ *  - lying flat and perfectly still with the screen off: you may be away from it, asleep or at a desk (0.15)
+ * Any check with real steps since the last one (walking, carrying the phone to another room) restarts
+ * the sitting time. It reminds only after the chosen sitting time, with fewer than [MoveCheck.MIN_STEPS]
+ * steps in it, when the average weight says you were most likely sitting with the phone.
  */
 @CapacitorPlugin(
     name = "MoveReminder",
@@ -83,6 +90,8 @@ class MoveReminderPlugin : Plugin() {
 
 object MoveCheck {
     const val MIN_STEPS = 60
+    const val MOVED_STEPS = 15        // this many steps between two checks counts as getting up
+    const val SITTING_SCORE = 0.5
     private const val PREFS = "move_reminder"
     private const val WORK = "move-check"
     private const val CHANNEL = "move"
@@ -105,19 +114,59 @@ object MoveCheck {
         wm.enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.UPDATE, req)
     }
 
-    /** One check: record the step count, and remind if there has been too little movement. */
+    /** How sure we are, from this moment, that you're sitting with the phone (see the class comment). */
+    private suspend fun sittingWeight(c: Context): Double {
+        val pm = c.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val km = c.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        if (pm.isInteractive && !km.isKeyguardLocked) return 1.0
+        val m = readMotion(c) ?: return 0.4                      // no accelerometer reading: in between
+        return if (m.first && m.second) 0.15 else 0.6           // flat and still → maybe away; else held/pocket
+    }
+
+    /** ~2.5 s of accelerometer: (lying flat, perfectly still). */
+    private suspend fun readMotion(c: Context): Pair<Boolean, Boolean>? {
+        val sm = c.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val sensor = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) ?: return null
+        return withTimeoutOrNull(4000) {
+            suspendCancellableCoroutine<Pair<Boolean, Boolean>> { cont ->
+                val t0 = System.nanoTime(); var n = 0; var sx = 0.0; var sy = 0.0; var sz = 0.0; var sm1 = 0.0; var sm2 = 0.0
+                val l = object : SensorEventListener {
+                    override fun onSensorChanged(e: SensorEvent) {
+                        val x = e.values[0].toDouble(); val y = e.values[1].toDouble(); val z = e.values[2].toDouble()
+                        val mag = Math.sqrt(x * x + y * y + z * z)
+                        n++; sx += x; sy += y; sz += z; sm1 += mag; sm2 += mag * mag
+                        if (System.nanoTime() - t0 > 2_500_000_000L && n >= 10) {
+                            sm.unregisterListener(this)
+                            val g = Math.sqrt((sx / n) * (sx / n) + (sy / n) * (sy / n) + (sz / n) * (sz / n))
+                            val flat = g > 0 && Math.abs(sz / n) / g > 0.9
+                            val sd = Math.sqrt(Math.max(0.0, sm2 / n - (sm1 / n) * (sm1 / n)))
+                            if (cont.isActive) cont.resume(Pair(flat, sd < 0.06))
+                        }
+                    }
+                    override fun onAccuracyChanged(s: Sensor?, a: Int) {}
+                }
+                sm.registerListener(l, sensor, SensorManager.SENSOR_DELAY_GAME)
+                cont.invokeOnCancellation { sm.unregisterListener(l) }
+            }
+        }
+    }
+
+    /** One check: record the step count and what the phone is doing, and remind if you've most likely
+     *  been sitting with it for the chosen time. */
     suspend fun check(c: Context) {
         val p = prefs(c)
         if (!p.getBoolean("on", false)) return
         val steps = readCounter(c)
         val now = System.currentTimeMillis()
         val mins = p.getInt("mins", 60)
-        // samples: [[time, count], ...] for the last few hours
+        // samples: [[time, count, sitting weight], ...] for the last few hours
         var samples = try { JSONArray(p.getString("samples", "[]")) } catch (e: Exception) { JSONArray() }
         val last = if (samples.length() > 0) samples.getJSONArray(samples.length() - 1) else null
         val count: Long = steps ?: last?.getLong(1) ?: return
         if (last != null && count < last.getLong(1)) samples = JSONArray()   // phone restarted: counter reset
-        samples.put(JSONArray().put(now).put(count))
+        // real steps since the last check (walking, or carrying the phone to another room): sitting starts again now
+        if (last != null && count - last.getLong(1) >= MOVED_STEPS) p.edit().putLong("movedAt", now).apply()
+        samples.put(JSONArray().put(now).put(count).put(sittingWeight(c)))
         val keep = JSONArray()
         for (i in 0 until samples.length()) { val s = samples.getJSONArray(i); if (now - s.getLong(0) <= 4 * 3600_000L) keep.put(s) }
         p.edit().putString("samples", keep.toString()).apply()
@@ -133,10 +182,15 @@ object MoveCheck {
         var base: JSONArray? = null
         for (i in 0 until keep.length()) { val s = keep.getJSONArray(i); if (s.getLong(0) <= windowStart + 5 * 60_000L) base = s }
         if (base == null) return                                   // not watched long enough yet
+        if (now - p.getLong("movedAt", 0) < mins * 60_000L) return    // got up recently: not sitting long enough
         if (now - p.getLong("lastAlert", 0) < mins * 60_000L) return  // at most one reminder per sitting
-        if (count - base.getLong(1) < MIN_STEPS) {
-            if (notify(c, mins, false)) p.edit().putLong("lastAlert", now).apply()
-        }
+        if (count - base.getLong(1) >= MIN_STEPS) return
+        // how sure are we that you were sitting with the phone, over the window?
+        var sum = 0.0; var n = 0; var used = 0
+        for (i in 0 until keep.length()) { val s = keep.getJSONArray(i)
+            if (s.getLong(0) >= windowStart - 60_000L) { val w = s.optDouble(2, 0.6); sum += w; n++; if (w >= 1.0) used++ } }
+        if (n < 2 || sum / n < SITTING_SCORE) return              // phone mostly lying still: you may well be away from it
+        if (notify(c, mins, false, used * 2 >= n)) p.edit().putLong("lastAlert", now).apply()
     }
 
     private suspend fun readCounter(c: Context): Long? {
@@ -159,7 +213,7 @@ object MoveCheck {
         }
     }
 
-    fun notify(c: Context, mins: Int, test: Boolean): Boolean {
+    fun notify(c: Context, mins: Int, test: Boolean, onPhone: Boolean = false): Boolean {
         val nm = c.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL) == null)
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "Move reminders", NotificationManager.IMPORTANCE_DEFAULT)
@@ -172,7 +226,7 @@ object MoveCheck {
             .setSmallIcon(Water.smallIcon(c)).setColor(0xFF5CF2A6.toInt())
             .setLargeIcon(Water.largeIcon(c, "ic_large_walk"))
             .setContentTitle(if (test) "Test: time to move 🚶" else "Time to move 🚶")
-            .setContentText("You've hardly moved in $sat. A 5-minute walk helps.")
+            .setContentText(if (onPhone) "You've been on your phone for about $sat without moving. A 5-minute walk helps." else "You've hardly moved in $sat. A 5-minute walk helps.")
             .setAutoCancel(true)
             .setContentIntent(pi)
             .build()
