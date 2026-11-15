@@ -80,7 +80,7 @@ object Logs {
     private const val CHANNEL = "logs"
     private const val ALARM_BASE = 9100
     private const val MAX = 24
-    private val KINDS = listOf("sleep", "Breakfast", "Lunch", "Snack", "Dinner")
+    private val KINDS = listOf("sleep", "Breakfast", "Lunch", "Snack", "Dinner", "bedtime")
 
     fun prefs(c: Context) = c.getSharedPreferences("log_reminder", Context.MODE_PRIVATE)
     fun noteId(kind: String) = 7500 + maxOf(0, KINDS.indexOf(kind))
@@ -155,7 +155,7 @@ object Logs {
     fun post(c: Context, o: JSONObject): Boolean {
         channel(c)
         if (!NotificationManagerCompat.from(c).areNotificationsEnabled()) return false
-        val kind = o.optString("kind", "sleep"); val sleep = kind == "sleep"
+        val kind = o.optString("kind", "sleep"); val bed = kind == "bedtime"; val sleep = kind == "sleep" || bed
         val body = o.optString("body")
         val n = NotificationCompat.Builder(c, CHANNEL)
             .setSmallIcon(Water.smallIcon(c)).setColor(if (sleep) 0xFFB39DDB.toInt() else 0xFFFFB74D.toInt())
@@ -166,7 +166,11 @@ object Logs {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(openApp(c, kind))
-            .addAction(0, if (sleep) "😴 Log sleep" else "🍽️ Log ${kind.lowercase()}", openApp(c, kind))
+            .apply {
+                // bedtime: nothing to log, just "off to bed" (dismiss) or "later"
+                if (bed) addAction(0, "😴 Off to bed", action(c, o, "skip"))
+                else addAction(0, if (sleep) "😴 Log sleep" else "🍽️ Log ${kind.lowercase()}", openApp(c, kind))
+            }
             .addAction(0, "⏰ Later", action(c, o, "later"))
             .apply { if (kind == "Snack") addAction(0, "No snack", action(c, o, "skip")) }
             .build()
