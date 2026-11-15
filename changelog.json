@@ -26,6 +26,9 @@
     {
       "text": "Settings → Goals shows your goals as plain numbers. Tap Edit goals to change them, then Save (or Cancel). Nothing changes until you save, and the suggested goals fill in the fields for you to check first.",
       "img": "docs/whatsnew/goals-edit.png"
+    },
+    {
+      "text": "When the weekly review or the coach can't answer, it now says why (for example, the free AI has used up its allowance for now, or there's no internet) instead of always blaming the connection. The weekly review also retries once by itself if the AI sends back a blank or broken reply."
     }
   ],
   "releases": [
