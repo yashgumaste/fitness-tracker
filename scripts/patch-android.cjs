@@ -44,6 +44,15 @@ if(!m.includes('ViewPermissionUsageActivity'))
     </application>`);
 fs.writeFileSync(mf,m);
 icons.write(path.join(app,'src/main/res'));
+// Android's own launch splash: same background as the icon (white in light mode, black in dark mode), so it flows
+// straight into the app's loading screen, which draws the same apple in the same place. Only touches the launch theme
+// if it's built on Theme.SplashScreen (Capacitor's template); otherwise leaves it alone.
+{const st=path.join(app,'src/main/res/values/styles.xml');
+  if(fs.existsSync(st)){let x=fs.readFileSync(st,'utf8');
+    const re=/(<style name="AppTheme\.NoActionBarLaunch" parent="Theme\.SplashScreen[^"]*">)([\s\S]*?)(<\/style>)/;
+    if(re.test(x)&&!x.includes('windowSplashScreenBackground')){
+      x=x.replace(re,(all,o,body,c)=>`${o}${body}    <item name="windowSplashScreenBackground">@color/ic_bg</item>\n    ${c}`);fs.writeFileSync(st,x);}
+    else if(!re.test(x))console.warn('patch-android: launch theme is not Theme.SplashScreen; splash background left as is');}}
 
 // Kotlin + Health Connect library (needs Android 8.0+, minSdk 26)
 const vars=path.join(app,'..','variables.gradle');

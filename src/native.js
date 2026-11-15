@@ -326,7 +326,14 @@
     return[.2104542553*l+.793617785*m-.0040720468*s,1.9779984951*l-2.428592205*m+.4505937099*s,.0259040371*l+.7827717662*m-.808675766*s];};
   function iconFor(hex){if(!/^#[0-9a-f]{6}$/i.test(hex||''))return 'cyan';const a=oklab(hex);let best='cyan',bd=1e9;
     for(const [n,h] of ICONS){const b=oklab(h);const d=(a[0]-b[0])**2+(a[1]-b[1])**2+(a[2]-b[2])**2;if(d<bd){bd=d;best=n;}}return best;}
-  function setIcon(v){wantIcon=/^#/.test(v||'')?iconFor(v):v;}
+  // the icon colour on white (phone in light mode): deepened to ≥ 3:1, same as scripts/app-icons.cjs
+  function onWhite(hex){const c=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));const L=x=>{x/=255;return x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4);};
+    const lum=a=>0.2126*L(a[0])+0.7152*L(a[1])+0.0722*L(a[2]);let k=1;while(k>0.2&&lum(c.map(x=>x*k))>0.3)k-=0.01;
+    return '#'+c.map(x=>Math.round(x*k).toString(16).padStart(2,'0')).join('').toUpperCase();}
+  function setIcon(v){wantIcon=/^#/.test(v||'')?iconFor(v):v;
+    // remember the icon's colours so the next launch's loading screen matches Android's splash
+    const h=(ICONS.find(x=>x[0]===wantIcon)||['cyan','#00FFFF'])[1];
+    try{localStorage.setItem('lm-boot',JSON.stringify({d:h,l:onWhite(h)}));}catch(_){}}
 
   /* ── System bars follow the app theme ── */
   async function bars(light){
