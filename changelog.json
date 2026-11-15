@@ -18,7 +18,7 @@
       "img": "docs/whatsnew/icon-light-dark.png"
     },
     {
-      "text": "The Steps page buttons now read Start a walk and Start a hike."
+      "text": "The Steps page buttons now read Start a walk and Start a hike, and the Fitness page has ▶ Walk and ▶ Hike instead of a plain Start."
     }
   ],
   "releases": [

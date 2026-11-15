@@ -4140,7 +4140,7 @@ Reply ONLY with valid JSON (no markdown):
         </div>
 
         <div className="x-sec"><h2 className="x-h2">Walks</h2><span style={{display:'flex',gap:6}}>
-          {isT&&!rec&&<button className="x-btn sm" onClick={()=>startRecording('walk')}>▶ Start</button>}<button className="x-btn sm tonal" onClick={()=>openStepsPage(date)}>By hour</button></span></div>
+          {isT&&!rec&&<><button className="x-btn sm" style={{whiteSpace:'nowrap',padding:'0 12px'}} onClick={()=>startRecording('walk')} aria-label="Start a walk">▶ Walk</button><button className="x-btn sm" style={{whiteSpace:'nowrap',padding:'0 12px'}} onClick={()=>startRecording('hike')} aria-label="Start a hike">▶ Hike</button></>}<button className="x-btn sm tonal" style={{whiteSpace:'nowrap',padding:'0 12px'}} onClick={()=>openStepsPage(date)}>By hour</button></span></div>
         {mv.walks.length?<div style={{display:'flex',flexDirection:'column',gap:10}}>{mv.walks.map(w=>renderWalkRow(date,w))}</div>
           :<button className="x-card" onClick={()=>openStepsPage(date)} style={{textAlign:'left',color:'var(--fg)',display:'flex',gap:12,alignItems:'center'}}>
             <Shape kind="sunny" size={42} fill="var(--s3)" font={20}>🚶</Shape>
