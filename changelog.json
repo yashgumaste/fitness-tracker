@@ -1,29 +1,34 @@
 {
-  "unreleased": [
-    {
-      "text": "Smarter move reminders: they now come when you've most likely been sitting with your phone (using it, or with it in your pocket), not when it was just lying on a table while you were up and about. Walking a few steps, even carrying the phone to another room, starts the sitting time again. If you were on your phone the whole time, the reminder says so."
-    },
-    {
-      "text": "Water and move reminders got a sense of humour: each one picks a fact from today or yesterday and has fun with it, like “Chicken biryani brought the salt 🧂 Water is the cleanup crew”, “That 980-kcal lunch wants a walk 🍛→🚶” or “Doomscroll detected 📱 Swap 5 minutes of scrolling for 5 minutes of strolling.”"
-    },
-    {
-      "text": "Log water the way you drink it: in Settings → Water reminders, choose Sips, gulps & glasses. The buttons then say +1 gulp, +1 glass, 1 bottle, and the reminder's buttons say 1 glass and 1 bottle. Your gulp size comes from your weight (and gender if set). Everything is still saved in ml.",
-      "img": "docs/whatsnew/water-gulps.png"
-    },
-    {
-      "text": "Water buttons learn your habits: the amounts you log most (recent days count more) come first on the Home water card, in the amount picker, at the top of Add water, and on the reminder's buttons. Start logging gulps and +1 gulp moves to the front within a few days."
-    },
-    {
-      "text": "Bedtime reminders: 30 minutes before lights-out, with the reason and a bit of fun, like “Sleep debt collector calling 💸 Last night was only 5 h 10 min. To be up at 6:10 AM like last Monday with 8 h 15 min of sleep, lights out by 9:55 PM.” Tomorrow's wake-up time comes from the same weekday last week, else this morning, else your usual time. The sleep you need comes from your age (8 h up to 25, 7 h 30 after), plus 30 min after a short night and 15 min after a hike or a hard day. Turn it on or off in Settings → Logging reminders."
-    },
-    {
-      "text": "Food → History is back to food only: each day's meals and how you felt. Walks, hikes, water, sleep, workouts and weight stay on the Home timeline."
-    },
-    {
-      "text": "Fixed the weekly review failing with “reply was cut off”, with Claude and with the free AI: when an answer runs out of room, the app now asks again straight away with twice the room, and the review starts with more space."
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.22",
+      "date": "2026-11-16",
+      "items": [
+        {
+          "text": "Smarter move reminders: they now come when you've most likely been sitting with your phone (using it, or with it in your pocket), not when it was just lying on a table while you were up and about. Walking a few steps, even carrying the phone to another room, starts the sitting time again. If you were on your phone the whole time, the reminder says so."
+        },
+        {
+          "text": "Water and move reminders got a sense of humour: each one picks a fact from today or yesterday and has fun with it, like “Chicken biryani brought the salt 🧂 Water is the cleanup crew”, “That 980-kcal lunch wants a walk 🍛→🚶” or “Doomscroll detected 📱 Swap 5 minutes of scrolling for 5 minutes of strolling.”"
+        },
+        {
+          "text": "Log water the way you drink it: in Settings → Water reminders, choose Sips, gulps & glasses. The buttons then say +1 gulp, +1 glass, 1 bottle, and the reminder's buttons say 1 glass and 1 bottle. Your gulp size comes from your weight (and gender if set). Everything is still saved in ml.",
+          "img": "docs/whatsnew/water-gulps.png"
+        },
+        {
+          "text": "Water buttons learn your habits: the amounts you log most (recent days count more) come first on the Home water card, in the amount picker, at the top of Add water, and on the reminder's buttons. Start logging gulps and +1 gulp moves to the front within a few days."
+        },
+        {
+          "text": "Bedtime reminders: 30 minutes before lights-out, with the reason and a bit of fun, like “Sleep debt collector calling 💸 Last night was only 5 h 10 min. To be up at 6:10 AM like last Monday with 8 h 15 min of sleep, lights out by 9:55 PM.” Tomorrow's wake-up time comes from the same weekday last week, else this morning, else your usual time. The sleep you need comes from your age (8 h up to 25, 7 h 30 after), plus 30 min after a short night and 15 min after a hike or a hard day. Turn it on or off in Settings → Logging reminders."
+        },
+        {
+          "text": "Food → History is back to food only: each day's meals and how you felt. Walks, hikes, water, sleep, workouts and weight stay on the Home timeline."
+        },
+        {
+          "text": "Fixed the weekly review failing with “reply was cut off”, with Claude and with the free AI: when an answer runs out of room, the app now asks again straight away with twice the room, and the review starts with more space."
+        }
+      ]
+    },
     {
       "version": "1.21",
       "date": "2026-11-15",
