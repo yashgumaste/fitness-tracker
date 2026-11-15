@@ -1154,7 +1154,7 @@ async function callAI(prompt,maxTokens=400,kind='smart',json=false){
   let c=pick(t);if(c)return c;
   c=pick(clean(await window.LMNative.ask(prompt+'\n\nYour previous reply was not valid JSON. Reply with ONLY the JSON — no words before or after it.',maxTokens,kind,json)));
   if(c)return c;
-  throw new Error('The AI didn’t send back macros — tap Calculate macros to try again');
+  throw new Error('The AI’s reply was cut off or not in the right format — try again');
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -2477,7 +2477,7 @@ Be specific, mention actual food names, be direct.`;
 
       const text=await callAI(prompt,500);
       setAiInsight(text||'Could not load insight.');
-    }catch(_){setAiInsight('Could not load insight.');}
+    }catch(e){console.error('Coach failed:',e);setAiInsight(`Couldn’t get the coach’s advice${(e&&e.message?': '+e.message.replace(/\.$/,''):'')}.`);}
     setInsightLoading(false);
   }
 
@@ -2501,7 +2501,7 @@ Be specific, mention actual food names, be direct.`;
       }
       const text=await callAI(prompt,400);
       setDayInsights(p=>({...p,[dk]:{text:text||'No insight.',loading:false}}));
-    }catch(_){setDayInsights(p=>({...p,[dk]:{text:'Could not load insight.',loading:false}}));}
+    }catch(e){console.error('Coach failed:',e);setDayInsights(p=>({...p,[dk]:{text:`Couldn’t get the coach’s advice${(e&&e.message?': '+e.message.replace(/\.$/,''):'')}.`,loading:false}}));}
   }
 
   /* ═══ FITNESS ACTIONS ═══ */
@@ -2813,7 +2813,8 @@ Give a JSON response ONLY (no markdown):
       const parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());
       setDayInsight(prev=>({...prev,[date]:{...parsed,_walks:wm.length>0}}));
     }catch(err){
-      setDayInsight(prev=>({...prev,[date]:{error:'Could not load insight. Try again.'}}));
+      console.error('Workout review failed:',err);
+      setDayInsight(prev=>({...prev,[date]:{error:`Couldn’t get the workout review${err&&err.message?': '+err.message.replace(/\.$/,''):''}.`}}));
     }
     setDayInsightLoading(false);
   }
@@ -2973,11 +2974,18 @@ Reply ONLY with valid JSON (no markdown):
   "priority": "<the single most critical action this week, max 20 words>"
 }`;
 
-      const raw=await callAI(prompt,900,'smart',true);
-      const parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());
+      // one automatic retry for a blank or garbled reply (not for a used-up allowance, a bad key or no internet)
+      let parsed=null,lastErr=null;
+      for(let i=0;i<2&&!parsed;i++){
+        try{const raw=await callAI(prompt,900,'smart',true);parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());}
+        catch(e){lastErr=e;if(/allowance|key|internet|Add your/i.test(e?.message||''))break;}
+      }
+      if(!parsed)throw lastErr||new Error('No reply');
       setAiAnalysis(parsed);
     }catch(err){
-      setAiAnalysis({error:'Could not load analysis. Check your connection and try again.'});
+      console.error('Weekly review failed:',err);
+      // say what actually went wrong, so it can be fixed (allowance used up, key, no internet, odd reply)
+      setAiAnalysis({error:`Couldn’t get the weekly review: ${(err&&err.message)||'something went wrong'}.`.replace(/\.\.$/,'.')});
     }
     setAiAnalysisLoading(false);
   }
