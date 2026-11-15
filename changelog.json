@@ -2,6 +2,13 @@
   "unreleased": [
     {
       "text": "Smarter move reminders: they now come when you've most likely been sitting with your phone (using it, or with it in your pocket), not when it was just lying on a table while you were up and about. Walking a few steps, even carrying the phone to another room, starts the sitting time again. If you were on your phone the whole time, the reminder says so."
+    },
+    {
+      "text": "Water and move reminders got a sense of humour: each one picks a fact from today or yesterday and has fun with it, like “Chicken biryani brought the salt 🧂 Water is the cleanup crew”, “That 980-kcal lunch wants a walk 🍛→🚶” or “Doomscroll detected 📱 Swap 5 minutes of scrolling for 5 minutes of strolling.”"
+    },
+    {
+      "text": "Log water the way you drink it: in Settings → Water reminders, choose Sips, gulps & glasses. The buttons then say +1 gulp, +1 glass, 1 bottle, and the reminder's buttons say 1 glass and 1 bottle. Your gulp size comes from your weight (and gender if set). Everything is still saved in ml.",
+      "img": "docs/whatsnew/water-gulps.png"
     }
   ],
   "releases": [

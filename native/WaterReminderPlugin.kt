@@ -66,6 +66,15 @@ class WaterReminderPlugin : Plugin() {
         val r = JSObject(); r.put("count", list.size); call.resolve(r)
     }
 
+    /** lines: [{title, body}] fun reminder texts written by the app from your day; btns: [{ml, label}] the two buttons */
+    @PluginMethod
+    fun extras(call: PluginCall) {
+        val e = Water.prefs(context).edit()
+        call.getArray("lines")?.let { e.putString("lines", it.toString()) }
+        call.getArray("btns")?.let { e.putString("btns", it.toString()) }
+        e.apply(); call.resolve()
+    }
+
     @PluginMethod
     fun cancelAll(call: PluginCall) {
         Water.prefs(context).edit().putBoolean("on", false).apply()
@@ -185,22 +194,45 @@ object Water {
 
     private val LINES = arrayOf("Time for a glass of water", "Sip break: log it with one tap", "Your body will thank you: have some water", "Stay topped up: a glass now?")
 
+    /** The two buttons: (ml, label), from the app (e.g. "🥛 1 glass" or "🥛 250 ml"). */
+    private fun buttons(c: Context): List<Pair<Int, String>> {
+        val a = try { JSONArray(prefs(c).getString("btns", "[]")) } catch (e: Exception) { JSONArray() }
+        val out = ArrayList<Pair<Int, String>>()
+        for (i in 0 until a.length()) { val o = a.optJSONObject(i) ?: continue; val ml = o.optInt("ml"); if (ml > 0) out.add(Pair(ml, o.optString("label", "$ml ml"))) }
+        return if (out.size >= 2) out.take(2) else listOf(Pair(250, "🥛 250 ml"), Pair(500, "🍶 500 ml"))
+    }
+
+    /** The next of the app's fun lines (title, body), in turn, or null to use the plain ones. */
+    private fun nextLine(c: Context): Pair<String, String>? {
+        val p = prefs(c)
+        val a = try { JSONArray(p.getString("lines", "[]")) } catch (e: Exception) { JSONArray() }
+        if (a.length() == 0) return null
+        val i = p.getInt("lineIdx", 0); p.edit().putInt("lineIdx", i + 1).apply()
+        val o = a.optJSONObject(i % a.length()) ?: return null
+        return Pair(o.optString("title"), o.optString("body"))
+    }
+
     fun post(c: Context, test: Boolean): Boolean {
         channel(c)
         if (!NotificationManagerCompat.from(c).areNotificationsEnabled()) return false
         val p = prefs(c); val goal = p.getInt("goal", 3000); val tot = todayTotal(c)
+        val fun_ = nextLine(c)
         val line = LINES[((System.currentTimeMillis() / 3_600_000L) % LINES.size).toInt()]
+        val title = (if (test) "Test: " else "") + (fun_?.first?.takeIf { it.isNotBlank() } ?: "Time for water 💧")
+        val body = if (fun_ != null) "${fun_.second}\n💧 ${litres(tot)} of ${litres(goal)} today" else "$line · ${litres(tot)} of ${litres(goal)} today"
+        val b = buttons(c)
         val n = NotificationCompat.Builder(c, CHANNEL)
             .setSmallIcon(smallIcon(c)).setColor(0xFF4FC3F7.toInt())
             .setLargeIcon(largeIcon(c, "ic_large_water"))
-            .setContentTitle(if (test) "Test: time for water 💧" else "Time for water 💧")
-            .setContentText("$line · ${litres(tot)} of ${litres(goal)} today")
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(openApp(c, true, NOTE_ID))
-            .addAction(0, "🥛 250 ml", action(c, 250))
-            .addAction(0, "🍶 500 ml", action(c, 500))
+            .addAction(0, b[0].second, action(c, b[0].first))
+            .addAction(0, b[1].second, action(c, b[1].first))
             .build()
         return try { NotificationManagerCompat.from(c).notify(NOTE_ID, n); true } catch (e: SecurityException) { false }
     }
@@ -215,7 +247,7 @@ object Water {
         val n = NotificationCompat.Builder(c, CHANNEL)
             .setSmallIcon(smallIcon(c)).setColor(0xFF4FC3F7.toInt())
             .setLargeIcon(largeIcon(c, "ic_large_water"))
-            .setContentTitle("✓ $ml ml logged")
+            .setContentTitle("✓ " + (buttons(c).firstOrNull { it.first == ml }?.second?.replace(Regex("^\\S+\\s"), "") ?: "$ml ml") + " logged")
             .setContentText(if (tot >= goal) "${litres(tot)} today · goal reached 🎉" else "${litres(tot)} of ${litres(goal)} today · ${litres(goal - tot)} to go")
             .setOnlyAlertOnce(true).setSilent(true)
             .setAutoCancel(true)

@@ -3114,6 +3114,81 @@ Reply ONLY with valid JSON (no markdown):
   const viaWalk=(day,ex)=>isWalkCardio(ex)&&walkCovers(day)&&!fitLogs[day]?.[ex.id]?.done;
   const exDoneOn=(day,ex)=>!!fitLogs[day]?.[ex.id]?.done||(isWalkCardio(ex)&&walkCovers(day));
   const waterMl=day=>(waterLog[day]||[]).reduce((a,x)=>a+(+x.ml||0),0);
+  // Logging water in everyday amounts (Settings → Water): sips, gulps, glasses, bottles. Always saved in ml.
+  // A gulp is ~20–30 ml for most adults: bigger for heavier people, a little bigger for men.
+  const natWater=prefs.waterUnits==='natural';
+  const gulpMl=(()=>{const w=latestWeight?.w||(bodyMeasure&&bodyMeasure.weightKg)||70,base=profile.gender==='female'?20:profile.gender==='male'?25:22;
+    return Math.max(15,Math.min(35,Math.round(base*Math.sqrt(w/70)/5)*5));})();
+  const sipMl=Math.max(10,Math.round(gulpMl*0.4/5)*5);
+  const NAT_DRINKS=[['💧','1 sip',sipMl],['💦','1 gulp',gulpMl],['🌊','3 gulps',gulpMl*3],['🥛','1 glass',250],['🍶','1 bottle',500],['🧴','1 L bottle',1000]];
+  const waterWord=ml=>{if(!natWater)return fmtL(ml);const d=NAT_DRINKS.find(x=>x[2]===ml);if(d)return d[1];
+    if(ml%250===0)return `${ml/250} glasses`;const g=Math.max(1,Math.round(ml/gulpMl));return `${g} gulp${g===1?'':'s'}`;};
+  // ── Fun reminder texts (Zomato/Swiggy style): one fact from today or yesterday that matters for the reminder ──
+  function funLines(){
+    const n=(profile.name||'').trim().split(/\s+/)[0]||'';
+    const Y=calAddDays(TODAY,-1),days=[[TODAY,'today'],[Y,'yesterday']];
+    const meals=day=>(dietGrouped[day]||[]).map(e=>({e,kcal:rnd(entryMacros(e).cal),name:(e.food||'').split(/[,+&]| with /)[0].trim()}));
+    const big=days.map(([d,w])=>{const m=meals(d).sort((a,b)=>b.kcal-a.kcal)[0];return m&&m.kcal>=700?{...m,w}:null;}).find(Boolean);
+    const SALTY=/biryani|pizza|chips|fries|namkeen|pickle|achaar|achar|maggi|noodle|burger|pakor|samosa|schezwan|manchurian|chinese|fried|vada pav|pav bhaji|bhujia|papad|lollipop/i;
+    const salty=days.map(([d,w])=>{const m=meals(d).find(x=>SALTY.test(x.e.food||''));return m?{...m,w}:null;}).find(Boolean);
+    const cups=meals(TODAY).filter(x=>/\b(chai|tea|coffee|latte|cappuccino|espresso)\b/i.test(x.e.food||'')).length;
+    const sym=id=>days.map(([d,w])=>(symptomLog[d]||[]).some(x=>x.id===id)?w:null).find(Boolean);
+    const tummy=['gas','bloat','acidity','constipation','heavy'].map(id=>{const w=sym(id);return w?{id,w}:null;}).find(Boolean);
+    const achy=['headache','dizzy','energy_low'].map(id=>{const w=sym(id);return w?{id,w,label:SYMPTOMS.find(x=>x.id===id).label.toLowerCase()}:null;}).find(Boolean);
+    const sick=['fever','cold','throat','cough'].map(id=>sym(id)).find(Boolean);
+    const stressed=sym('stress');
+    const mvT=moveDay(TODAY),mvY=moveDay(Y);
+    const walkT=mvT.walks.filter(w=>w.src==='gps'||w.km>=2).sort((a,b)=>b.km-a.km)[0];
+    const hikeY=mvY.walks.find(w=>w.kind==='hike')||mvY.walks.filter(w=>w.km>=4).sort((a,b)=>b.km-a.km)[0];
+    const gymT=fitLogs[TODAY]&&fitLogs[TODAY]._dayComplete,gymY=fitLogs[Y]&&fitLogs[Y]._dayComplete;
+    const wY=waterMl(Y),slept=sleepMin(sleepLog[TODAY]);
+    const W=[],M=[],P=[];
+    // water
+    if(big)W.push({title:`${big.w==='today'?'That':'Yesterday’s'} ${fmtN(big.kcal)}-kcal ${big.e.mealType.toLowerCase()} 🍛`,body:'It’s still doing paperwork in your stomach. Water speeds up the filing 🧾'});
+    if(salty)W.push({title:`${salty.name} brought the salt 🧂`,body:`Water is the cleanup crew. One ${natWater?'glass':'250 ml'}, please.`});
+    if(tummy)W.push({title:tummy.id==='constipation'?'Things a bit stuck? 🧱':tummy.id==='acidity'?`Acidity ${tummy.w} 🔥`:`Tummy drama ${tummy.w} 💨`,
+      body:tummy.id==='constipation'?'Water is fibre’s best friend. Get them together.':tummy.id==='acidity'?'Cool it down with a glass of water.':'Water keeps things moving (literally). A glass now helps.'});
+    if(cups>=2)W.push({title:`${cups} cups of ☕ today`,body:'Plot twist: they’re not water. Balance it with a glass.'});
+    if(walkT)W.push({title:`${walkT.km.toFixed(1)} km walked today 🚶`,body:'Your sweat sent the bill. Pay it in water 💧'});
+    if(gymT)W.push({title:'Post-workout thirst 💪',body:'Your muscles just filed a refill request.'});
+    if(achy)W.push({title:`Feeling ${achy.label} ${achy.w}? 🤕`,body:'Even a little dehydration does that. Water first, then everything else.'});
+    if(sick)W.push({title:'Under the weather 🤧',body:'Warm water counts too. Keep sipping.'});
+    if(wY&&wY<WATER_GOAL.ml*0.8)W.push({title:`Yesterday stopped at ${fmtL(wY)} 🥲`,body:`Today’s comeback starts with this ${natWater?'glass':'one'}.`});
+    else if(wY>=WATER_GOAL.ml)W.push({title:'Yesterday: water goal smashed 🎯',body:'Keep the streak flowing.'});
+    W.push({title:`${n?n+', your':'Your'} brain is ~75% water 🧠`,body:'Don’t let it run on 60.'},
+      {title:'Plants get watered daily 🌱',body:'You deserve the same treatment.'},
+      {title:'Sip happens 💧',body:`Make it happen now: ${natWater?'a few gulps':'a glass'} will do.`},
+      {title:'Zero calories, full satisfaction 🥛',body:'The only drink the coach never complains about.'});
+    // move
+    if(big&&big.w==='today')M.push({title:`That ${fmtN(big.kcal)}-kcal ${big.e.mealType.toLowerCase()} wants a walk 🍛→🚶`,body:'10 easy minutes helps digestion and keeps your sugar steady.'});
+    if(tummy&&tummy.id!=='constipation')M.push({title:tummy.id==='gas'?`Gas logged ${tummy.w} 💨`:tummy.id==='bloat'?`Bloated ${tummy.w}? 🫧`:`Feeling heavy ${tummy.w}? 🪨`,body:'A short walk is the best antacid nobody sells.'});
+    if(tummy&&tummy.id==='constipation')M.push({title:'Things a bit stuck? 🧱',body:'Walking gets your gut moving too. 10 minutes, go.'});
+    if(hikeY)M.push({title:`After yesterday’s ${hikeY.name.toLowerCase()} 🥾`,body:'A gentle walk loosens stiff legs better than the sofa does.'});
+    if(mvY.steps>=WALK_GOAL.day)M.push({title:`Yesterday: ${fmtN(mvY.steps)} steps 🔥`,body:'Today-you vs yesterday-you. Don’t let yesterday win.'});
+    else if(mvY.src==='hc'&&mvY.steps>0&&mvY.steps<WALK_GOAL.day*0.5)M.push({title:`Yesterday was a ${fmtN(mvY.steps)}-step day 🛋️`,body:'Today we write a better chapter. Start with 5 minutes.'});
+    if(gymT||gymY)M.push({title:'Gym done, but sitting isn’t a workout 💪',body:'A short walk keeps recovery flowing.'});
+    if(slept&&slept<6*60)M.push({title:`Only ${fmtHM(slept)} of sleep 😴`,body:'A walk in daylight beats a third coffee.'});
+    if(stressed)M.push({title:`Stress logged ${stressed} 😰`,body:'Walk it off, literally. 5 minutes of fresh air.'});
+    M.push({title:'Your chair needs a break from you 🪑',body:'You’ve hardly moved in {sat}. 5 minutes on your feet?'},
+      {title:'Legs on airplane mode ✈️',body:'{sat} without moving. Switch them back on with a short walk.'},
+      {title:`${n?n+', time':'Time'} to stretch those legs 🚶`,body:'You’ve hardly moved in {sat}. A 5-minute walk helps.'});
+    P.push({title:'Doomscroll detected 📱',body:'{sat} on your phone. Swap 5 minutes of scrolling for 5 minutes of strolling.'},
+      {title:'Thumbs: 10,000 steps. Legs: 0 👍',body:'{sat} on the phone. Time to even it out.'},
+      {title:'Your phone could use a walk too 📱🚶',body:'Take it for one: {sat} sitting is plenty.'});
+    if(big&&big.w==='today')P.unshift({title:`Scrolling after a ${fmtN(big.kcal)}-kcal ${big.e.mealType.toLowerCase()}? 📱🍛`,body:'Walk and scroll later. Your digestion will thank you.'});
+    // facts first, then the evergreen ones; keep a handful so they rotate
+    return {water:W.slice(0,8),move:M.slice(0,7),movePhone:P.slice(0,4),
+      btns:natWater?[{ml:250,label:'🥛 1 glass'},{ml:500,label:'🍶 1 bottle'}]:[{ml:250,label:'🥛 250 ml'},{ml:500,label:'🍶 500 ml'}]};
+  }
+  const funSig=JSON.stringify([TODAY,dietEntries.length,Object.values(symptomLog).flat().length,Math.round(moveDay(TODAY).steps/2000),Object.keys(tracks).length,
+    waterMl(calAddDays(TODAY,-1)),fitLogs[TODAY]?._dayComplete,sleepLog[TODAY]?.wake,natWater,profile.name]);
+  useEffect(()=>{if(!storageReady||!window.LMNative?.reminderExtras)return;
+    const run=()=>{try{window.LMNative.reminderExtras(funLines());}catch(e){console.warn(e);}};
+    const t=setTimeout(run,1500);window.addEventListener('lm-resume',run);
+    return()=>{clearTimeout(t);window.removeEventListener('lm-resume',run);};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[storageReady,funSig]);
+  const waterBtns=natWater?[[gulpMl,'💦','+1 gulp'],[250,'🥛','+1 glass']]:[[250,'🥛','+250'],[500,'🍶','+500']];
   const waterDesc=day=>{const ws=[...(waterLog[day]||[])].sort((a,b)=>a.ts-b.ts);if(!ws.length)return '';
     return `${fmtL(waterMl(day))} of ${fmtL(WATER_GOAL.ml)} goal — ${ws.map(x=>`${fmt12(hmOf(x.ts))} ${fmtL(x.ml)}`).join(', ')}`;};
   function addWater(day,ml,hm,quiet){const ts=hm?new Date(day+'T'+hm+':00').getTime():day===TODAY?Date.now():new Date(day+'T13:00:00').getTime();
@@ -3282,17 +3357,19 @@ Reply ONLY with valid JSON (no markdown):
           <div className="x-num" style={{fontSize:28,color:'var(--fg)'}}>How much did you drink?</div>
           <div style={{fontWeight:700,color:'var(--fg2)',marginTop:4}}>{fmtL(b.total)} of {fmtL(WATER_GOAL.ml)} so far today</div></div>
         <div style={{display:'flex',gap:12,width:'100%'}}>
-          {[[250,'🥛','Glass'],[500,'🍶','Bottle']].map(([ml,e,l])=>
-            <button key={ml} onClick={()=>waterActRef.current(ml)} aria-label={`${ml} ml`}
+          {[[250,'🥛','Glass','1 glass'],[500,'🍶','Bottle','1 bottle']].map(([ml,e,l,nl])=>
+            <button key={ml} onClick={()=>waterActRef.current(ml)} aria-label={natWater?nl:`${ml} ml`}
               style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'14px 8px',border:'none',borderRadius:ml===250?'32px 16px 32px 16px':'16px 32px 16px 32px',background:'var(--sky)',color:'var(--bg)',cursor:'pointer'}}>
-              <span style={{fontSize:30}}>{e}</span><b className="x-num" style={{fontSize:24}}>{ml} ml</b><span style={{fontWeight:700,fontSize:13}}>{l}</span></button>)}
+              <span style={{fontSize:30}}>{e}</span><b className="x-num" style={{fontSize:24}}>{natWater?nl:`${ml} ml`}</b>{!natWater&&<span style={{fontWeight:700,fontSize:13}}>{l}</span>}</button>)}
         </div>
         {!b.other?<button className="x-btn ghost" style={{color:'var(--sky)'}} onClick={()=>setBigWater(x=>({...x,other:true}))}>Other amount</button>
           :<div style={{display:'flex',flexDirection:'column',gap:10,width:'100%'}}>
-            <div className="x-chips" style={{justifyContent:'center'}}>{[150,200,330,750,1000].map(ml=><button key={ml} className="x-chip" onClick={()=>waterActRef.current(ml)}>{ml>=1000?'1 L':ml+' ml'}</button>)}</div>
+            {natWater?<div className="x-chips" style={{justifyContent:'center'}}>{[['1 sip',sipMl],['1 gulp',gulpMl],['3 gulps',gulpMl*3],['½ glass',125],['2 glasses',500],['1 L bottle',1000]].map(([l,ml])=><button key={l} className="x-chip" onClick={()=>waterActRef.current(ml)}>{l}</button>)}</div>
+            :<div className="x-chips" style={{justifyContent:'center'}}>{[150,200,330,750,1000].map(ml=><button key={ml} className="x-chip" onClick={()=>waterActRef.current(ml)}>{ml>=1000?'1 L':ml+' ml'}</button>)}</div>}
             <div style={{display:'flex',gap:8}}>
-              <input className="x-field" type="number" inputMode="numeric" placeholder="Amount in ml" value={b.custom} onChange={e=>{const v=e.target.value;setBigWater(x=>({...x,custom:v}));}} style={{flex:1}}/>
-              <button className="x-btn" disabled={!ok} style={{background:'var(--sky)',color:'var(--bg)',opacity:ok?1:.45}} onClick={()=>ok&&waterActRef.current(Math.round(c))}>Log</button></div>
+              <input className="x-field" type="number" inputMode="numeric" placeholder={natWater?'How many gulps?':'Amount in ml'} value={b.custom} onChange={e=>{const v=e.target.value;setBigWater(x=>({...x,custom:v}));}} style={{flex:1}}/>
+              <button className="x-btn" disabled={!(natWater?(+b.custom>=1&&+b.custom<=100):ok)} style={{background:'var(--sky)',color:'var(--bg)',opacity:(natWater?(+b.custom>=1&&+b.custom<=100):ok)?1:.45}}
+                onClick={()=>{if(natWater){const n=Math.round(+b.custom);if(n>=1&&n<=100)waterActRef.current(n*gulpMl);}else if(ok)waterActRef.current(Math.round(c));}}>Log</button></div>
           </div>}
         <button className="x-btn ghost" onClick={()=>setBigWater(null)}>Not now</button>
       </div>
@@ -3344,7 +3421,7 @@ Reply ONLY with valid JSON (no markdown):
     let gone=false;const run=async()=>{try{
       const ds=window.LMNative.takeLoggedWater?await window.LMNative.takeLoggedWater():[];let add=0,last=0;
       ds.forEach(x=>{addWaterAt(+x.ts,+x.ml);last=Math.max(last,+x.ts);if(localDate(new Date(+x.ts))===TODAY)add+=+x.ml;});
-      if(ds.length)showToast(`💧 ${ds.map(x=>x.ml+' ml').join(' + ')} logged from the reminder`,'var(--sky)');
+      if(ds.length)showToast(`💧 ${ds.map(x=>waterWord(+x.ml)).join(' + ')} logged from the reminder`,'var(--sky)');
       const r=await window.LMNative.planWater(waterCfg,Math.max(lastDrinkRef.current,last),waterTodayRef.current+add,WATER_GOAL.ml);
       if(!gone)setWaterPlan(r);}catch(e){console.warn(e);}};
     const t=setTimeout(run,600);window.addEventListener('lm-resume',run);
@@ -3617,8 +3694,8 @@ Reply ONLY with valid JSON (no markdown):
           </span>
         </button>
         <div style={{display:'flex',flexDirection:'column',gap:6}}>
-          {[[250,'🥛'],[500,'🍶']].map(([ml,em])=>(
-            <button key={ml} className="x-btn sm" onClick={()=>tapWater(day,ml)} style={{background:'var(--sky)',color:'var(--bg)',minWidth:88}}>{em} +{ml}</button>))}
+          {waterBtns.map(([ml,em,lab])=>(
+            <button key={lab} className="x-btn sm" onClick={()=>tapWater(day,ml)} aria-label={`Add ${natWater?lab.slice(1):fmtL(ml)}`} style={{background:'var(--sky)',color:'var(--bg)',minWidth:88,whiteSpace:'nowrap'}}>{em} {lab}</button>))}
         </div>
       </div>);
   }
@@ -4472,6 +4549,12 @@ Reply ONLY with valid JSON (no markdown):
     const c=waterCfg;const setW=f=>setPrefs(p=>({...p,water:{...c,...f}}));
     const native=window.LMNative?.isNative;
     return(<>
+      <div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
+        <div className="x-eyebrow">Log water in</div>
+        <Seg items={[['ml','ml'],['natural','Sips, gulps & glasses']]} value={natWater?'natural':'ml'} onChange={v=>setPrefs(p=>({...p,waterUnits:v}))}/>
+        <div className="x-sub">{natWater?<>Nobody measures water in ml while drinking. Buttons say <b>+1 gulp</b>, <b>1 glass</b>, <b>1 bottle</b>. Your gulp is about <b>{gulpMl} ml</b> and a sip about {sipMl} ml (from {profile.gender==='female'||profile.gender==='male'?'your weight and gender':'your weight'}); a glass is 250 ml, a bottle 500 ml. Totals and history still show ml.</>
+          :'Buttons show the amount in ml. Switch to sips, gulps & glasses if that’s easier to think in. Everything is saved in ml either way.'}</div>
+      </div>
       <div className="x-card" style={{display:'flex',flexDirection:'column',gap:12}}>
         <Seg items={[['off','Off'],['on','On']]} value={c.on?'on':'off'} onChange={v=>setW({on:v==='on'})}/>
         {c.on&&<>
@@ -4481,7 +4564,7 @@ Reply ONLY with valid JSON (no markdown):
           </div>
           <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Every</div>
           <div className="x-chips">{[[60,'1 h'],[90,'1 h 30'],[120,'2 h'],[150,'2 h 30'],[180,'3 h']].map(([m,l])=><button key={m} className={`x-chip${+c.every===m?' on':''}`} onClick={()=>setW({every:m})}>{l}</button>)}</div>
-          <div className="x-sub">Reminders skip a slot if you've just logged a drink. Tap <b>Log 250 ml</b> on the notification to add it without opening the app.
+          <div className="x-sub">Reminders skip a slot if you've just logged a drink. Tap <b>{natWater?'1 glass':'250 ml'}</b> on the notification to add it without opening the app.
             {waterPlan&&waterPlan.ok&&waterPlan.next?` Next: ${new Date(waterPlan.next).toLocaleString('en-IN',{weekday:'short',hour:'numeric',minute:'2-digit'})}.`:''}
             {waterPlan&&waterPlan.reason==='denied'?' Notifications are blocked — allow them in Android Settings → Apps → Fitness Tracker.':''}</div>
           {native&&<button className="x-btn outline" onClick={()=>window.LMNative.testNotification().then(ok=>showToast(ok?'Test reminder in 3 seconds':'Notifications are blocked','var(--ok)'))}>Send a test reminder</button>}
@@ -5075,17 +5158,28 @@ Reply ONLY with valid JSON (no markdown):
         {d.timeOpen&&<TimePicker value={shown} onChange={v=>set({time:v})}
           quick={date===TODAY?[['Now',hmOf(Date.now())],['30 min ago',hmOf(Date.now()-1800000)],['1 h ago',hmOf(Date.now()-3600000)],['2 h ago',hmOf(Date.now()-7200000)]]:[['Morning','08:00'],['Noon','12:00'],['Evening','18:00']]}/>}
         <div className="x-eyebrow" style={{margin:'16px 2px 8px'}}>Add a drink</div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(0,1fr))',gap:6}}>
+        {natWater?<div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:6}}>
+          {NAT_DRINKS.map(([em,lab,ml])=>(
+            <button key={lab} onClick={()=>add(ml)} style={{border:'none',background:'var(--s2)',color:'var(--fg)',borderRadius:20,padding:'12px 2px',display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+              <span style={{fontSize:24,lineHeight:1}}>{em}</span><b style={{fontSize:14}}>{lab}</b></button>))}
+        </div>
+        :<div style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(0,1fr))',gap:6}}>
           {DRINKS.map(([em,lab,ml])=>(
             <button key={ml} onClick={()=>add(ml)} style={{border:'none',background:'var(--s2)',color:'var(--fg)',borderRadius:20,padding:'10px 2px',display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
               <span style={{fontSize:24,lineHeight:1}}>{em}</span><b style={{fontSize:13}}>{fmtL(ml)}</b><span style={{fontSize:10.5,fontWeight:700,color:'var(--fg3)'}}>{lab}</span></button>))}
-        </div>
+        </div>}
         <div className="x-item" style={{marginTop:10,borderRadius:24,background:'var(--s2)'}}>
-          <span style={{flex:1}}><span className="t" style={{display:'block'}}>Other amount</span></span>
+          <span style={{flex:1,minWidth:0}}><span className="t" style={{display:'block',whiteSpace:'nowrap'}}>{natWater?'Other':'Other amount'}</span></span>
+          {natWater?<>
+          <button className="x-ibtn" aria-label="1 gulp less" onClick={()=>set({gulps:Math.max(1,(d.gulps||5)-1)})} style={{width:44,height:44,borderRadius:16,background:'var(--s4)',fontSize:22,fontWeight:800}}>−</button>
+          <b className="x-num" style={{fontSize:18,minWidth:80,textAlign:'center'}}>{d.gulps||5} gulps</b>
+          <button className="x-ibtn tonal" aria-label="1 gulp more" onClick={()=>set({gulps:Math.min(60,(d.gulps||5)+1)})} style={{width:44,height:44,borderRadius:16,fontSize:22,fontWeight:800}}>+</button>
+          <button className="x-btn sm" onClick={()=>add((d.gulps||5)*gulpMl)} style={{background:'var(--sky)',color:'var(--bg)'}}>Add</button></>
+          :<>
           <button className="x-ibtn" aria-label="50 ml less" onClick={()=>set({amt:Math.max(50,amt-50)})} style={{width:44,height:44,borderRadius:16,background:'var(--s4)',fontSize:22,fontWeight:800}}>−</button>
           <b className="x-num" style={{fontSize:20,minWidth:72,textAlign:'center'}}>{amt} ml</b>
           <button className="x-ibtn tonal" aria-label="50 ml more" onClick={()=>set({amt:Math.min(2000,amt+50)})} style={{width:44,height:44,borderRadius:16,fontSize:22,fontWeight:800}}>+</button>
-          <button className="x-btn sm" onClick={()=>add(amt)} style={{background:'var(--sky)',color:'var(--bg)'}}>Add</button>
+          <button className="x-btn sm" onClick={()=>add(amt)} style={{background:'var(--sky)',color:'var(--bg)'}}>Add</button></>}
         </div>
         {list.length>0&&<><div className="x-eyebrow" style={{margin:'16px 2px 8px'}}>{date===TODAY?'Today':'That day'} · {list.length} drink{list.length===1?'':'s'}</div>
           <div className="x-list">{list.slice().reverse().map(x=>(
