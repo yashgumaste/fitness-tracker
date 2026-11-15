@@ -104,8 +104,8 @@
     if(!key)throw new Error('Add your Claude API key in Settings → AI, or switch to the free AI');
     const tier=(JSON.parse(localStorage.getItem('lm-ai-models')||'{}'))[kind]||(kind==='fast'?'fast':'smart');
     const M=MODELS[tier]||MODELS.smart;
-    const send=async withExtra=>{
-      const body={model:M.id,max_tokens:maxTokens,messages:[{role:'user',content:prompt}],
+    const send=async(withExtra,room)=>{
+      const body={model:M.id,max_tokens:room||maxTokens,messages:[{role:'user',content:prompt}],
         ...(json?{system:'You are a nutrition data API. Reply with only the JSON the user asks for: no words, notes or markdown before or after it.'}:{}),...(withExtra?M.extra:{})};
       return fetch('https://api.anthropic.com/v1/messages',{method:'POST',
         headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -122,8 +122,14 @@
       if(r.status===429)throw new Error('Too many requests — wait a moment and try again');
       throw new Error('AI error '+r.status+': '+msg);
     }
-    const d=await r.json();
+    let d=await r.json();
     if(d.usage)recordUsage(M.id,d.usage);
+    // the answer hit the length limit (a long weekly review, say): ask again with twice the room
+    if(d.stop_reason==='max_tokens'){
+      try{let r2=await send(true,Math.min(8192,maxTokens*2));
+        if(r2.status===400){const t=await r2.clone().text();if(/thinking|effort|output_config/i.test(t))r2=await send(false,Math.min(8192,maxTokens*2));}
+        if(r2.ok){d=await r2.json();if(d.usage)recordUsage(M.id,d.usage);}}catch(_){}
+    }
     return(d.content||[]).map(c=>c.text||'').join('').trim();
   }
   function usage(){

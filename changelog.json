@@ -20,7 +20,7 @@
       "text": "Food → History is back to food only: each day's meals and how you felt. Walks, hikes, water, sleep, workouts and weight stay on the Home timeline."
     },
     {
-      "text": "Fixed the weekly review failing with “reply was cut off” on the free AI: when its answer runs out of room, the app now asks again straight away with more room, and the review has more space to answer."
+      "text": "Fixed the weekly review failing with “reply was cut off”, with Claude and with the free AI: when an answer runs out of room, the app now asks again straight away with twice the room, and the review starts with more space."
     }
   ],
   "releases": [
