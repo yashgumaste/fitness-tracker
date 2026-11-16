@@ -1009,17 +1009,8 @@ function thinTrack(pts,minM=4){if(!pts||pts.length<3)return pts||[];const out=[p
   out.push(pts[pts.length-1]);return out;}
 const speedKind=kmh=>kmh>=8?'run':kmh>=5.6?'brisk':kmh>=4?'walk':'stroll';
 const fmtDur=sec=>{sec=Math.round(sec);const h=Math.floor(sec/3600),m=Math.floor(sec/60)%60,s=sec%60;return h?`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`:`${m}:${String(s).padStart(2,'0')}`;};
-<<<<<<< Updated upstream
-const fmtPaceS=secPerKm=>{if(!isFinite(secPerKm)||secPerKm<=0)return '—';const t=Math.round(secPerKm);return `${Math.floor(t/60)}′${String(t%60).padStart(2,'0')}″`;};
-// Live recording: which numbers are shown big ("focus"), chosen per activity kind, 1 to 3 of them, in tap order.
-const REC_METRICS={dist:'Distance',time:'Time',pace:'Pace',steps:'Steps',speed:'Speed',climb:'Climb',height:'Height'};
-const recMetricIds=kind=>kind==='hike'?['dist','time','pace','steps','climb','height','speed']:['dist','time','pace','steps','speed'];
-const recFocusFor=(cfg,kind)=>{const ok=recMetricIds(kind);const f=((cfg||{})[kind]||[]).filter(x=>ok.includes(x)).slice(0,3);return f.length?f:['dist'];};
-const recFocusToggle=(list,id)=>list.includes(id)?(list.length>1?list.filter(x=>x!==id):list):list.length>=3?[...list.slice(0,2),id]:[...list,id];
-=======
 // pace as minutes:seconds per km, e.g. 13:36 (shown with "min/km")
 const fmtPaceS=secPerKm=>{if(!isFinite(secPerKm)||secPerKm<=0)return '—';const t=Math.round(secPerKm);return `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`;};
->>>>>>> Stashed changes
 
 // steps per hour (24) from 10-minute slices
 const hourly=b=>Array.from({length:24},(_,h)=>(b||[]).slice(h*6,h*6+6).reduce((a,x)=>a+(+x||0),0));
@@ -3801,16 +3792,6 @@ Reply ONLY with valid JSON (no markdown):
     const live=hike&&altPts.length>=6?(()=>{const n=24,step=Math.max(1,Math.floor(altPts.length/n));const o=[];let d=0,j=0;
       for(let i=1;i<r.pts.length;i++){d+=distM([r.pts[i-1][1],r.pts[i-1][2]],[r.pts[i][1],r.pts[i][2]]);
         if(r.pts[i][3]!=null&&(j++%step===0))o.push({x:(d/1000).toFixed(1)+' km',y:Math.round(r.pts[i][3])});}return o;})():null;
-<<<<<<< Updated upstream
-    const toggle=async()=>{try{const st=paused?await W.resume():await W.pause();setRec(p=>({...p,state:st.state}));}catch(_){}};
-    const kind=hike?'hike':'walk',focus=recFocusFor(prefs.recFocus,kind),rest=recMetricIds(kind).filter(x=>!focus.includes(x));
-    const M={dist:['Distance',km.toFixed(2),'km'],time:['Time',fmtDur(sec),''],pace:['Pace',fmtPaceS(pace),'per km'],
-      steps:['Steps',r.steps?fmtN(r.steps):'—',cad?`${cad} a minute`:''],speed:['Speed',kmh?kmh.toFixed(1):'—','km/h'],
-      climb:['Climb',`↑ ${Math.round(r.gainM||0)}`,'metres'],height:['Height',r.alt!=null?fmtN(r.alt):'—','m above sea']};
-    const BIGU={dist:'kilometres',speed:'km an hour'},cols=rest.length<=3?rest.length:rest.length===4?2:3;
-    const setFocus=id=>setPrefs(p=>({...p,recFocus:{...(p.recFocus||{}),[kind]:recFocusToggle(recFocusFor(p.recFocus,kind),id)}}));
-    return(<div>
-=======
     const toggle=async()=>{try{const st=paused?await W.resume():await W.pause();setRec(p=>({...p,state:st.state,_at:Date.now()}));}catch(_){}};
     // every number this screen can show: [label, value, unit, small line underneath]
     const M={
@@ -3833,31 +3814,10 @@ Reply ONLY with valid JSON (no markdown):
       setPrefs(p=>({...p,recLayout:{...(p.recLayout||{}),[kind]:{big:b,small:sm}}}));};
     const clock=Date.now();
     return(<div style={{paddingBottom:120}}>
->>>>>>> Stashed changes
       <div className="x-head" style={{alignItems:'center',justifyContent:'flex-start'}}>
         <button className="x-ibtn" aria-label="Back" onClick={()=>setRecOpen(false)}><Ico d={ICON.left} size={24}/></button>
         <Shape kind="cookie9" size={44} fill={paused?'var(--amber-c)':'var(--mint-c)'} color="var(--fg)" font={20}>{paused?'⏸':now.jogging?'🏃':hike?'🥾':'🚶'}</Shape>
         <h1 style={{fontSize:28,flex:1}}>{paused?'Paused':hike?'Hike':'Walk'}</h1>
-<<<<<<< Updated upstream
-        <span className="x-tag" style={{background:r.gps==='ok'?'var(--mint-c)':'var(--amber-c)',color:r.gps==='ok'?'var(--on-mint-c)':'var(--on-amber-c)'}}>{gpsTxt}</span>
-        <button className="x-ibtn" aria-label="Choose big numbers" onClick={()=>setRec(p=>({...p,pick:true}))}><Ico d={ICON.gear} size={22}/></button>
-      </div>
-      <div className="x-wrap" style={{paddingTop:0}}>
-        <RouteMap pts={r.pts.map(p=>[0,p[1],p[2]])} live height={[290,250,210][focus.length-1]} dark={!isLight}/>
-        <div style={{display:'flex',flexDirection:'column',gap:focus.length>1?14:0,padding:'4px 0'}}>
-          {focus.map(id=>{const [l,v,u]=M[id];return(
-            <div key={id} style={{textAlign:'center'}}>
-              <div className="x-eyebrow" style={{color:'var(--fg2)'}}>{l}</div>
-              <div className="x-num" style={{fontSize:[96,76,60][focus.length-1],lineHeight:1,color:paused?'var(--fg2)':'var(--pri)'}}>{v}</div>
-              <div style={{fontWeight:800,color:'var(--fg2)',minHeight:18}}>{BIGU[id]||u}</div></div>);})}
-        </div>
-        {rest.length>0&&<div className="x-grid3" style={{gap:8,gridTemplateColumns:`repeat(${cols},minmax(0,1fr))`}}>
-          {rest.map((id,i)=>{const [l,v,u]=M[id],c=i%cols;return(
-            <div key={id} className="x-card" style={{padding:'12px 10px',textAlign:'center',borderRadius:cols===1?28:c===0?'28px 12px 12px 28px':c===cols-1?'12px 28px 28px 12px':12}}>
-              <div style={{fontSize:12,fontWeight:750,color:'var(--fg2)'}}>{l}</div>
-              <div className="x-num" style={{fontSize:26}}>{v}</div>
-              <div style={{fontSize:11,fontWeight:700,color:'var(--fg2)',minHeight:14}}>{u}</div></div>);})}
-=======
         <button className="x-btn tonal sm" aria-label="Choose which numbers show" onClick={()=>setRecEdit(x=>!x)}>{recEdit?'Done':'⚙️ Layout'}</button>
       </div>
       <div className="x-wrap" style={{paddingTop:0}}>
@@ -3889,33 +3849,12 @@ Reply ONLY with valid JSON (no markdown):
               <div style={{fontSize:12,fontWeight:750,color:'var(--fg2)'}}>{M[k][0]}</div>
               <div style={{whiteSpace:'nowrap'}}>{val(k,k==='time'?20:24)}</div>
               <div style={{fontSize:11,fontWeight:700,color:'var(--fg2)',minHeight:14}}>{M[k][2]}{M[k][3]?` · ${M[k][3]}`:''}</div></div>)}
->>>>>>> Stashed changes
         </div>}
         {live&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:6,padding:'12px 14px'}}>
           <div className="x-eyebrow">Height so far</div>
           <LineChart points={live} color="var(--amber)" height={90} fmt={v=>v+' m'}/></div>}
         <div className="x-sub" style={{textAlign:'center',fontSize:12.5,lineHeight:1.5}}>You can leave this screen or lock your phone: recording keeps going. Tap the notification to come back.{hike?' No mobile signal is fine: GPS works without it. The map behind the route may stay blank until you’re back online.':''}</div>
       </div>
-<<<<<<< Updated upstream
-      <div style={{position:'fixed',left:0,right:0,bottom:0,zIndex:120,padding:'28px 16px calc(14px + env(safe-area-inset-bottom,0px))',background:'linear-gradient(to bottom,transparent,var(--bg) 26px)'}}><div style={{display:'flex',gap:12,maxWidth:560,margin:'0 auto'}}>
-        <button className="x-btn tonal" onClick={toggle} style={{flex:1,height:72,borderRadius:36,fontSize:18}}>{paused?'▶  Resume':'⏸  Pause'}</button>
-        <button className="x-btn" onClick={()=>setRec(p=>({...p,confirm:true,arm:false}))} style={{flex:1,height:72,borderRadius:'36px 18px 36px 18px',fontSize:18}}>■  Finish</button>
-      </div></div>
-      {r.pick&&<div onClick={()=>setRec(p=>({...p,pick:false}))} style={{position:'fixed',inset:0,zIndex:300,background:'rgba(0,0,0,.72)',display:'flex',alignItems:'flex-end',justifyContent:'center',padding:16}}>
-        <div onClick={e=>e.stopPropagation()} role="dialog" aria-label="Big numbers" className="x-card" style={{width:'100%',maxWidth:420,borderRadius:32,display:'flex',flexDirection:'column',gap:10,padding:20}}>
-          <h2 style={{margin:0}}>Big numbers · {hike?'hikes':'walks'}</h2>
-          <div className="x-sub">Pick 1 to 3 to show big, in the order you tap them. The rest stay in the small boxes. Saved for every {what} you record.</div>
-          {recMetricIds(kind).map(id=>{const n=focus.indexOf(id)+1;return(
-            <button key={id} className="x-card" role="checkbox" aria-checked={n>0} onClick={()=>setFocus(id)}
-              style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:n?'var(--pri-c)':'var(--s2)',color:n?'var(--on-pri-c)':'var(--fg)',textAlign:'left'}}>
-              <span style={{width:28,height:28,borderRadius:14,display:'grid',placeItems:'center',fontWeight:850,background:n?'var(--pri)':'transparent',color:n?'var(--on-pri)':'var(--fg2)',border:n?'none':'2px solid var(--fg2)'}}>{n||''}</span>
-              <span style={{flex:1,fontWeight:760}}>{M[id][0]}</span>
-              <span className="x-num" style={{fontSize:18,opacity:.8}}>{M[id][1]}</span>
-            </button>);})}
-          <button className="x-btn" onClick={()=>setRec(p=>({...p,pick:false}))}>Done</button>
-        </div>
-      </div>}
-=======
       {/* Pause and Finish float where the island usually is */}
       <div className="dock" role="toolbar" aria-label={`${what} controls`}>
         <div className="dock-pill" style={{gap:6,padding:6}}>
@@ -3923,7 +3862,6 @@ Reply ONLY with valid JSON (no markdown):
           <button onClick={()=>setRec(p=>({...p,confirm:true,arm:false}))} style={{height:52,minWidth:132,borderRadius:26,border:'none',background:'var(--s0)',color:'var(--pri)',fontWeight:850,fontSize:17,padding:'0 18px'}}>■  Finish</button>
         </div>
       </div>
->>>>>>> Stashed changes
       {r.confirm&&<div onClick={()=>setRec(p=>({...p,confirm:false}))} style={{position:'fixed',inset:0,zIndex:300,background:'rgba(0,0,0,.72)',display:'flex',alignItems:'flex-end',justifyContent:'center',padding:16}}>
         <div onClick={e=>e.stopPropagation()} role="dialog" aria-label={`Finish this ${what}?`} className="x-card" style={{width:'100%',maxWidth:420,borderRadius:32,display:'flex',flexDirection:'column',gap:12,padding:20}}>
           <h2 style={{margin:0}}>Finish this {what}?</h2>
