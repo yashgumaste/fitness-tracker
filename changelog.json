@@ -1,27 +1,32 @@
 {
-  "unreleased": [
-    {
-      "text": "The walk and hike recording screen is yours to arrange: tap ⚙️ Layout and pick up to 2 big numbers and 6 small ones (time, steps, distance, pace, speed, cadence, stride, calories, and climb and height on hikes). Walks and hikes keep their own layout.",
-      "img": "docs/whatsnew/walk-recording-2.png"
-    },
-    {
-      "text": "While recording: the time runs like a stopwatch with hundredths and shows when you started; a pill shows the time now; cadence, speed and pace show what you're doing right now as well as the average; Pause and Finish float where the menu island usually is."
-    },
-    {
-      "text": "Pace now reads like 13:36 min/km everywhere."
-    },
-    {
-      "text": "Short jogs inside a walk are spotted from your speed and steps (140+ steps a minute, or 7.5+ km/h). A 🏃 Jogging pill shows while you jog, and the walk's page lists each jog, shows it in amber on the map and counts it in calories.",
-      "img": "docs/whatsnew/walk-jogs.png"
-    },
-    {
-      "text": "The coach's walk analysis goes deeper: pace (min/km and km/h), cadence and stride against your last 7 days, what they say about your steps, any short jogs, and concrete targets for pace, cadence and stride."
-    },
-    {
-      "text": "With sips, gulps & glasses on, the quick water buttons are always +1 gulp and +1 glass (on Home, in the amount picker and on the reminder), since hardly anyone drinks a whole bottle in one go. Bottles are still in Add water."
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.24",
+      "date": "2026-11-17",
+      "items": [
+        {
+          "text": "The walk and hike recording screen is yours to arrange: tap ⚙️ Layout and pick up to 2 big numbers and 6 small ones (time, steps, distance, pace, speed, cadence, stride, calories, and climb and height on hikes). Walks and hikes keep their own layout.",
+          "img": "docs/whatsnew/walk-recording-2.png"
+        },
+        {
+          "text": "While recording: the time runs like a stopwatch with hundredths and shows when you started; a pill shows the time now; cadence, speed and pace show what you're doing right now as well as the average; Pause and Finish float where the menu island usually is."
+        },
+        {
+          "text": "Pace now reads like 13:36 min/km everywhere."
+        },
+        {
+          "text": "Short jogs inside a walk are spotted from your speed and steps (140+ steps a minute, or 7.5+ km/h). A 🏃 Jogging pill shows while you jog, and the walk's page lists each jog, shows it in amber on the map and counts it in calories.",
+          "img": "docs/whatsnew/walk-jogs.png"
+        },
+        {
+          "text": "The coach's walk analysis goes deeper: pace (min/km and km/h), cadence and stride against your last 7 days, what they say about your steps, any short jogs, and concrete targets for pace, cadence and stride."
+        },
+        {
+          "text": "With sips, gulps & glasses on, the quick water buttons are always +1 gulp and +1 glass (on Home, in the amount picker and on the reminder), since hardly anyone drinks a whole bottle in one go. Bottles are still in Add water."
+        }
+      ]
+    },
     {
       "version": "1.22",
       "date": "2026-11-16",
