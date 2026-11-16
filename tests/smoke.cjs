@@ -116,19 +116,11 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
       async pause(){this._st='paused';return this.status(1e9);},async resume(){this._st='recording';return this.status(1e9);},
       async stop(){const s=await this.status(0);s.end=this._t0+26*60000;this._st='idle';return s;},async discard(){this._st='idle';}};});
     await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);await click('.x-btn','Start a walk');await W(1500);
-<<<<<<< Updated upstream
-    await expect('kilometres');if(await p.$('.dock'))throw new Error('dock shown while recording');
-    await p.click('[aria-label="Choose big numbers"]');await W();await click('[role="dialog"] button','Steps');await click('[role="dialog"] button','Distance');await click('[role="dialog"] button','Time');await click('.x-btn','Done');await W();
-    if(!(await p.evaluate(()=>{const t=document.body.innerText;return t.includes('STEPS')&&t.includes('TIME')&&!t.includes('DISTANCE');})))throw new Error('big numbers not changed');
-    await click('.x-btn','Pause');await expect('Resume');await click('.x-btn','Resume');
-    await click('.x-btn','Finish');await expect('Finish this walk');await click('.x-btn','Save walk');await W(900);
-=======
     await expect('Started');await expect('Now ');await expect('steps/min');
     if(await p.$('nav.dock-pill'))throw new Error('the floating island should be hidden while recording');
     await click('.x-btn','Layout');await expect('Numbers on this screen');await click('.x-btn','Done');
     await click('button','Pause');await expect('Resume');await click('button','Resume');
     await click('button','Finish');await expect('Finish this walk');await click('.x-btn','Save walk');await W(900);
->>>>>>> Stashed changes
     await expect('Pace for each km');await expect('Moving time');await expect('Elevation');
     if(!(await p.$('[aria-label="Route map"]')))throw new Error('no route map');
     await p.click('[aria-label="Back"]');await W();});
