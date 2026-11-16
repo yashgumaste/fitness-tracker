@@ -118,7 +118,7 @@ object WalkState {
     private var movingAcc = 0L            // ms recorded before the last pause
     var distanceM = 0.0
     var stepsBase = -1L; var stepsNow = -1L; var stepsPaused = 0L
-    val points = ArrayList<DoubleArray>()  // [time ms, lat, lon, altitude m (NaN if none), accuracy m, barometer altitude m (NaN if none)]
+    val points = ArrayList<DoubleArray>()  // [time ms, lat, lon, altitude m (NaN if none), accuracy m, barometer altitude m (NaN if none), steps so far]
     @Volatile var baro = Double.NaN        // smoothed height from the air-pressure sensor (good for climb, not for absolute height)
     var gainM = 0.0                        // climb so far, for the live screen
     private var refAlt = Double.NaN
@@ -163,7 +163,7 @@ object WalkState {
         val alt = if (Build.VERSION.SDK_INT >= 34 && l.hasMslAltitude()) l.mslAltitudeMeters
             else if (l.hasAltitude()) l.altitude else Double.NaN
         val b = baro
-        points.add(doubleArrayOf(l.time.toDouble(), l.latitude, l.longitude, alt, l.accuracy.toDouble(), b))
+        points.add(doubleArrayOf(l.time.toDouble(), l.latitude, l.longitude, alt, l.accuracy.toDouble(), b, steps().toDouble()))
         // live climb: barometer if there is one (steady), else GPS height with a bigger dead band (it wobbles)
         val h = if (!b.isNaN()) b else alt
         if (!h.isNaN()) {
@@ -187,6 +187,7 @@ object WalkState {
             val p = points[i]; val q = JSONArray()
             q.put(p[0].toLong()); q.put(p[1]); q.put(p[2]); q.put(if (p[3].isNaN()) JSONObject.NULL else p[3]); q.put(p[4])
             q.put(if (p.size < 6 || p[5].isNaN()) JSONObject.NULL else p[5])
+            q.put(if (p.size < 7) JSONObject.NULL else p[6].toLong())     // steps so far (for cadence and jogs)
             a.put(q)
         }
         o.put("points", a); o.put("from", maxOf(0, from))
