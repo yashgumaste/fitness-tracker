@@ -3147,7 +3147,10 @@ Reply ONLY with valid JSON (no markdown):
     const defs=natWater?[250,gulpMl,500]:[250,500,gulpMl];
     defs.forEach((ml,i)=>{if(!sc[ml])sc[ml]=0.001*(3-i);});        // defaults fill in, in this order, until you've logged enough
     return Object.entries(sc).map(([ml,v])=>({ml:+ml,score:v})).sort((a,b)=>b.score-a.score).slice(0,5);})();
-  const waterBtns=favWater.slice(0,2).map(f=>[f.ml,waterEmoji(f.ml),natWater?'+'+waterWord(f.ml):'+'+(f.ml>=1000?fmtL(f.ml):f.ml)]);
+  // the two quick amounts: in sips-gulps-glasses mode always a gulp and a glass (nobody downs a bottle in one go;
+  // bottles stay in Add water); in ml mode, your two favourite amounts
+  const quickWater=natWater?[{ml:gulpMl,score:2},{ml:250,score:1}]:favWater.slice(0,2);
+  const waterBtns=quickWater.map(f=>[f.ml,waterEmoji(f.ml),natWater?'+'+waterWord(f.ml):'+'+(f.ml>=1000?fmtL(f.ml):f.ml)]);
   const favFirst=list=>[...list].sort((a,b)=>{const ia=favWater.findIndex(f=>f.ml===a[2]),ib=favWater.findIndex(f=>f.ml===b[2]);return (ia<0?99:ia)-(ib<0?99:ib);});
   // ── Fun reminder texts (Zomato/Swiggy style): one fact from today or yesterday that matters for the reminder ──
   function funLines(){
@@ -3204,9 +3207,9 @@ Reply ONLY with valid JSON (no markdown):
     if(big&&big.w==='today')P.unshift({title:`Scrolling after a ${fmtN(big.kcal)}-kcal ${big.e.mealType.toLowerCase()}? 📱🍛`,body:'Walk and scroll later. Your digestion will thank you.'});
     // facts first, then the evergreen ones; keep a handful so they rotate
     return {water:W.slice(0,8),move:M.slice(0,7),movePhone:P.slice(0,4),
-      btns:favWater.map(f=>({ml:f.ml,score:+f.score.toFixed(3),label:`${waterEmoji(f.ml)} ${natWater?waterWord(f.ml):fmtL(f.ml)}`}))};
+      btns:(natWater?quickWater:favWater).map(f=>({ml:f.ml,score:+f.score.toFixed(3),label:`${waterEmoji(f.ml)} ${natWater?waterWord(f.ml):fmtL(f.ml)}`}))};
   }
-  const funSig=JSON.stringify([TODAY,favWater.map(f=>f.ml).join(),dietEntries.length,Object.values(symptomLog).flat().length,Math.round(moveDay(TODAY).steps/2000),Object.keys(tracks).length,
+  const funSig=JSON.stringify([TODAY,favWater.map(f=>f.ml).join(),quickWater.map(f=>f.ml).join(),dietEntries.length,Object.values(symptomLog).flat().length,Math.round(moveDay(TODAY).steps/2000),Object.keys(tracks).length,
     waterMl(calAddDays(TODAY,-1)),fitLogs[TODAY]?._dayComplete,sleepLog[TODAY]?.wake,natWater,profile.name]);
   useEffect(()=>{if(!storageReady||!window.LMNative?.reminderExtras)return;
     const run=()=>{try{window.LMNative.reminderExtras(funLines());}catch(e){console.warn(e);}};
@@ -3382,7 +3385,7 @@ Reply ONLY with valid JSON (no markdown):
           <div className="x-num" style={{fontSize:28,color:'var(--fg)'}}>How much did you drink?</div>
           <div style={{fontWeight:700,color:'var(--fg2)',marginTop:4}}>{fmtL(b.total)} of {fmtL(WATER_GOAL.ml)} so far today</div></div>
         <div style={{display:'flex',gap:12,width:'100%'}}>
-          {favWater.slice(0,2).map((f,i)=>{const ml=f.ml,nl=waterWord(ml),dr=DRINKS.find(x=>x[2]===ml);
+          {quickWater.map((f,i)=>{const ml=f.ml,nl=waterWord(ml),dr=DRINKS.find(x=>x[2]===ml);
             return <button key={ml} onClick={()=>waterActRef.current(ml)} aria-label={natWater?nl:`${ml} ml`}
               style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'14px 8px',border:'none',borderRadius:i===0?'32px 16px 32px 16px':'16px 32px 16px 32px',background:'var(--sky)',color:'var(--bg)',cursor:'pointer'}}>
               <span style={{fontSize:30}}>{waterEmoji(ml)}</span><b className="x-num" style={{fontSize:24}}>{natWater?nl:fmtL(ml)}</b>{!natWater&&dr&&<span style={{fontWeight:700,fontSize:13}}>{dr[1]}</span>}</button>;})}
