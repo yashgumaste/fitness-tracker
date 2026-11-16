@@ -1,5 +1,10 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "Walk and hike recording: choose which numbers show big. Tap the ⚙ button at the top and pick 1 to 3, like Steps and Time instead of Distance; the rest stay in the small boxes. Walks and hikes each remember their own choice. Pause and Finish now sit at the bottom of the screen where they're easy to reach, and the bottom menu is hidden while you record.",
+      "img": "docs/whatsnew/rec-big-numbers.png"
+    }
+  ],
   "releases": [
     {
       "version": "1.22",
