@@ -954,20 +954,33 @@ const R_EARTH=6371008.8;
 function distM(a,b){const r=Math.PI/180,dl=(b[0]-a[0])*r,dn=(b[1]-a[1])*r,s=Math.sin(dl/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dn/2)**2;return 2*R_EARTH*Math.asin(Math.min(1,Math.sqrt(s)));}
 // distance, time for each km (moving time), climb and an elevation profile, from points [[sec,lat,lon,alt]]
 // altSrc 'baro' = height from the air-pressure sensor (steady); otherwise GPS height, which wobbles, so it's smoothed harder
+// GPS height is rough: single fixes jump, and the first fixes after GPS starts can be 100 m off.
+// Take the middle value of each 11 fixes, and drop the first minute and a half's heights until they agree with what follows.
+function gpsHeight(pts){
+  const med=a=>{const s=a.slice().sort((x,y)=>x-y);return s[s.length>>1];};
+  const raw=pts.map(p=>p[3]);
+  const alt=raw.map((a,i)=>{if(a==null)return null;const w=[];for(let j=Math.max(0,i-5);j<=Math.min(raw.length-1,i+5);j++)if(raw[j]!=null)w.push(raw[j]);return w.length>=3?med(w):a;});
+  for(let i=0;i<alt.length&&pts[i][0]-pts[0][0]<=90;i++){
+    if(alt[i]==null)continue;
+    const w=[];for(let j=i+1;j<raw.length&&w.length<30;j++)if(raw[j]!=null)w.push(raw[j]);
+    if(w.length>=10&&Math.abs(alt[i]-med(w))>20)alt[i]=null;else if(Math.abs(raw[i]-med(w))<=20)break;
+  }
+  return alt;
+}
 function trackStats(pts,altSrc){
   const out={dist:0,splits:[],gain:0,loss:0,profile:[],speed:[],maxKmh:0,hasAlt:false,maxAlt:null,minAlt:null,movingSec:0,climbSec:0,
     steepUp:0,steepDown:0,kcalPerKg:0,jogs:[],jogSec:0,jogM:0};
   if(!pts||pts.length<2)return out;
   const baro=altSrc==='baro',win=baro?2:6,band=baro?1.5:4;
-  const alts=pts.map(p=>p[3]).filter(a=>a!=null);out.hasAlt=alts.length>pts.length*.6;
+  const raw=pts.map(p=>p[3]);out.hasAlt=raw.filter(a=>a!=null).length>pts.length*.6;
+  const alt=baro?raw:gpsHeight(pts);
   // smooth altitude before counting climb
-  const sm=pts.map((p,i)=>{if(p[3]==null)return null;let s=0,n=0;for(let j=Math.max(0,i-win);j<=Math.min(pts.length-1,i+win);j++)if(pts[j][3]!=null){s+=pts[j][3];n++;}return n?s/n:null;});
+  const sm=alt.map((a,i)=>{if(a==null)return null;let s=0,n=0;for(let j=Math.max(0,i-win);j<=Math.min(alt.length-1,i+win);j++)if(alt[j]!=null){s+=alt[j];n++;}return n?s/n:null;});
   const D=[0],T=[0];   // distance and moving time at each point
   let d=0,mt=0,next=1000,lastSplitT=0,lastAlt=sm.find(a=>a!=null),splitGain=0,splitLoss=0,prevSm=lastAlt;
   const every=Math.max(1,Math.floor(pts.length/100));
   for(let i=1;i<pts.length;i++){
     const a=pts[i-1],b=pts[i],seg=distM([a[1],a[2]],[b[1],b[2]]),dt=b[0]-a[0],moving=dt>0&&dt<30;
-    if(moving){const kmh=seg/dt*3.6;if(kmh<25)out.maxKmh=Math.max(out.maxKmh,kmh);}
     const dtm=moving?dt:0;
     while(d+seg>=next&&seg>0){const f=(next-d)/seg,t=mt+f*dtm;out.splits.push({km:next/1000,sec:t-lastSplitT,gain:splitGain,loss:splitLoss});lastSplitT=t;splitGain=splitLoss=0;next+=1000;}
     d+=seg;mt+=dtm;D.push(d);T.push(mt);
@@ -984,6 +997,14 @@ function trackStats(pts,altSrc){
   const rest=d-(next-1000);if(rest>=100)out.splits.push({km:+(d/1000).toFixed(2),sec:mt-lastSplitT,part:rest,gain:splitGain,loss:splitLoss});
   out.dist=d;out.movingSec=mt;
   // speed along the way (over the last ~400 m) and the steepest stretch (over at least 200 m)
+  // top speed: straight-line speed over 10+ s of moving time, and it has to hold for the next 10 s too,
+  // so one GPS fix that jumps away and back doesn't count
+  {const w=[];for(let i=0,v=0;i<pts.length;i++){
+      while(v<i&&T[i]-T[v+1]>=10)v++;
+      w.push(T[i]-T[v]>=10&&T[i]-T[v]<=40?distM([pts[v][1],pts[v][2]],[pts[i][1],pts[i][2]])/(T[i]-T[v])*3.6:null);}
+    for(let i=0,j=0;i<pts.length;i++){if(w[i]==null)continue;
+      while(j<pts.length-1&&T[j]-T[i]<10)j++;
+      if(T[j]-T[i]>=10&&w[j]!=null){const kmh=Math.min(w[i],w[j]);if(kmh<25)out.maxKmh=Math.max(out.maxKmh,kmh);}}}
   for(let i=0,k=0,u=0;i<pts.length;i++){
     while(k<i&&D[i]-D[k+1]>=400)k++;
     if(i%every===0&&D[i]>=300&&D[i]-D[k]>=150&&T[i]-T[k]>=60)out.speed.push({x:+(D[i]/1000).toFixed(2),y:+((D[i]-D[k])/(T[i]-T[k])*3.6).toFixed(1)});

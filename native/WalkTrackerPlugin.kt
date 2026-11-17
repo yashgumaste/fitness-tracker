@@ -160,7 +160,10 @@ object WalkState {
         }
         last = l
         // height above sea level where Android can give it (14+), otherwise GPS height
-        val alt = if (Build.VERSION.SDK_INT >= 34 && l.hasMslAltitude()) l.mslAltitudeMeters
+        // skip a height the GPS itself says is rough (just after it starts it can be 100 m out)
+        val roughHeight = Build.VERSION.SDK_INT >= 26 && l.hasVerticalAccuracy() && l.verticalAccuracyMeters > 25f
+        val alt = if (roughHeight) Double.NaN
+            else if (Build.VERSION.SDK_INT >= 34 && l.hasMslAltitude()) l.mslAltitudeMeters
             else if (l.hasAltitude()) l.altitude else Double.NaN
         val b = baro
         points.add(doubleArrayOf(l.time.toDouble(), l.latitude, l.longitude, alt, l.accuracy.toDouble(), b, steps().toDouble()))

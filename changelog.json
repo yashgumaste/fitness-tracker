@@ -1,5 +1,12 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "Walk and hike charts: the height line no longer starts with a big jump. GPS height is often far off for the first few seconds, so those heights are now left out, and single wrong readings are smoothed away, so climb and descent come out closer to the real thing. This fixes walks you've already recorded too."
+    },
+    {
+      "text": "Top speed on walks and hikes now counts only a speed you kept up for at least 10 seconds, so a GPS jump no longer shows a 22 km/h top speed on a walk."
+    }
+  ],
   "releases": [
     {
       "version": "1.24",
