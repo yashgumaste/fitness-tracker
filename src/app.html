@@ -1845,10 +1845,6 @@ function App(){
   const [editLoading,setEditLoading]=useState(false);
   const [addingToDay,setAddingToDay]=useState(null);
   const [addDayLoading,setAddDayLoading]=useState(false);
-  const [aiInsight,setAiInsight]=useState('');
-  const [insightLoading,setInsightLoading]=useState(false);
-  const [showInsight,setShowInsight]=useState(false);
-  const [insightDay,setInsightDay]=useState(null);   // the day the coach card was made for
   const [,setDayTick]=useState(0);
   const [sysLight,setSysLight]=useState(()=>{try{return matchMedia('(prefers-color-scheme: light)').matches;}catch(_){return false;}});
   useEffect(()=>{let mq;try{mq=matchMedia('(prefers-color-scheme: light)');}catch(_){return;}
@@ -1878,7 +1874,6 @@ function App(){
     const iv=setInterval(()=>setDayTick(t=>t+1),60000);
     return()=>{document.removeEventListener('visibilitychange',bump);clearInterval(iv);};
   },[]);
-  const [dayInsights,setDayInsights]=useState({}); // {dateKey: {text, loading}}
   const [showDayInsight,setShowDayInsight]=useState({}); // {dateKey: bool}
   const [showNewDay,setShowNewDay]=useState(false);
   const [newDayLoading,setNewDayLoading]=useState(false);
@@ -1912,7 +1907,7 @@ function App(){
   const [aiAnalysis,setAiAnalysis]=useState(null);
   const [aiAnalysisLoading,setAiAnalysisLoading]=useState(false);
   const [dayInsight,setDayInsight]=useState({});
-  const [dayInsightLoading,setDayInsightLoading]=useState(false);
+  const [dayInsightLoading,setDayInsightLoading]=useState(false);   // the date being reviewed, or false
   const bottomRef=useRef(null);
   const prevDietLen=useRef(0);
   const TODAY=todayKey();
@@ -2391,151 +2386,6 @@ async function handleDietAdd(text,at){
     setSplittingDays(p=>({...p,[dayKey]:false}));
   }
 
-  async function fetchInsight(){
-    if(!buildTimeline(TODAY).length)return;
-    setShowInsight(true);setInsightLoading(true);setAiInsight('');setInsightDay(TODAY);
-    try{
-      // When did the pain start? (earliest pain onset in the last 3 days; logged time if no onset given)
-      const painStarts=[-2,-1,0].flatMap(o=>{const d=new Date(TODAY+'T00:00:00');d.setDate(d.getDate()+o);
-        return (symptomLog[localDate(d)]||[]).filter(s=>s.id==='pain').map(s=>s.since||s.ts);});
-      const painToday=(symptomLog[TODAY]||[]).some(s=>s.id==='pain');
-      const painSince=painToday&&painStarts.length?Math.min(...painStarts):null;
-      const todayLog=sortByMealTime(todayDiet).map(e=>{
-        const m=entryMacros(e);
-        const flags=[e.carbHeavy?'CARB-HEAVY':'',e.gasRisk?'GAS-RISK':''].filter(Boolean).join(',');
-        return `${e.mealType} (${mealTag(e,painSince)}): ${e.food} (${rnd(m.cal)}kcal, ${rnd(m.pro)}g P${flags?` [${flags}]`:''})`;
-      }).join('\n');
-
-      // Yesterday's meals
-      const yd=new Date(TODAY+'T00:00:00');yd.setDate(yd.getDate()-1);
-      const ydKey=localDate(yd);
-      const ydMeals=dietGrouped[ydKey]||[];
-      const ydGasRisk=ydMeals.filter(e=>e.gasRisk).map(e=>e.food);
-      const ydLog=ydMeals.length>0
-        ?sortByMealTime(ydMeals).map(e=>`${e.mealType} (${mealTag(e,painSince)}): ${e.food}${e.gasRisk?' [GAS-RISK]':''}`).join('\n')
-        :'Nothing logged';
-
-      // 2 days ago meals (relevant for loose motion trigger — can take 12-24h)
-      const d2=new Date(TODAY+'T00:00:00');d2.setDate(d2.getDate()-2);
-      const d2Key=localDate(d2);
-      const d2Meals=dietGrouped[d2Key]||[];
-      const d2Log=d2Meals.length>0
-        ?sortByMealTime(d2Meals).map(e=>`${e.mealType} (${mealTag(e,painSince)}): ${e.food}${e.gasRisk?' [GAS-RISK]':''}`).join('\n')
-        :'Nothing logged';
-
-      // Last 3 days symptoms with labels
-      const SEVERE_IDS=['loose','nausea','vomit'];
-      const isSevere=s=>SEVERE_IDS.includes(s.id)||(s.id==='pain'&&s.level==='severe');
-      const recentSymptomsByDay=[-2,-1,0].map(offset=>{
-        const d=new Date(TODAY+'T00:00:00');d.setDate(d.getDate()+offset);
-        const k=localDate(d);
-        const syms=symptomLog[k]||[];
-        if(!syms.length)return null;
-        const label=offset===0?'Today':offset===-1?'Yesterday':'2 days ago';
-        return {label, syms:syms.map(s=>symptomText(s,k)), key:k};
-      }).filter(Boolean);
-
-      const recentSymptomsText=recentSymptomsByDay.map(d=>`${d.label}: ${d.syms.join(', ')}`).join('\n');
-
-      // Detect severe GI symptoms today or yesterday
-      const todaySyms=symptomLog[TODAY]||[];
-      const ydSyms=symptomLog[ydKey]||[];
-      const hasSevereToday=todaySyms.some(isSevere);
-      const hasSevereYesterday=ydSyms.some(isSevere);
-      const hasLooseMotion=todaySyms.some(s=>s.id==='loose')||ydSyms.some(s=>s.id==='loose');
-      const gasRiskToday=todayDiet.filter(e=>e.gasRisk).map(e=>e.food);
-
-      let prompt;
-
-      if(hasSevereToday){
-        // ── RECOVERY MODE — completely different prompt ────────────────────
-        const severeLabel='today';
-        const allRecentFoods=[
-          ...sortByMealTime(d2Meals).map(e=>`2 days ago ${e.mealType} (${mealTag(e,painSince)}): ${e.food}`),
-          ...sortByMealTime(ydMeals).map(e=>`Yesterday ${e.mealType} (${mealTag(e,painSince)}): ${e.food}`),
-          ...sortByMealTime(todayDiet).map(e=>`Today ${e.mealType} (${mealTag(e,painSince)}): ${e.food}`),
-        ].join('\n');
-
-        prompt=`You are a gut health and recovery nutrition expert. The user has logged ${hasLooseMotion?'loose motion (diarrhea)':[...todaySyms,...ydSyms].some(s=>s.id==='pain'&&s.level==='severe')?'severe stomach pain':'severe GI symptoms (nausea/vomiting)'} ${severeLabel}.
-
-USER'S RECENT FOOD LOG (last 3 days — the trigger could be 12-36 hours before symptoms):
-${allRecentFoods}
-
-EVERYTHING ELSE LOGGED TODAY (water, sleep, walks, workout, feelings — in time order):
-${dayLog(TODAY,painSince)}
-
-SYMPTOMS LOGGED:
-${recentSymptomsText}
-
-${TIMING_RULE}
-
-CRITICAL TASK — give exactly 3 focused sentences:
-1. FOOD TRIGGER ANALYSIS: Identify the most likely food(s) from the log that caused the ${hasLooseMotion?'loose motion':'symptoms'}. Consider: outside food, reheated food, raw vegetables, high-fiber foods, dairy, oily/spicy food, uncooked sprouts, street food, stale leftovers. Name the specific suspected food and explain why it's suspect.
-2. RECOVERY DIET: What to eat NOW and for the next 24-48 hours. Be specific — name easy-to-digest Indian foods (khichdi, plain rice, curd rice, banana, coconut water, moong dal soup, sabudana khichdi, plain roti with ghee). No protein targets, no calorie goals today.
-3. WHAT TO COMPLETELY AVOID: Name specific foods from their usual diet (paneer, rajma, chana, raw salads, milk, heavy dals, fried foods) that will worsen symptoms. When to return to normal eating.
-
-If stomach pain is logged, use its region and how long it has lasted: relate the region to likely causes (e.g. upper-middle = acidity/gastritis, left side/navel = gas, upper-right after oily food = gallbladder), and clearly tell them to see a doctor if it is severe, worsening, lasting over 2-3 days, lower-right with fever/vomiting, or with blood.
-
-Be direct and medically grounded. Protein and fat loss goals are paused — recovery is the only priority.`;
-      } else {
-        // ── NORMAL coaching mode ─────────────────────────────────────────
-        prompt=`You are a nutrition and gut health coach. Give 3 focused, honest coaching sentences about TODAY (${TODAY}).
-
-USER CONTEXT:
-- Goal: ${{lose:'Fat loss',maintain:'Maintain weight, get fitter',gain:'Build muscle'}[profile.goal]||'Fat loss'}, ${GOALS.calories.min}-${GOALS.calories.max} kcal/day, ${GOALS.protein.target}g protein/day, ${fmtN(WALK_GOAL.day)} steps/day, ${fmtL(WATER_GOAL.ml)} water/day, sleep 7–9 h${currentBF?`; body fat ${currentBF}% (goal ${BF_GOAL[0]}-${BF_GOAL[1]}%)`:''}${latestWeight?`; weight ${latestWeight.w} kg`:''}
-- Indian diet (rotis, dal, sabji, dahi, paneer, etc.)
-- It is now ${fmtTime(Date.now())}; the day is not over.
-
-EVERYTHING LOGGED TODAY, in time order (every meal, drink, walk, workout, sleep, weigh-in and feeling; walks were recorded with GPS, found from the phone's steps or added by hand):
-${dayLog(TODAY,painSince)}
-
-YESTERDAY, EVERYTHING LOGGED:
-${dayLog(ydKey)}
-${ydGasRisk.length>0?`Yesterday had gas-risk foods: ${ydGasRisk.join(', ')} — may still be causing discomfort today`:''}
-
-RECENT SYMPTOMS LOGGED:
-${recentSymptomsText||'None logged'}
-${hasSevereYesterday&&!todaySyms.length?`NOTE: yesterday's symptoms were NOT logged again today, so they may have settled. Do not re-analyse yesterday's meals or triggers — this insight is about TODAY. Just judge whether today's meals were gentle enough for someone recovering, naming any heavy, oily or spicy items.\n`:''}
-GAS-RISK FOODS TODAY: ${gasRiskToday.length>0?gasRiskToday.join(', '):'None flagged'}
-${painSince?'\n'+TIMING_RULE+'\n':''}
-Use ALL of the logs above, not just the meals: weigh food against everything burned (walks, everyday steps, workout), and let sleep, water and feelings shape the advice. Only mention things that were actually logged.
-
-Give exactly 3 sentences:
-1. Nutritional quality + protein/calorie assessment today (mention specific foods), taking today's activity and calories burned into account
-2. Gut/body pattern: if illness signs are logged (feverish, cold, sore throat, cough, body ache, headache), first consider a viral infection or getting run-down (poor sleep, stress, hard training) rather than food — suggest rest, fluids, warm light meals and skipping intense workouts until better, and to see a doctor if fever is 102 °F+ or lasts over 3 days. Otherwise: if gas-risk foods eaten today OR yesterday, call them out by name. If symptoms logged recently, connect to specific foods. If stomach pain is logged, use its region and duration (e.g. upper-middle = acidity, left side/navel = gas, upper-right after oily food = gallbladder); if it has lasted over 2-3 days or is severe, say plainly to see a doctor.
-3. One concrete actionable suggestion for next meal or tomorrow.
-
-Be specific, mention actual food names, be direct.`;
-      }
-
-      const text=await callAI(prompt,500);
-      setAiInsight(text||'Could not load insight.');
-    }catch(e){console.error('Coach failed:',e);setAiInsight(`Couldn’t get the coach’s advice${(e&&e.message?': '+e.message.replace(/\.$/,''):'')}.`);}
-    setInsightLoading(false);
-  }
-
-  async function fetchInsightForDate(dk, entries){
-    if(!buildTimeline(dk).length) return;
-    setShowDayInsight(p=>({...p,[dk]:true}));
-    setDayInsights(p=>({...p,[dk]:{text:'',loading:true}}));
-    try{
-      const macros=entries.reduce((a,e)=>{const m=entryMacros(e);return{cal:a.cal+m.cal,pro:a.pro+m.pro,carbs:a.carbs+m.carbs};},{cal:0,pro:0,carbs:0});
-      const dayPain=(symptomLog[dk]||[]).filter(s=>s.id==='pain').map(s=>s.since||s.ts);
-      const painSince=dayPain.length?Math.min(...dayPain):null;
-      const log=sortByMealTime(entries).map(e=>{const m=entryMacros(e);return `${e.mealType} (${mealTag(e,painSince)}): ${e.food} (${rnd(m.cal)}kcal, ${rnd(m.pro)}g P)`;}).join('\n');
-      const syms=(symptomLog[dk]||[]).map(s=>symptomText(s,dk)).join(', ');
-      const SEVERE=['loose','nausea','vomit'];
-      const hasSevere=(symptomLog[dk]||[]).some(s=>SEVERE.includes(s.id)||(s.id==='pain'&&s.level==='severe'));
-      let prompt;
-      if(hasSevere){
-        prompt=`Gut health recovery coach. User had ${(symptomLog[dk]||[]).some(s=>s.id==='loose')?'loose motion':(symptomLog[dk]||[]).some(s=>s.id==='pain')?'stomach pain':'nausea'} on ${dk}.\nEverything logged that day, in time order:\n${dayLog(dk,painSince)}\nThe day before:\n${dayLog(calAddDays(dk,-1))}\nSymptoms: ${syms||'none'}\n${painSince?TIMING_RULE+'\n':''}\n3 sentences: 1. Most likely food trigger from this day's log. 2. What to eat for recovery. 3. What to avoid. Be specific, name actual foods.`;
-      } else {
-        prompt=`Health and nutrition coach. Review this whole day (${dk}). Everything logged, in time order — every meal, drink, walk (GPS-recorded, found from phone steps or added by hand), workout, sleep, weigh-in and feeling:\n${dayLog(dk,painSince)}\nUse all of it, not just the meals: weigh food against what was burned, and let sleep, water and feelings shape the advice. Only mention what was logged.\n${painSince?TIMING_RULE+'\n':''}${(symptomLog[dk]||[]).some(s=>ILLNESS_IDS.includes(s.id))?'Illness signs were logged (fever/cold/aches): weigh infection, poor sleep and stress against food, and favour rest, fluids and light meals.\n':''}Goal: ${{lose:'fat loss',maintain:'maintain weight, get fitter',gain:'build muscle'}[profile.goal]||'fat loss'}, ${GOALS.calories.min}-${GOALS.calories.max} kcal, ${GOALS.protein.target}g protein, ${fmtN(WALK_GOAL.day)} steps, Indian diet.\n3 sentences: 1. How well this day (food and activity together) aligned with the goal. 2. Biggest gap or win. 3. One specific improvement.`;
-      }
-      const text=await callAI(prompt,400);
-      setDayInsights(p=>({...p,[dk]:{text:text||'No insight.',loading:false}}));
-    }catch(e){console.error('Coach failed:',e);setDayInsights(p=>({...p,[dk]:{text:`Couldn’t get the coach’s advice${(e&&e.message?': '+e.message.replace(/\.$/,''):'')}.`,loading:false}}));}
-  }
 
   /* ═══ FITNESS ACTIONS ═══ */
   function toggleEx(exId){
@@ -2763,14 +2613,19 @@ Be specific, mention actual food names, be direct.`;
   /* ═══════════════════════════════════════════════════════
      RENDER: DIET HISTORY
   ═══════════════════════════════════════════════════════ */
-  /* ═══ FITNESS DAY INSIGHT ═══ */
-  async function fetchDayInsight(date,dayInfo,sug,dl,customActs){
-    setDayInsightLoading(true);
+  /* ═══ THE DAY'S COACH: one full review of a day, shown the same on Home, Food and Fitness ═══ */
+  async function fetchDayInsight(date){
+    if(!buildTimeline(date).length&&!(dietGrouped[date]||[]).length)return;
+    setShowDayInsight(p=>({...p,[date]:true}));
+    setDayInsightLoading(date);
     try{
+      const isT=date===TODAY,dk=o=>calAddDays(date,o);
+      const {info:dayInfo,sug}=daySug(date);
+      const dl=fitLogs[date]||{},customActs=dl._custom||[];
       const weekNum=getWeekNum(date);
       const phase=weekNum<=4?1:weekNum<=8?2:3;
 
-      // Build exercise summary
+      // Workout: planned exercises and what was done
       const exSummary=sug?.exercises.map(ex=>{
         const exL=dl[ex.id]||{};
         const setLog=exL.setLog||[];
@@ -2781,17 +2636,10 @@ Be specific, mention actual food names, be direct.`;
         }
         return `${ex.name} — ${exL.sets||ex.sets} sets × ${exL.reps||ex.reps} ${ex.unit}${exL.weight?` @ ${exL.weight}${exL.weightUnit||'kg'}`:''}${isDone?' ✓':' (not done)'}`;
       }).join('\n')||'No exercises planned';
-
-      // Custom activities
       const customStr=customActs?.length>0
         ?customActs.map(a=>`${a.name||'Unnamed'}: ${a.sets.map((s,i)=>`Set${i+1} ${s.reps}reps${s.weight?` @${s.weight}${s.wUnit}`:'(BW)'}`).join(', ')}`).join('\n')
         :'None';
-
-      // Today's diet
-      const dietDay=dietGrouped[date]||[];
-      const dietStr=dietDay.length>0
-        ?`${dietDay.reduce((s,e)=>s+(e.calories||0),0)}kcal, ${dietDay.reduce((s,e)=>s+(e.protein||0),0)}g protein`
-        :'Not logged yet';
+      const hasWorkout=!!(sug?.exercises?.length||customActs.length);
 
       // Walks for this day + last-7-day averages for comparison
       const asM=w=>{const pace=w.min&&w.km?w.min/w.km:null;return{min:w.min,steps:w.steps,km:w.km,pace,speed:pace?60/pace:null,cadence:w.cadence,
@@ -2801,8 +2649,7 @@ Be specific, mention actual food names, be direct.`;
         `${m.steps?`, ${m.steps} steps`:''}${m.km?`, ${m.km.toFixed(2)} km`:''}`+
         `${m.pace?`, pace ${fmtPace(m.pace)} min/km, speed ${m.speed.toFixed(1)} km/h`:''}${m.cadence?`, cadence ${Math.round(m.cadence)} steps/min`:''}${m.stride?`, stride ${Math.round(m.stride)} cm`:''}`+
         `${m.jogs.length?`, including ${m.jogs.length} short jog${m.jogs.length>1?'s':''} (${fmtDur(m.jogSec)} in total, up to ${Math.max(...m.jogs.map(j=>j.kmh)).toFixed(1)} km/h)`:''}, ~${w.kcal} kcal`;
-      const prevDays=Array.from({length:7},(_,i)=>calAddDays(date,-(i+1)));
-      const prev=prevDays.flatMap(d=>moveDay(d).walks.map(asM)).filter(m=>m&&m.pace);
+      const prev=Array.from({length:7},(_,i)=>dk(-(i+1))).flatMap(d=>moveDay(d).walks.map(asM)).filter(m=>m&&m.pace);
       const avg=f=>prev.length?prev.reduce((a,m)=>a+(m[f]||0),0)/prev.filter(m=>m[f]).length:null;
       const dayTot=moveDay(date);
       const walksStr=wm.length
@@ -2810,46 +2657,75 @@ Be specific, mention actual food names, be direct.`;
           (prev.length?`\nLast 7 days (${prev.length} timed walks): avg pace ${fmtPace(avg('pace'))} min/km, avg speed ${avg('speed').toFixed(1)} km/h${avg('cadence')?`, avg cadence ${Math.round(avg('cadence'))} steps/min`:''}${avg('stride')?`, avg stride ${Math.round(avg('stride'))} cm`:''}`:'\nNo earlier timed walks to compare with.')
         :'No walks logged';
 
-      const prompt=`You are a fitness coach reviewing a single workout session. Be specific, direct and practical.
+      // Gut and feelings: when pain started, the days before, symptoms over 3 days
+      const painStarts=[-2,-1,0].flatMap(o=>(symptomLog[dk(o)]||[]).filter(s=>s.id==='pain').map(s=>s.since||s.ts));
+      const painSince=(symptomLog[date]||[]).some(s=>s.id==='pain')&&painStarts.length?Math.min(...painStarts):null;
+      const meals=d=>sortByMealTime(dietGrouped[d]||[]);
+      const isSevere=s=>['loose','nausea','vomit'].includes(s.id)||(s.id==='pain'&&s.level==='severe');
+      const daySyms=symptomLog[date]||[],ydSyms=symptomLog[dk(-1)]||[];
+      const severe=daySyms.some(isSevere),severeYd=ydSyms.some(isSevere);
+      const loose=daySyms.some(s=>s.id==='loose')||ydSyms.some(s=>s.id==='loose');
+      const recentSyms=[-2,-1,0].map(o=>{const k=dk(o),s=symptomLog[k]||[];
+        return s.length?`${o===0?'That day':o===-1?'The day before':'2 days before'}: ${s.map(x=>symptomText(x,k)).join(', ')}`:null;}).filter(Boolean).join('\n');
+      const gasDay=meals(date).filter(e=>e.gasRisk).map(e=>e.food),gasYd=meals(dk(-1)).filter(e=>e.gasRisk).map(e=>e.food);
+      const twoBefore=severe?meals(dk(-2)).map(e=>`${e.mealType} (${mealTag(e,painSince)}): ${e.food}${e.gasRisk?' [GAS-RISK]':''}`).join('\n'):'';
+      const hasMeals=meals(date).length>0;
+      const bodyLogged=!!(sleepLog[date]||waterDesc(date)||weightLog[date]||daySyms.length);
+
+      const foodRule=severe
+        ?`RECOVERY MODE: ${loose?'loose motion (diarrhea)':daySyms.some(s=>s.id==='pain'&&s.level==='severe')?'severe stomach pain':'nausea/vomiting'} was logged that day. Protein and fat-loss goals are paused; recovery is the only priority. Use the rating "🩹 Recovering". food_insight has 3 parts: (1) the most likely trigger food(s), only from meals eaten BEFORE the symptoms began (the trigger can be 12-36 hours earlier): consider outside food, reheated food, raw vegetables, high-fibre food, dairy, oily or spicy food, uncooked sprouts, street food, stale leftovers; name the food and say why it's suspect. (2) What to eat now and for the next 24-48 hours: easy Indian foods (khichdi, plain rice, curd rice, banana, coconut water, moong dal soup, sabudana khichdi, plain roti with ghee); no protein or calorie targets. (3) What to avoid completely (e.g. paneer, rajma, chana, raw salads, milk, heavy dals, fried food) and when to return to normal eating. focus_next and recovery_tip are about recovering, not training; say to skip hard workouts until better.`
+        :`food_insight: 4-5 sentences. (1) Calories and protein against the targets, naming the actual foods${isT?' (the day is not over, so judge what is left to eat)':''}, weighed against what was burned (walks, everyday steps, workout). (2) What was carb-heavy, protein-light or well balanced, and why it matters for the goal. (3) Gut check: call out gas-risk foods from that day or the day before by name, and connect any logged symptoms to specific foods.${severeYd&&!daySyms.length?' The day before had bad gut symptoms that were NOT logged again, so they may have settled: just judge whether the meals were gentle enough for someone recovering, naming any heavy, oily or spicy items.':''} (4) One concrete swap or addition for ${isT?'the next meal':'a day like this'}, with Indian foods and amounts.`;
+
+      const prompt=`You are a health coach reviewing one whole day (${date}${isT?`, today; it is now ${fmtTime(Date.now())} and the day is not over`:''}): food, walks, workout, sleep, water and how they felt. Be specific, direct and practical; name actual foods and numbers. Only mention things that were actually logged.
 
 USER CONTEXT:
+- Goal: ${{lose:'Fat loss',maintain:'Maintain weight, get fitter',gain:'Build muscle'}[profile.goal]||'Fat loss'}${currentBF?`, ${currentBF}% → ${BF_GOAL[0]}-${BF_GOAL[1]}% body fat`:''}${profile.targetKg?`, goal weight ${profile.targetKg} kg`:targetWeightAt18?`, ${targetWeightAt24}-${targetWeightAt18} kg target`:''}${profile.gender?`, ${profile.gender==='female'?'woman':profile.gender==='male'?'man':'adult'}`:''}${bodySaved?`, age ${bodyMeasure.age}`:''}${latestWeight?`, weight ${latestWeight.w} kg`:''}
+- Daily targets: ${GOALS.calories.min}-${GOALS.calories.max} kcal, ${GOALS.protein.target} g protein, ${fmtN(WALK_GOAL.day)} steps, ${fmtL(WATER_GOAL.ml)} water, sleep 7-9 h
+- Indian diet (rotis, dal, sabji, dahi, paneer, etc.)
 - Week ${weekNum} of 12-week plan (Phase ${phase}: ${phase===1?'Foundation — learning movements':phase===2?'Progression — adding weight':'Strength — pushing limits'})
-- Goal: ${{lose:'Fat loss',maintain:'Maintain weight, get fitter',gain:'Build muscle'}[profile.goal]||'Fat loss'}${currentBF?`, ${currentBF}% → ${BF_GOAL[0]}-${BF_GOAL[1]}% body fat`:''}${profile.targetKg?`, goal weight ${profile.targetKg} kg`:targetWeightAt18?`, ${targetWeightAt24}-${targetWeightAt18} kg target`:''}${profile.gender?`, ${profile.gender==='female'?'woman':profile.gender==='male'?'man':'adult'}`:''}${bodySaved?`, age ${bodyMeasure.age}`:''}
-- Daily targets: ${GOALS.calories.min}-${GOALS.calories.max} kcal, ${GOALS.protein.target}g protein, ${fmtN(WALK_GOAL.day)} steps
 
 EVERYTHING LOGGED THAT DAY, in time order (meals with macros, drinks, walks, workout, sleep, weigh-in, feelings) and totals:
-${dayLog(date)}
+${dayLog(date,painSince)}
 
-TODAY'S WORKOUT (${dayInfo?.label||'session'}):
+THE DAY BEFORE, EVERYTHING LOGGED:
+${dayLog(dk(-1),painSince)}
+${twoBefore?`\nMEALS 2 DAYS BEFORE (a gut trigger can be 12-36 hours earlier):\n${twoBefore}\n`:''}
+SYMPTOMS LOGGED (last 3 days): ${recentSyms?'\n'+recentSyms:'none'}
+GAS-RISK FOODS: that day ${gasDay.length?gasDay.join(', '):'none'}; the day before ${gasYd.length?gasYd.join(', '):'none'}
+${painSince?TIMING_RULE+'\n':''}
+WORKOUT PLAN THAT DAY (${dayInfo?.label||'session'}):
 ${exSummary}
+EXTRA ACTIVITIES: ${customStr}
 
-EXTRA ACTIVITIES:
-${customStr}
-
-SLEEP THE NIGHT BEFORE (goal 7–9 h; short or broken sleep means lower recovery): ${sleepText(sleepLog[date])||'not logged'}
-WATER THAT DAY: ${waterDesc(date)||'not logged'}
-
-PACED WALKS (these count as the day's walking cardio — treadmill/incline/easy-walk items above are marked done when a walk was logged) (plan: 2 walks a day, each ~${fmtN(WALK_GOAL.steps)} steps / ${WALK_GOAL.km} km / ${WALK_GOAL.min} min; ${fmtN(WALK_GOAL.day)} steps a day):
+PACED WALKS (these count as the day's walking cardio; treadmill/incline/easy-walk items above are marked done when a walk was logged) (plan: 2 walks a day, each ~${fmtN(WALK_GOAL.steps)} steps / ${WALK_GOAL.km} km / ${WALK_GOAL.min} min; ${fmtN(WALK_GOAL.day)} steps a day):
 ${walksStr}
-
 Walking reference: brisk = ~100+ steps/min and 5-6 km/h (pace 10-12 min/km); ~4 km/h is easy strolling.
+
+RULES:
+${foodRule}
+Illness: if illness signs are logged (fever, cold, sore throat, cough, body ache, headache), first consider a viral infection or being run-down (poor sleep, stress, hard training) rather than food: suggest rest, fluids, warm light meals and skipping intense workouts until better, and a doctor if fever is 102 °F+ or lasts over 3 days.
+Stomach pain: use its region and how long it has lasted (upper-middle = acidity/gastritis, left side or navel = gas, upper-right after oily food = gallbladder); say plainly to see a doctor if it is severe, worsening, lasting over 2-3 days, lower-right with fever or vomiting, or with blood.
 
 Give a JSON response ONLY (no markdown):
 {
-  "rating": "💪 Strong"|"✅ Solid"|"⚠️ Light"|"🎯 Getting started",
-  "summary": "<2 sentences: what went well today, counting walks, everyday steps and the day's food, sleep and water as part of training and recovery>",
-  "walk_insight": ${wm.length?`"<4-6 sentences, like a running coach reading a watch: (1) what today's walks were: distance, stride and pace (write pace as m:ss min/km with km/h in brackets); if a walk's time wasn't logged, say you can't judge its pace. (2) compare with the last 7 days' averages (pace, km/h, steps/min, stride). (3) read cadence against speed: high cadence with slow speed means short, quick steps; long stride with low cadence means overstriding. (4) mention any short jogs and what they add. (5) give concrete targets: a pace in m:ss min/km with km/h, a cadence (steps/min) and a stride tip, and how to split the walks against the plan (e.g. two brisk 30-minute walks instead of one long easy one).>"`:'null'},
-  "top_win": "<the single best thing about this session, specific>",
-  "focus_next": "<one specific thing to improve or push next session>",
-  "recovery_tip": "<practical recovery tip for tonight/tomorrow based on what was trained>"
+  "rating": "💪 Strong"|"✅ Solid"|"⚠️ Light"|"🎯 Getting started"|"🩹 Recovering",
+  "summary": "<2-3 sentences: the whole day at a glance (food, movement, sleep and water together) against the goal>",
+  "food_insight": ${hasMeals?'"<as in RULES>"':'null'},
+  "walk_insight": ${wm.length?`"<4-6 sentences, like a running coach reading a watch: (1) what the walks were: distance, stride and pace (write pace as m:ss min/km with km/h in brackets); if a walk's time wasn't logged, say you can't judge its pace. (2) compare with the last 7 days' averages (pace, km/h, steps/min, stride). (3) read cadence against speed: high cadence with slow speed means short, quick steps; long stride with low cadence means overstriding. (4) mention any short jogs and what they add. (5) give concrete targets: a pace in m:ss min/km with km/h, a cadence (steps/min) and a stride tip, and how to split the walks against the plan (e.g. two brisk 30-minute walks instead of one long easy one).>"`:'null'},
+  "workout_insight": ${hasWorkout?'"<2-3 sentences: which planned exercises were done or skipped (sets, reps, weight), what that means for this week of the plan, and whether the food that day fuelled it>"':'null'},
+  "body_insight": ${bodyLogged?'"<2-3 sentences: sleep, water, weight and feelings or symptoms: what they mean for recovery and the goal; follow the illness and stomach-pain rules>"':'null'},
+  "top_win": "<the single best thing about the day, specific>",
+  "focus_next": "<one specific thing to do next: ${isT?'the next meal or the rest of today':'next time, on a day like this'}>",
+  "recovery_tip": "<practical tip for tonight and tomorrow: food, sleep, water or rest, based on the whole day>"
 }`;
 
-      const raw=await callAI(prompt,wm.length?1100:600,'smart',true);
+      const raw=await callAI(prompt,1800,'smart',true);
       const parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());
-      setDayInsight(prev=>({...prev,[date]:{...parsed,_walks:wm.length>0}}));
+      if(!parsed||!parsed.summary)throw new Error('the reply came back without a review; try ↻ again');
+      setDayInsight(p=>({...p,[date]:{...parsed,_at:Date.now()}}));
     }catch(err){
-      console.error('Workout review failed:',err);
-      setDayInsight(prev=>({...prev,[date]:{error:`Couldn’t get the workout review${err&&err.message?': '+err.message.replace(/\.$/,''):''}.`}}));
+      console.error('Coach failed:',err);
+      setDayInsight(p=>({...p,[date]:{error:`Couldn’t get the coach’s review${err&&err.message?': '+err.message.replace(/\.$/,''):''}.`}}));
     }
     setDayInsightLoading(false);
   }
@@ -3701,30 +3577,47 @@ Reply ONLY with valid JSON (no markdown):
       </Tag>);
   }
 
+  // The day's coach card, the same on Home, Food, Food history and Fitness
   function renderCoach(day){
-    const es=dietGrouped[day]||[];
-    if(!es.length&&!buildTimeline(day).length)return null;
-    const isT=day===TODAY;
-    const open=isT?(showInsight&&insightDay===TODAY):!!showDayInsight[day];
-    const loading=isT?insightLoading:dayInsights[day]?.loading;
-    const text=isT?aiInsight:dayInsights[day]?.text;
-    const run=()=>isT?fetchInsight():fetchInsightForDate(day,es);
+    if(!(dietGrouped[day]||[]).length&&!buildTimeline(day).length)return null;
+    const isT=day===TODAY,ins=dayInsight[day],loading=dayInsightLoading===day;
+    const open=!!showDayInsight[day]&&(loading||!!ins);
+    const ask=()=>ins&&!ins.error?setShowDayInsight(p=>({...p,[day]:true})):fetchDayInsight(day);
     if(!open)return(
-      <button className="x-card" onClick={run} style={{display:'flex',alignItems:'center',gap:14}}>
+      <button className="x-card" onClick={ask} style={{display:'flex',alignItems:'center',gap:14}}>
         <Shape kind="flower" size={50} fill="var(--pri-c)" color="var(--pri)">🧠</Shape>
         <span style={{flex:1,minWidth:0}}><span style={{display:'block',fontWeight:820,fontSize:16}}>Ask the coach</span>
-          <span className="x-sub">How {isT?'today':'this day'} is going and what to eat next</span></span>
+          <span className="x-sub">A full review of {isT?'today':'this day'}: food, walks, workout, sleep and water</span></span>
         <Ico d={ICON.right} size={26} style={{color:'var(--pri)'}}/>
       </button>);
+    const walks=moveDay(day).walks;
+    const sec=(label,cls,text,extra)=>text&&(
+      <div key={label} className={'x-card '+(cls==='plain'?'':cls)} style={{padding:'12px 14px',borderRadius:20,...(cls==='plain'?{background:'var(--s3)'}:{})}}>
+        <div className="x-eyebrow" style={{color:'inherit',marginBottom:6}}>{label}</div>{extra}
+        <div className="t-reading" style={{color:'var(--fg)'}}>{text}</div></div>);
     return(
       <div className="x-card sb" style={{background:'var(--s2)'}}>
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
           <Shape kind="flower" size={40} fill="var(--pri-c)" color="var(--pri)">🧠</Shape>
-          <span className="x-eyebrow" style={{flex:1,color:'var(--pri)'}}>Coach · {isT?'today':dateNice(day)}</span>
-          <button className="x-ibtn sm" aria-label="Refresh" onClick={run} disabled={loading}>↻</button>
-          <button className="x-ibtn sm" aria-label="Close" onClick={()=>isT?setShowInsight(false):setShowDayInsight(p=>({...p,[day]:false}))}>✕</button>
+          <span style={{flex:1,minWidth:0}}><span className="x-eyebrow" style={{display:'block',color:'var(--pri)'}}>Coach · {isT?'today':dateNice(day)}</span>
+            {ins&&ins._at&&!loading&&<span className="x-sub" style={{fontSize:12}}>as of {fmtTime(ins._at)}{isT?' · ↻ for the latest':''}</span>}</span>
+          <button className="x-ibtn sm" aria-label="Refresh" onClick={()=>fetchDayInsight(day)} disabled={loading}>↻</button>
+          <button className="x-ibtn sm" aria-label="Close" onClick={()=>setShowDayInsight(p=>({...p,[day]:false}))}>✕</button>
         </div>
-        <div className="t-reading" style={{color:'var(--fg)'}}>{loading?<i style={{color:'var(--pri)'}}>Thinking…</i>:renderMD(text||'')}</div>
+        {loading?<i className="t-reading" style={{color:'var(--pri)'}}>Thinking… reading everything logged</i>
+        :ins.error?<div style={{color:'var(--err)',fontWeight:650}}>{ins.error}</div>
+        :<div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <div className="x-num" style={{fontSize:22}}>{ins.rating}</div>
+          <div className="t-reading" style={{color:'var(--fg2)'}}>{ins.summary}</div>
+          {sec('🍽️ Food','amber',ins.food_insight)}
+          {sec('🚶 Walks','mint',ins.walk_insight,walks.length>0&&<div className="x-chips" style={{marginBottom:6}}>{walks.map(w=>
+            <span key={w.id} className="x-tag" style={{background:'var(--bg)',color:'inherit'}}>{w.emoji} {w.name} · {fmtN(w.steps)} steps{w.cadence?` · ${w.cadence} spm`:''}</span>)}</div>)}
+          {sec('💪 Workout','plain',ins.workout_insight)}
+          {sec('😴 Sleep, water & feeling','pink',ins.body_insight)}
+          {sec('🏆 Top win','pri',ins.top_win)}
+          {sec(isT?'🎯 Next':'🎯 Next time','plain',ins.focus_next)}
+          {sec('🌙 Recovery','violet',ins.recovery_tip)}
+        </div>}
       </div>);
   }
 
@@ -4285,7 +4178,7 @@ Reply ONLY with valid JSON (no markdown):
               <div className="x-chips" style={{padding:'4px 16px 16px'}}>
                 <button className="x-chip pri" onClick={()=>openFood(dk,'Breakfast')}>+ Food</button>
                 <button className="x-chip" onClick={()=>openFeel(dk)}>+ Feeling</button>
-                {!showDayInsight[dk]&&<button className="x-chip" onClick={()=>fetchInsightForDate(dk,es)}>🧠 Coach</button>}
+                {!showDayInsight[dk]&&<button className="x-chip" onClick={()=>dayInsight[dk]&&!dayInsight[dk].error?setShowDayInsight(p=>({...p,[dk]:true})):fetchDayInsight(dk)}>🧠 Coach</button>}
                 {pending&&<button className="x-chip amber" disabled={splittingDays[dk]} onClick={()=>splitDay(dk,es)}>{splittingDays[dk]?'Working…':'⚡ Break down macros'}</button>}
               </div>
             </article>);
@@ -4295,31 +4188,6 @@ Reply ONLY with valid JSON (no markdown):
   }
 
   /* ═══ FITNESS ═══ */
-  function renderSessionInsight(date,info,sug,dl){
-    const ins=dayInsight[date];
-    return(
-      <div className="x-card" style={{background:'var(--s2)'}}>
-        <div style={{display:'flex',alignItems:'center',gap:12}}>
-          <Shape kind="flower" size={46} fill="var(--violet-c)" color="var(--violet)">🤖</Shape>
-          <div style={{flex:1,minWidth:0}}><div style={{fontWeight:820,fontSize:16}}>Session insight</div><div className="x-sub">AI review of the workout and walks</div></div>
-          <button className="x-btn sm" disabled={dayInsightLoading} onClick={()=>fetchDayInsight(date,info,sug,dl,fitLogs[date]?._custom||[])}>{dayInsightLoading?'Thinking…':ins?'Again':'Analyse'}</button>
-        </div>
-        {ins?.error&&<div style={{color:'var(--err)',marginTop:10,fontWeight:650}}>{ins.error}</div>}
-        {ins&&!ins.error&&(<div style={{marginTop:14,display:'flex',flexDirection:'column',gap:8}}>
-          <div className="x-num" style={{fontSize:22}}>{ins.rating}</div>
-          <div className="t-reading" style={{color:'var(--fg2)'}}>{ins.summary}</div>
-          {ins.walk_insight&&<div className="x-card mint" style={{padding:'12px 14px',borderRadius:20}}>
-            <div className="x-eyebrow" style={{color:'var(--on-mint-c)',marginBottom:6}}>🚶 Walks</div>
-            <div className="x-chips" style={{marginBottom:6}}>{moveDay(date).walks.map(w=>
-              <span key={w.id} className="x-tag" style={{background:'var(--bg)',color:'var(--on-mint-c)'}}>{w.emoji} {w.name} · {fmtN(w.steps)} steps{w.cadence?` · ${w.cadence} spm`:''}</span>)}</div>
-            <div className="t-reading" style={{color:'var(--fg)'}}>{ins.walk_insight}</div></div>}
-          {[['🏆 Top win',ins.top_win,'pri'],['🎯 Next session',ins.focus_next,'amber'],['🌙 Recovery',ins.recovery_tip,'violet']].map(([l,t,c])=>t&&(
-            <div key={l} className={`x-card ${c}`} style={{padding:'12px 14px',borderRadius:20}}>
-              <div className="x-eyebrow" style={{color:'inherit',marginBottom:4}}>{l}</div>
-              <div className="t-reading" style={{color:'var(--fg)'}}>{t}</div></div>))}
-        </div>)}
-      </div>);
-  }
 
   function renderFitDay(){
     const date=selectedDate,isT=date===TODAY;
@@ -4419,7 +4287,7 @@ Reply ONLY with valid JSON (no markdown):
             <Ico d={ICON.right} size={22} style={{color:'var(--fg3)'}}/></button>);})}</div>}
         <button className="x-btn outline wide" onClick={()=>{const id=newActivity('',[{reps:'',weight:'',wUnit:'kg'}]);openSheet('activity',{date,actId:id});}}>+ Add an activity</button>
 
-        {renderSessionInsight(date,info,sug,dl)}
+        {renderCoach(date)}
 
         <div className="x-card" style={{background:'var(--s2)'}}>
           <div className="x-eyebrow" style={{marginBottom:8}}>Session notes</div>

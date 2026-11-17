@@ -5,6 +5,10 @@
     },
     {
       "text": "Top speed on walks and hikes now counts only a speed you kept up for at least 10 seconds, so a GPS jump no longer shows a 22 km/h top speed on a walk."
+    },
+    {
+      "text": "One coach everywhere: Ask the coach on Home, Food, Food history and Fitness now gives the same full review of the day, with sections for food, walks, workout, and sleep, water & feeling, plus a top win, what to do next and recovery. It keeps the gut and illness checks, and a review you already asked for opens straight away (↻ gets a fresh one).",
+      "img": "docs/whatsnew/coach-full.png"
     }
   ],
   "releases": [
