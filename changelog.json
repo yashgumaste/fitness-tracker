@@ -1,17 +1,22 @@
 {
-  "unreleased": [
-    {
-      "text": "Walk and hike charts: the height line no longer starts with a big jump. GPS height is often far off for the first few seconds, so those heights are now left out, and single wrong readings are smoothed away, so climb and descent come out closer to the real thing. This fixes walks you've already recorded too."
-    },
-    {
-      "text": "Top speed on walks and hikes now counts only a speed you kept up for at least 10 seconds, so a GPS jump no longer shows a 22 km/h top speed on a walk."
-    },
-    {
-      "text": "One coach everywhere: Ask the coach on Home, Food, Food history and Fitness now gives the same full review of the day, with sections for food, walks, workout, and sleep, water & feeling, plus a top win, what to do next and recovery. It keeps the gut and illness checks, and a review you already asked for opens straight away (↻ gets a fresh one).",
-      "img": "docs/whatsnew/coach-full.png"
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.26",
+      "date": "2026-11-18",
+      "items": [
+        {
+          "text": "Walk and hike charts: the height line no longer starts with a big jump. GPS height is often far off for the first few seconds, so those heights are now left out, and single wrong readings are smoothed away, so climb and descent come out closer to the real thing. This fixes walks you've already recorded too."
+        },
+        {
+          "text": "Top speed on walks and hikes now counts only a speed you kept up for at least 10 seconds, so a GPS jump no longer shows a 22 km/h top speed on a walk."
+        },
+        {
+          "text": "One coach everywhere: Ask the coach on Home, Food, Food history and Fitness now gives the same full review of the day, with sections for food, walks, workout, and sleep, water & feeling, plus a top win, what to do next and recovery. It keeps the gut and illness checks, and a review you already asked for opens straight away (↻ gets a fresh one).",
+          "img": "docs/whatsnew/coach-full.png"
+        }
+      ]
+    },
     {
       "version": "1.24",
       "date": "2026-11-17",
