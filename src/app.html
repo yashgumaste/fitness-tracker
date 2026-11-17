@@ -5821,7 +5821,7 @@ Reply ONLY with valid JSON (no markdown):
       if(hcT.workouts&&can('ExerciseSession'))Object.values(tracks).forEach(t=>{if(!t||localDate(new Date(t.start))<since)return;
         const mv=moveDay(localDate(new Date(t.start))).walks.find(w=>w.trackId===t.id);
         recs.push({type:'ExerciseSession',id:'track-'+t.id,start:t.start,end:t.end,exercise:t.kind==='hike'?'hiking':mv&&mv.kind==='run'?'running':'walking',title:mv?mv.name:t.kind==='hike'?'Hike':'Walk',
-          route:t.pts.map(p=>[t.start+p[0]*1000,p[1],p[2],p[3]])});
+          route:(h=>t.pts.map((p,i)=>[t.start+p[0]*1000,p[1],p[2],h[i]]))(t.altSrc==='baro'?t.pts.map(p=>p[3]):gpsHeight(t.pts))});
         if(can('Steps')&&t.steps>0)recs.push({type:'Steps',id:'trsteps-'+t.id,start:t.start,end:t.end,count:t.steps});
         if(can('Distance')&&mv)recs.push({type:'Distance',id:'trdist-'+t.id,start:t.start,end:t.end,meters:Math.round(mv.km*1000)});});
       if(hcT.weight&&can('Weight'))Object.entries(weightLog).forEach(([dk,v])=>{if(dk<since||!(+v>0))return;recs.push({type:'Weight',id:'weight-'+dk,time:new Date(dk+'T08:00:00').getTime(),kg:+v});});
