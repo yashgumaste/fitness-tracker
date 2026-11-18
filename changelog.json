@@ -1,5 +1,9 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "Recording a walk or hike: “🏃 Jogging” now shows about 3 seconds after you start jogging, instead of 15-20 seconds. The live steps-a-minute and “now” pace also react much faster, and Jogging stays on until you really slow down instead of flickering."
+    }
+  ],
   "releases": [
     {
       "version": "1.26",

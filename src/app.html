@@ -3699,7 +3699,7 @@ Reply ONLY with valid JSON (no markdown):
   function renderRecPage(){
     const r=rec||{state:'idle',pts:[]};const paused=r.state==='paused',running=r.state==='recording';
     const sec=(r.movingMs||0)/1000,km=(r.distanceM||0)/1000,pace=km>=0.02?sec/km:NaN,min=sec/60;
-    const cadAvg=r.steps&&min>=0.5?Math.round(r.steps/min):null,now=recNow(r.pts);
+    const cadAvg=r.steps&&min>=0.5?Math.round(r.steps/min):null,now=recNow(r.pts,r.spm);
     const gpsTxt=r.gps==='ok'?`GPS ±${Math.round(r.accuracy||0)} m`:r.gps==='lost'?'GPS signal lost':'Finding GPS…';
     const W=window.LMNative?.walk,hike=r.kind==='hike',what=hike?'hike':'walk',kind=hike?'hike':'walk';
     const kmh=sec>30&&km>0?km/(sec/3600):0,stride=r.steps>20&&km>0?km*100000/r.steps:null;
@@ -6010,13 +6010,27 @@ function RecClock({ms,at,running,size}){
   return <span className="x-num" style={{fontSize:size,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{a}<span style={{fontSize:size*0.42,opacity:.7}}>{b}</span></span>;
 }
 // what you're doing right now, from the last ~30 s of the route: cadence, speed, and whether it's a jog
-function recNow(pts){
-  if(!pts||pts.length<3)return{};
-  const L=pts[pts.length-1];let i=pts.length-1;while(i>0&&L[0]-pts[i-1][0]<=30000)i--;
-  const F=pts[i],dt=(L[0]-F[0])/1000;if(dt<10)return{};
-  let d=0;for(let k=i+1;k<pts.length;k++)d+=distM([pts[k-1][1],pts[k-1][2]],[pts[k][1],pts[k][2]]);
-  const kmh=d/dt*3.6,cad=L[6]!=null&&F[6]!=null?Math.round((L[6]-F[6])/(dt/60)):null;
-  return{kmh,cad,jogging:(cad!=null&&cad>=140)||(kmh>=7.5&&(cad==null||cad>=115))};
+// Live "now" numbers on the recording screen. Cadence comes from the step sensor's last 4 seconds (spm, from the
+// recorder), speed from the last ~10 s of GPS fixes, so jogging shows within a few seconds of speeding up.
+// Once jogging, it stays on until you clearly slow down, so it doesn't flicker.
+let _jogging=false;
+function recNow(pts,spm){
+  let cad=spm!=null?Math.round(spm):null,kmh=null;
+  if(pts&&pts.length>=2){
+    const L=pts[pts.length-1];
+    if(Date.now()-L[0]>6000)kmh=0;    // no new fix for a while: standing still
+    else{let i=pts.length-1;while(i>0&&L[0]-pts[i-1][0]<=10000)i--;
+      const dt=(L[0]-pts[i][0])/1000;
+      if(dt>=5){let d=0;for(let k=i+1;k<pts.length;k++)d+=distM([pts[k-1][1],pts[k-1][2]],[pts[k][1],pts[k][2]]);kmh=d/dt*3.6;}}
+    if(cad==null){   // phone without a step detector: the step counter over the last 30 s
+      let i=pts.length-1;while(i>0&&L[0]-pts[i-1][0]<=30000)i--;const F=pts[i],dt=(L[0]-F[0])/1000;
+      if(dt>=10&&L[6]!=null&&F[6]!=null)cad=Math.round((L[6]-F[6])/(dt/60));}
+  }
+  if(cad==null&&kmh==null)return{};
+  _jogging=_jogging
+    ?(cad!=null&&cad>=125)||(kmh!=null&&kmh>=6.8&&(cad==null||cad>=105))
+    :(cad!=null&&cad>=140)||(kmh!=null&&kmh>=7.5&&(cad==null||cad>=115));
+  return{kmh,cad,jogging:_jogging};
 }
 function RouteMap({pts,height=280,live=false,dark=true,round=28,jogs=[]}){
   const ref=useRef(null);const [w,setW]=useState(360);
