@@ -1,35 +1,40 @@
 {
-  "unreleased": [
-    {
-      "text": "Recording a walk or hike: “🏃 Jogging” now shows about 3 seconds after you start jogging (it used to take 15-20 seconds) and goes off about 3 seconds after you slow back to walking. The live steps-a-minute and “now” pace also react much faster, and Jogging no longer flickers on and off."
-    },
-    {
-      "text": "Recording a walk or hike: Pace, Speed and Cadence now show what you're doing right now in big, with your average for the walk underneath. When you're paused or standing still, the big number is your average and says so."
-    },
-    {
-      "text": "Recording a walk or hike: show as many big numbers as you like, not just 2. Big ones sit two to a row (an odd one out gets a whole row), and any number of small ones go below the map. Choose them under ⚙️ Layout.",
-      "img": "docs/whatsnew/rec-more-big.png"
-    },
-    {
-      "text": "After a walk or hike: new “How it went over time” charts for pace, speed, cadence and stride, minute by minute, each with its average. Tap a point for its value. This works for walks you've already recorded too.",
-      "img": "docs/whatsnew/walk-over-time.png"
-    },
-    {
-      "text": "Recording a walk or hike: Stride now also shows your current stride in big, with the walk's average underneath, like Pace, Speed and Cadence."
-    },
-    {
-      "text": "Water: each drink in the list now has an ✎ edit button. Change how much you drank and what time, then Save. Health Connect gets the corrected entry too.",
-      "img": "docs/whatsnew/water-edit.png"
-    },
-    {
-      "text": "New date picker in the app's own style, instead of Android's old grey calendar: the day in big type, quick picks like Yesterday and 2 days ago, and a month grid where days ahead are greyed out. Used for logging food on a past day and for the exact start of a symptom (with the clock-style time picker).",
-      "img": "docs/whatsnew/date-picker.png"
-    },
-    {
-      "text": "Opening the app: the logo on the loading screen now has the same size and spot as Android's opening logo, so it no longer jumps up and shrinks as the app loads. This takes effect from the second time you open the app after updating, once the app has measured where it sits on your screen."
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.28",
+      "date": "2026-11-19",
+      "items": [
+        {
+          "text": "Recording a walk or hike: “🏃 Jogging” now shows about 3 seconds after you start jogging (it used to take 15-20 seconds) and goes off about 3 seconds after you slow back to walking. The live steps-a-minute and “now” pace also react much faster, and Jogging no longer flickers on and off."
+        },
+        {
+          "text": "Recording a walk or hike: Pace, Speed and Cadence now show what you're doing right now in big, with your average for the walk underneath. When you're paused or standing still, the big number is your average and says so."
+        },
+        {
+          "text": "Recording a walk or hike: show as many big numbers as you like, not just 2. Big ones sit two to a row (an odd one out gets a whole row), and any number of small ones go below the map. Choose them under ⚙️ Layout.",
+          "img": "docs/whatsnew/rec-more-big.png"
+        },
+        {
+          "text": "After a walk or hike: new “How it went over time” charts for pace, speed, cadence and stride, minute by minute, each with its average. Tap a point for its value. This works for walks you've already recorded too.",
+          "img": "docs/whatsnew/walk-over-time.png"
+        },
+        {
+          "text": "Recording a walk or hike: Stride now also shows your current stride in big, with the walk's average underneath, like Pace, Speed and Cadence."
+        },
+        {
+          "text": "Water: each drink in the list now has an ✎ edit button. Change how much you drank and what time, then Save. Health Connect gets the corrected entry too.",
+          "img": "docs/whatsnew/water-edit.png"
+        },
+        {
+          "text": "New date picker in the app's own style, instead of Android's old grey calendar: the day in big type, quick picks like Yesterday and 2 days ago, and a month grid where days ahead are greyed out. Used for logging food on a past day and for the exact start of a symptom (with the clock-style time picker).",
+          "img": "docs/whatsnew/date-picker.png"
+        },
+        {
+          "text": "Opening the app: the logo on the loading screen now has the same size and spot as Android's opening logo, so it no longer jumps up and shrinks as the app loads. This takes effect from the second time you open the app after updating, once the app has measured where it sits on your screen."
+        }
+      ]
+    },
     {
       "version": "1.26",
       "date": "2026-11-18",
