@@ -6012,7 +6012,7 @@ function RecClock({ms,at,running,size}){
 // what you're doing right now, from the last ~30 s of the route: cadence, speed, and whether it's a jog
 // Live "now" numbers on the recording screen. Cadence comes from the step sensor's last 4 seconds (spm, from the
 // recorder), speed from the last ~10 s of GPS fixes, so jogging shows within a few seconds of speeding up.
-// Once jogging, it stays on until you clearly slow down, so it doesn't flicker.
+// Once jogging, it stays on until your steps clearly slow (about 3 s after you stop jogging), so it doesn't flicker.
 let _jogging=false;
 function recNow(pts,spm){
   let cad=spm!=null?Math.round(spm):null,kmh=null;
@@ -6027,8 +6027,9 @@ function recNow(pts,spm){
       if(dt>=10&&L[6]!=null&&F[6]!=null)cad=Math.round((L[6]-F[6])/(dt/60));}
   }
   if(cad==null&&kmh==null)return{};
+  // stop: steps a minute decide when the step sensor is there (it drops within ~3 s); without it, speed
   _jogging=_jogging
-    ?(cad!=null&&cad>=125)||(kmh!=null&&kmh>=6.8&&(cad==null||cad>=105))
+    ?(cad!=null?cad>=125:kmh!=null&&kmh>=6.8)
     :(cad!=null&&cad>=140)||(kmh!=null&&kmh>=7.5&&(cad==null||cad>=115));
   return{kmh,cad,jogging:_jogging};
 }
