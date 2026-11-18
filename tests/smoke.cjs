@@ -187,7 +187,13 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await p.evaluate(()=>localStorage.setItem('lm-ai-provider','gemini'));await tab(1);await expect('2 bowls cabbage rice');
     if(!(await p.evaluate(()=>window.__jsonMode)))throw new Error('Claude was not told to reply in JSON');});
   await step('Water',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Water');
-    await click('.x-sheet button','Glass');await expect('250 ml');await close();});
+    await click('.x-sheet button','Glass');await expect('250 ml');
+    // edit it: one step more and an hour earlier
+    await p.click('.x-sheet [aria-label^="Edit 250 ml"]');await W();await expect('Edit this drink');
+    await p.click('.x-sheet [aria-label="Edited drink: 50 ml more"]');await click('.x-sheet button','1 h ago');await click('.x-sheet button','Save');await W();
+    const row=await p.evaluate(()=>[...document.querySelectorAll('.x-sheet .x-item')].map(e=>e.innerText).find(t=>/300 ml/.test(t)&&/✎/.test(t))||'');
+    if(!/7:30\s*PM/i.test(row))throw new Error('edited drink should be 300 ml at 7:30 PM, got: '+row.replace(/\n/g,' '));
+    await close();});
   await step('Walk',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Add a walk');
     await expect('Start + duration');await p.fill('.x-sheet input[inputmode=numeric]','3500');await click('.x-sheet-foot button','Save walk');
     if(await p.$('.x-sheet'))throw new Error('walk panel did not close after saving');});

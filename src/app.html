@@ -5225,12 +5225,37 @@ Reply ONLY with valid JSON (no markdown):
           <button className="x-btn sm" onClick={()=>add(amt)} style={{background:'var(--sky)',color:'var(--bg)'}}>Add</button></>}
         </div>
         {list.length>0&&<><div className="x-eyebrow" style={{margin:'16px 2px 8px'}}>{date===TODAY?'Today':'That day'} · {list.length} drink{list.length===1?'':'s'}</div>
-          <div className="x-list">{list.slice().reverse().map(x=>(
-            <div key={x.ts} className="x-item" style={{minHeight:52}}>
-              <span style={{fontSize:20}}>{(DRINKS.find(dr=>dr[2]===x.ml)||['💧'])[0]}</span>
-              <span style={{flex:1}}><span className="t" style={{display:'block'}}>{fmtL(x.ml)}</span><span className="s">{fmt12(hmOf(x.ts))}</span></span>
+          <div className="x-list">{list.slice().reverse().map(x=>{const ed=d.edit&&d.edit.ts===x.ts?d.edit:null;
+            return(<React.Fragment key={x.ts}>
+            <div className="x-item" style={{minHeight:52,background:ed?'var(--s3)':undefined}}>
+              <span style={{fontSize:20}}>{(DRINKS.find(dr=>dr[2]===x.ml)||NAT_DRINKS.find(dr=>dr[2]===x.ml)||['💧'])[0]}</span>
+              <span style={{flex:1}}><span className="t" style={{display:'block'}}>{natWater&&waterWord(x.ml)!==fmtL(x.ml)?`${waterWord(x.ml)} · ${fmtL(x.ml)}`:fmtL(x.ml)}</span><span className="s">{fmt12(hmOf(x.ts))}</span></span>
+              <button className="x-ibtn sm" aria-label={`Edit ${fmtL(x.ml)} at ${fmt12(hmOf(x.ts))}`} aria-pressed={!!ed} onClick={()=>set({edit:ed?null:{ts:x.ts,ml:x.ml,hm:hmOf(x.ts)}})} style={{fontSize:16}}>✎</button>
               <button className="x-ibtn sm" aria-label={`Remove ${fmtL(x.ml)}`} onClick={()=>setWaterLog(p=>({...p,[date]:(p[date]||[]).filter(y=>y.ts!==x.ts)}))}>✕</button>
-            </div>))}</div></>}
+            </div>
+            {ed&&(()=>{const step=natWater?gulpMl:50,setE=f=>set({edit:{...ed,...f}});
+              const saveEdit=()=>{const nts=ed.hm===hmOf(ed.ts)?ed.ts:new Date(date+'T'+ed.hm+':00').getTime();
+                setWaterLog(p=>{const ex=(p[date]||[]).filter(y=>y.ts!==ed.ts);let t=nts;while(ex.some(y=>y.ts===t))t++;return{...p,[date]:[...ex,{ts:t,ml:ed.ml}]};});
+                set({edit:null});showToast(`💧 Changed to ${natWater?waterWord(ed.ml):fmtL(ed.ml)} at ${fmt12(ed.hm)}`,'var(--sky)');};
+              return(<div className="x-card" style={{background:'var(--s2)',display:'flex',flexDirection:'column',gap:10,padding:'14px'}}>
+                <b style={{fontSize:15}}>Edit this drink</b>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span className="t" style={{flex:1}}>Amount</span>
+                  <button className="x-ibtn" aria-label={`Edited drink: ${natWater?'1 gulp':'50 ml'} less`} onClick={()=>setE({ml:Math.max(step,ed.ml-step)})} style={{width:44,height:44,borderRadius:16,background:'var(--s4)',fontSize:22,fontWeight:800}}>−</button>
+                  <span style={{minWidth:96,textAlign:'center'}}><b className="x-num" style={{fontSize:18,display:'block'}}>{fmtL(ed.ml)}</b>
+                    {natWater&&waterWord(ed.ml)!==fmtL(ed.ml)&&<span className="s" style={{fontSize:12}}>{waterWord(ed.ml)}</span>}</span>
+                  <button className="x-ibtn tonal" aria-label={`Edited drink: ${natWater?'1 gulp':'50 ml'} more`} onClick={()=>setE({ml:Math.min(3000,ed.ml+step)})} style={{width:44,height:44,borderRadius:16,fontSize:22,fontWeight:800}}>+</button>
+                </div>
+                <div className="x-chips">{(natWater?NAT_DRINKS:DRINKS).map(([em,lab,ml])=><button key={lab} className={`x-chip${ed.ml===ml?' on':''}`} onClick={()=>setE({ml})}>{em} {natWater?lab:fmtL(ml)}</button>)}</div>
+                <div className="t">Drank at</div>
+                <TimePicker value={ed.hm} onChange={v=>setE({hm:v})}
+                  quick={date===TODAY?[['Now',hmOf(Date.now())],['30 min ago',hmOf(Date.now()-1800000)],['1 h ago',hmOf(Date.now()-3600000)],['2 h ago',hmOf(Date.now()-7200000)]]:[['Morning','08:00'],['Noon','12:00'],['Evening','18:00']]}/>
+                <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                  <button className="x-btn tonal sm" onClick={()=>set({edit:null})}>Cancel</button>
+                  <button className="x-btn sm" onClick={saveEdit} style={{background:'var(--sky)',color:'var(--bg)'}}>Save</button>
+                </div>
+              </div>);})()}
+            </React.Fragment>);})}</div></>}
       </>;
       foot=<button className="x-btn" onClick={close}>Done</button>;
     }

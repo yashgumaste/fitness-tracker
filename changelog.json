@@ -16,6 +16,10 @@
     },
     {
       "text": "Recording a walk or hike: Stride now also shows your current stride in big, with the walk's average underneath, like Pace, Speed and Cadence."
+    },
+    {
+      "text": "Water: each drink in the list now has an ✎ edit button. Change how much you drank and what time, then Save. Health Connect gets the corrected entry too.",
+      "img": "docs/whatsnew/water-edit.png"
     }
   ],
   "releases": [
