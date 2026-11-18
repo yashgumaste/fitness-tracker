@@ -1178,7 +1178,6 @@ function mealTag(e,painSince){
 const sortByMealTime=arr=>[...arr].sort((a,b)=>mealTime(a).ts-mealTime(b).ts);
 const TIMING_RULE='TIMING RULE: each meal shows when it was eaten relative to when the pain/symptom started. Meals marked "AFTER pain started" CANNOT have caused it — never blame them. Only consider meals eaten before the symptom began (for loose motion, up to ~36 hours before).';
 
-function toLocalInput(ts){const d=new Date(ts-new Date(ts).getTimezoneOffset()*60000);return d.toISOString().slice(0,16);}
 
 
 
@@ -1812,7 +1811,8 @@ function Spinner({size=8,color='var(--acc)'}){
 function App(){
   // Tab: 'diet' | 'fitness' | 'progress'
   const [tab,setTab]=useState('home');
-  const [sheet,setSheet]=useState(null);   // {type,...params} — the one bottom sheet
+  const [sheet,setSheet]=useState(null);
+  const [sinceEdit,setSinceEdit]=useState(null);   // which feeling's exact start time is being picked   // {type,...params} — the one bottom sheet
   const [draft,setDraft]=useState({});
   const [arm,setArm]=useState(false);      // delete armed
   const [homeDay,setHomeDay]=useState(null);
@@ -4986,8 +4986,16 @@ Reply ONLY with valid JSON (no markdown):
             <div className="x-chips">{PAIN_LEVELS.map(l=><button key={l.id} className={`x-chip${e.level===l.id?' on':''}`} onClick={()=>patch({level:e.level===l.id?null:l.id})}>{l.label}</button>)}</div>
             {lab('Started')}
             <div className="x-chips">{PAIN_SINCE.map(o=><button key={o.id} className={`x-chip${e.sinceOpt===o.id?' on':''}`} onClick={()=>patch(e.sinceOpt===o.id?{since:null,sinceOpt:null,relMeal:null}:{since:o.at(),sinceOpt:o.id,relMeal:null})}>{o.label}</button>)}</div>
-            <input type="datetime-local" className="x-field" style={{marginTop:8,fontSize:15}} value={e.since?toLocalInput(e.since):''} max={toLocalInput(Date.now())}
-              onChange={ev=>{const v=ev.target.value;patch(v?{since:new Date(v).getTime(),sinceOpt:'exact',relMeal:null}:{since:null,sinceOpt:null,relMeal:null});}}/>
+            <button className="x-item" onClick={()=>setSinceEdit(x=>x===date+e.id?null:date+e.id)} style={{marginTop:8,borderRadius:20,background:sinceEdit===date+e.id?'var(--s3)':'var(--s2)'}}>
+              <span style={{flex:1,minWidth:0}}><span className="s" style={{display:'block',margin:0}}>Exact start</span>
+                <b style={{fontSize:15}}>{e.since?`${dateNice(localDate(new Date(e.since)))}, ${fmt12(hmOf(e.since))}`:'Pick a day and time'}</b></span>
+              <span className="x-chip" style={{background:'var(--s4)'}}>{sinceEdit===date+e.id?'Done':'Change'}</span>
+            </button>
+            {sinceEdit===date+e.id&&(()=>{const cur=e.since||Date.now(),dk=localDate(new Date(cur)),hm=hmOf(cur);
+              const put=(k,t)=>{const ts=Math.min(Date.now(),new Date(k+'T'+t+':00').getTime());patch({since:ts,sinceOpt:'exact',relMeal:null});};
+              return(<><DatePicker value={dk} max={date} min={calAddDays(date,-14)} onChange={k=>put(k,hm)}
+                  quick={[[date===TODAY?'Today':'That day',date],['Day before',calAddDays(date,-1)]]}/>
+                <TimePicker value={hm} onChange={t=>put(dk,t)}/></>);})()}
             {e.since&&<div className="x-sub" style={{marginTop:6}}>{e.relMeal?`Started ${e.relMeal.rel} ${e.relMeal.food} · `:''}{fmtSince(e.since,date)} · about {sinceDuration(e.since)}</div>}
           </>}
           {e.id==='pain'&&<>
@@ -5050,7 +5058,16 @@ Reply ONLY with valid JSON (no markdown):
         close();};
       const keep=e=>e.preventDefault(); // tapping a chip must not close the keyboard
       body=<>
-        {!s.date&&<label className="x-lab" style={{marginBottom:14}}>Day<input type="date" className="x-field" max={TODAY} value={d.date||''} onChange={e=>set({date:e.target.value})}/></label>}
+        {!s.date&&<div style={{marginBottom:14}}>
+          <button className="x-item" onClick={()=>set({dateOpen:!d.dateOpen})} style={{borderRadius:24,background:d.dateOpen?'var(--s3)':'var(--s2)'}}>
+            <Shape kind="cookie12" size={40} fill="var(--pri-c)" color="var(--on-pri-c)" font={18}>📅</Shape>
+            <span style={{flex:1,minWidth:0}}><span className="s" style={{display:'block',margin:0}}>Day</span>
+              <span style={{fontFamily:'var(--font-ui)',fontStretch:'120%',fontWeight:850,fontSize:20}}>{d.date?dateNice(d.date):'Pick a day'}</span></span>
+            <span className="x-chip" style={{background:'var(--s4)'}}>{d.dateOpen?'Done':'Change'}</span>
+          </button>
+          {d.dateOpen&&<DatePicker value={d.date} max={TODAY} onChange={v=>set({date:v,dateOpen:false})}
+            quick={[['Yesterday',calAddDays(TODAY,-1)],['2 days ago',calAddDays(TODAY,-2)],['3 days ago',calAddDays(TODAY,-3)]]}/>}
+        </div>}
         <div className="x-chips" style={{marginBottom:14}}>{MEAL_TYPES.map(t=><button key={t} className={`x-chip${mealType===t?' on':''}`} onMouseDown={keep} onClick={()=>setMealType(t)}>{MEAL_ICONS[t]} {t}</button>)}</div>
         <textarea className="x-field" rows={4} autoFocus value={d.text||''} placeholder={`What did you have for ${mealType.toLowerCase()}? e.g. 2 chapati, dal, a bowl of curd`}
           onChange={e=>set({text:e.target.value})} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit();}}} style={{fontSize:17}}/>
@@ -6333,6 +6350,46 @@ function ColorPicker({initial,onApply,onCancel}){
 // ── Material 3 Expressive time picker: big HH : MM boxes, AM/PM, clock dial (drag or tap) ──
 const fmt12=hm=>{const [h,m]=hm.split(':').map(Number);return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`;};
 const hmOf=ms=>{const d=new Date(ms);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
+// Material 3 Expressive date picker, the same look as TimePicker: the chosen day in big type, quick chips,
+// then a month grid. Days after max (or before min) can't be picked. value/min/max are "YYYY-MM-DD".
+function DatePicker({value,onChange,min,max,quick=[]}){
+  const today=localDate(new Date());
+  const sel=value||max||today;
+  const [view,setView]=useState(()=>sel.slice(0,7));
+  useEffect(()=>{if(value)setView(value.slice(0,7));},[value]);
+  const [y,m]=view.split('-').map(Number);
+  const days=new Date(y,m,0).getDate(),lead=new Date(y,m-1,1).getDay();
+  const key=d=>`${view}-${String(d).padStart(2,'0')}`;
+  const shift=n=>{const d=new Date(y,m-1+n,1);setView(localDate(d).slice(0,7));};
+  const canPrev=!min||view>min.slice(0,7),canNext=!(max||today)||view<(max||'9999-12').slice(0,7);
+  const off=k=>(max&&k>max)||(min&&k<min);
+  const big=new Date(sel+'T00:00:00');
+  const nav=(n,ok,lab,ch)=><button className="x-ibtn" aria-label={lab} disabled={!ok} onClick={()=>shift(n)}
+    style={{width:44,height:44,borderRadius:16,background:'var(--s3)',opacity:ok?1:.35,fontSize:22,fontWeight:800}}>{ch}</button>;
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:12,padding:'16px 14px',borderRadius:32,background:'var(--s2)',marginTop:8}}>
+      <div style={{display:'flex',alignItems:'baseline',gap:10,padding:'0 4px'}}>
+        <span style={{fontFamily:'var(--font-ui)',fontStretch:'125%',fontWeight:850,fontSize:34,lineHeight:1.05,color:'var(--pri)'}}>
+          {big.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})}</span>
+        {sel===today&&<span className="x-sub" style={{fontWeight:750}}>today</span>}
+      </div>
+      {quick.length>0&&<div className="x-chips">{quick.map(([l,k])=><button key={l} className={`x-chip${k===value?' on':''}`} disabled={off(k)} onClick={()=>onChange(k)}>{l}</button>)}</div>}
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        {nav(-1,canPrev,'Previous month','‹')}
+        <b style={{flex:1,textAlign:'center',fontSize:17}}>{new Date(y,m-1,1).toLocaleDateString('en-IN',{month:'long',year:'numeric'})}</b>
+        {nav(1,canNext,'Next month','›')}
+      </div>
+      <div role="grid" aria-label="Days" style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,justifyItems:'center'}}>
+        {['S','M','T','W','T','F','S'].map((d,i)=><span key={'h'+i} style={{fontSize:12.5,fontWeight:800,color:'var(--fg3)',padding:'2px 0'}}>{d}</span>)}
+        {Array.from({length:lead},(_,i)=><span key={'b'+i}/>)}
+        {Array.from({length:days},(_,i)=>{const k=key(i+1),on=k===value,isT=k===today,no=off(k);
+          return(<button key={k} disabled={no} aria-label={new Date(k+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'})} aria-pressed={on}
+            onClick={()=>onChange(k)} style={{width:42,height:42,border:isT&&!on?'2px solid var(--pri)':'none',
+              borderRadius:on?14:21,background:on?'var(--pri)':'transparent',color:on?'var(--bg)':no?'var(--fg3)':'var(--fg)',opacity:no?.4:1,
+              fontWeight:on||isT?850:700,fontSize:15,fontVariantNumeric:'tabular-nums',transition:'border-radius .3s var(--spring), background .2s'}}>{i+1}</button>);})}
+      </div>
+    </div>);
+}
 function TimePicker({value,onChange,quick=[]}){
   const parse=v=>{const [h,m]=(v||'12:00').split(':').map(Number);return {h,m};};
   const [t,setT]=useState(()=>parse(value));

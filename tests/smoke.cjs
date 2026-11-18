@@ -80,7 +80,13 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await expect('Tester');});
   await step('Home loads',async()=>{await expect('Fuel');await expect('Timeline');});
   await step('Food today',async()=>{await tab(1);await expect('Breakfast');await expect('Water');});
-  await step('Food history',async()=>{await click('.x-seg button','History');await expect('kcal');await click('.x-seg button','Today');});
+  await step('Food history',async()=>{await click('.x-seg button','History');await expect('kcal');
+    // log for a past day: the app's own date picker, not the browser's
+    await click('.x-btn','Log food for a past day');await expect('8 Nov');
+    if(await p.$('.x-sheet input[type=date]'))throw new Error('the browser date field is back');
+    await click('.x-sheet button','Change');await expect('November 2026');
+    await click('.x-sheet button','2 days ago');await expect('7 Nov');await close();
+    await click('.x-seg button','Today');});
   await step('Fitness day',async()=>{await tab(2);await expect('Walks');await expect('Session notes');});
   for(const v of ['Day','Week','Month','Year'])
     await step('Fitness history '+v,async()=>{await click('.x-seg button','History');await click('.x-seg button',v);await expect('Workouts');});
