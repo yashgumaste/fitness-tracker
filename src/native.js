@@ -349,7 +349,14 @@
   function setIcon(v){wantIcon=/^#/.test(v||'')?iconFor(v):v;
     // remember the icon's colours so the next launch's loading screen matches Android's splash
     const h=(ICONS.find(x=>x[0]===wantIcon)||['cyan','#00FFFF'])[1];
-    try{localStorage.setItem('lm-boot',JSON.stringify({d:h,l:onWhite(h)}));}catch(_){}}
+    bootSave({d:h,l:onWhite(h)});}
+  // lm-boot: what the next launch's loading screen needs before the app has loaded (colours, where the logo goes)
+  function bootSave(f){try{const b=JSON.parse(localStorage.getItem('lm-boot')||'{}')||{};localStorage.setItem('lm-boot',JSON.stringify({...b,...f}));}catch(_){}}
+  // where the page sits on screen, so the loading screen's logo lands exactly where Android's splash logo was
+  async function bootGeometry(){
+    if(!AppIcon||!AppIcon.geometry)return;
+    try{const g=await AppIcon.geometry();if(g&&g.screenH>0)bootSave({top:+g.top.toFixed(1),sh:+g.screenH.toFixed(1)});}catch(_){}}
+  setTimeout(bootGeometry,1500);
 
   /* ── System bars follow the app theme ── */
   async function bars(light){

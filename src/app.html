@@ -748,8 +748,8 @@ input.m3-input{border-radius:999px;}
   <style>
     #splash{background:#000;--logo:#00FFFF}
     @media (prefers-color-scheme:light){#splash{background:#fff;--logo:#00A6A6}}
-    #splash-logo{position:absolute;left:50%;top:50%;width:124px;height:124px;transform:translate(-50%,-50%);fill:var(--logo)}
-    #splash-wave{position:absolute;left:50%;top:calc(50% + 112px);width:120px;height:12px;transform:translateX(-50%);overflow:hidden;opacity:0;animation:splashIn .4s ease .7s forwards}
+    #splash-logo{position:absolute;left:50%;top:50%;width:160px;height:160px;transform:translate(-50%,-50%);fill:var(--logo)}
+    #splash-wave{position:absolute;left:50%;top:calc(50% + 128px);width:120px;height:12px;transform:translateX(-50%);overflow:hidden;opacity:0;animation:splashIn .4s ease .7s forwards}
     #splash-wave path{fill:none;stroke-width:4;stroke-linecap:round}
     #splash-wave .tr{stroke:var(--logo);opacity:.22}
     #splash-wave .wv{stroke:var(--logo);stroke-dasharray:70 400;animation:splashRun 1.4s cubic-bezier(.4,0,.2,1) infinite}
@@ -758,7 +758,12 @@ input.m3-input{border-radius:999px;}
   </style>
   <script>(function(){try{var b=JSON.parse(localStorage.getItem('lm-boot')||'null');if(!b)return;
     var s=document.getElementById('splash').style,l=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches;
-    if(b.d&&!l)s.setProperty('--logo',b.d);if(b.l&&l)s.setProperty('--logo',b.l);}catch(e){}})();</script>
+    if(b.d&&!l)s.setProperty('--logo',b.d);if(b.l&&l)s.setProperty('--logo',b.l);
+    // Android centres its splash logo on the whole screen (and the icon's art sits 1.6 dp below centre);
+    // this page starts below the status bar, so move the logo to that same spot
+    if(b.sh>0&&b.top>=0&&Math.abs(innerHeight+b.top-b.sh)<200){var y=b.sh/2+1.6-b.top;
+      document.getElementById('splash-logo').style.top=y+'px';document.getElementById('splash-wave').style.top=(y+128)+'px';}
+  }catch(e){}})();</script>
 </div>
 <script src="vendor/react.production.min.js"></script>
 <script src="vendor/react-dom.production.min.js"></script>

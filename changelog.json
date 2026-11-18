@@ -24,6 +24,9 @@
     {
       "text": "New date picker in the app's own style, instead of Android's old grey calendar: the day in big type, quick picks like Yesterday and 2 days ago, and a month grid where days ahead are greyed out. Used for logging food on a past day and for the exact start of a symptom (with the clock-style time picker).",
       "img": "docs/whatsnew/date-picker.png"
+    },
+    {
+      "text": "Opening the app: the logo on the loading screen now has the same size and spot as Android's opening logo, so it no longer jumps up and shrinks as the app loads. This takes effect from the second time you open the app after updating, once the app has measured where it sits on your screen."
     }
   ],
   "releases": [
