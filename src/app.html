@@ -3715,9 +3715,12 @@ Reply ONLY with valid JSON (no markdown):
       time:['Time',null,'',r.start?`Started ${clockStr(r.start)}`:''],
       distance:['Distance',km.toFixed(2),'km',''],
       steps:['Steps',r.steps?fmtN(r.steps):'—','steps',''],
-      pace:['Pace',fmtPaceS(pace),'min/km',now.kmh>0.5?`now ${fmtPaceS(3600/now.kmh)}`:''],
-      speed:['Speed',kmh?kmh.toFixed(1):'—','km/h',now.kmh>0.5?`now ${now.kmh.toFixed(1)}`:''],
-      cadence:['Cadence',now.cad!=null?String(now.cad):cadAvg?String(cadAvg):'—','steps/min',cadAvg&&now.cad!=null?`avg ${cadAvg}`:''],
+      // pace, speed and cadence: what you're doing right now in big, the average underneath;
+      // when there's no "now" (paused, standing, GPS just starting) the average shows in big, marked as such
+      ...(()=>{const nk=running&&now.kmh>0.5?now.kmh:null,nc=running&&now.cad!=null?now.cad:null,hasP=isFinite(pace);
+        return{pace:nk?['Pace',fmtPaceS(3600/nk),'min/km',hasP?`avg ${fmtPaceS(pace)}`:'']:['Pace',fmtPaceS(pace),'min/km',hasP?'average':''],
+          speed:nk?['Speed',nk.toFixed(1),'km/h',kmh?`avg ${kmh.toFixed(1)}`:'']:['Speed',kmh?kmh.toFixed(1):'—','km/h',kmh?'average':''],
+          cadence:nc!=null?['Cadence',String(nc),'steps/min',cadAvg?`avg ${cadAvg}`:'']:['Cadence',cadAvg?String(cadAvg):'—','steps/min',cadAvg?'average':'']};})(),
       stride:['Stride',stride?String(Math.round(stride)):'—','cm a step',''],
       calories:['Calories',`~${fmtN(kcal)}`,'kcal',''],
       ...(hike?{climb:['Climb',`↑ ${Math.round(r.gainM||0)}`,'m',''],height:['Height',r.alt!=null?fmtN(r.alt):'—','m above sea','']}:{})};
