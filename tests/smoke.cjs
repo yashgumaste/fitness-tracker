@@ -112,7 +112,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     // a pretend GPS recorder: 25 minutes around a park
     await p.evaluate(()=>{window.LMNative.walk={available:()=>true,_st:'idle',_t0:0,_pts:[],
       async start(){this._st='recording';this._t0=Date.now()-25*60000;const c=[18.5204,73.8567];
-        this._pts=Array.from({length:120},(_,i)=>{const a=i/120*2*Math.PI;return[this._t0+i*12500,c[0]+0.004*Math.sin(a),c[1]+0.006*Math.cos(a)+i*0.00003,560+10*Math.sin(a*2),5];});return this.status(0);},
+        this._pts=Array.from({length:120},(_,i)=>{const a=i/120*2*Math.PI;return[this._t0+i*12500,c[0]+0.004*Math.sin(a),c[1]+0.006*Math.cos(a)+i*0.00003,560+10*Math.sin(a*2),5,null,i*27];});return this.status(0);},
       async status(from){return{state:this._st,start:this._t0,movingMs:25*60000,distanceM:2600,steps:3300,gps:'ok',accuracy:5,count:this._pts.length,from:from||0,points:this._pts.slice(from||0)};},
       async pause(){this._st='paused';return this.status(1e9);},async resume(){this._st='recording';return this.status(1e9);},
       async stop(){const s=await this.status(0);s.end=this._t0+26*60000;this._st='idle';return s;},async discard(){this._st='idle';}};});
@@ -129,6 +129,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await click('button','Pause');await expect('Resume');await click('button','Resume');
     await click('button','Finish');await expect('Finish this walk');await click('.x-btn','Save walk');await W(900);
     await expect('Pace for each km');await expect('Moving time');await expect('Elevation');
+    await expect('How it went over time');await expect('Cadence');await expect('Stride');await expect('higher = faster');
     if(!(await p.$('[aria-label="Route map"]')))throw new Error('no route map');
     await p.click('[aria-label="Back"]');await W();});
   await step('Record a hike',async()=>{

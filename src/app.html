@@ -968,7 +968,7 @@ function gpsHeight(pts){
   return alt;
 }
 function trackStats(pts,altSrc){
-  const out={dist:0,splits:[],gain:0,loss:0,profile:[],speed:[],maxKmh:0,hasAlt:false,maxAlt:null,minAlt:null,movingSec:0,climbSec:0,
+  const out={trend:[],dist:0,splits:[],gain:0,loss:0,profile:[],speed:[],maxKmh:0,hasAlt:false,maxAlt:null,minAlt:null,movingSec:0,climbSec:0,
     steepUp:0,steepDown:0,kcalPerKg:0,jogs:[],jogSec:0,jogM:0};
   if(!pts||pts.length<2)return out;
   const baro=altSrc==='baro',win=baro?2:6,band=baro?1.5:4;
@@ -1011,6 +1011,17 @@ function trackStats(pts,altSrc){
     if(out.hasAlt&&sm[i]!=null){while(u<i&&D[i]-D[u+1]>=200)u++;
       if(D[i]-D[u]>=200&&sm[u]!=null){const g=(sm[i]-sm[u])/(D[i]-D[u])*100;out.steepUp=Math.max(out.steepUp,g);out.steepDown=Math.min(out.steepDown,g);}}
   }
+  // how it went over time: speed, pace, steps a minute and stride over each last minute of moving time,
+  // ~60 samples across the walk; stretches with a pause or a long stop inside are left out
+  {out.trend=[];const every=Math.max(20,mt/60);let next=60;
+    for(let i=1,k=0;i<pts.length;i++){
+      if(T[i]<next)continue;next=T[i]+every;
+      while(k<i&&T[i]-T[k+1]>=60)k++;
+      const mv=T[i]-T[k],el=pts[i][0]-pts[k][0],m=D[i]-D[k];
+      if(mv<45||el>mv*1.5+10)continue;
+      const kmh=m/mv*3.6,steps=pts[i][4]!=null&&pts[k][4]!=null?pts[i][4]-pts[k][4]:null;
+      out.trend.push({x:Math.round(T[i]/60)+' min',kmh:+kmh.toFixed(1),pace:kmh>=1.5?3600/kmh:null,
+        cad:steps!=null&&steps>0?Math.round(steps/(el/60)):null,stride:steps!=null&&steps>=20&&m>=10?Math.round(m*100/steps):null});}}
   // short jogs inside a walk: 20-s stretches at 140+ steps/min, or 7.5+ km/h with a jogging rhythm; gaps under 15 s merge
   {const jog=pts.map((p,i)=>{let k=i;while(k>0&&p[0]-pts[k-1][0]<=20)k--;const dt=p[0]-pts[k][0];if(dt<8||T[i]-T[k]<dt*0.8)return false;
       const kmh=(D[i]-D[k])/dt*3.6,cad=p[4]!=null&&pts[k][4]!=null?(p[4]-pts[k][4])/(dt/60):null;
@@ -3721,7 +3732,9 @@ Reply ONLY with valid JSON (no markdown):
         return{pace:nk?['Pace',fmtPaceS(3600/nk),'min/km',hasP?`avg ${fmtPaceS(pace)}`:'']:['Pace',fmtPaceS(pace),'min/km',hasP?'average':''],
           speed:nk?['Speed',nk.toFixed(1),'km/h',kmh?`avg ${kmh.toFixed(1)}`:'']:['Speed',kmh?kmh.toFixed(1):'—','km/h',kmh?'average':''],
           cadence:nc!=null?['Cadence',String(nc),'steps/min',cadAvg?`avg ${cadAvg}`:'']:['Cadence',cadAvg?String(cadAvg):'—','steps/min',cadAvg?'average':'']};})(),
-      stride:['Stride',stride?String(Math.round(stride)):'—','cm a step',''],
+      // stride now: distance a minute ÷ steps a minute, from the same "now" speed and cadence
+      stride:(()=>{const ns=running&&now.kmh>0.5&&now.cad>=40?now.kmh/3.6*60/now.cad*100:null;
+        return ns?['Stride',String(Math.round(ns)),'cm a step',stride?`avg ${Math.round(stride)}`:'']:['Stride',stride?String(Math.round(stride)):'—','cm a step',stride?'average':''];})(),
       calories:['Calories',`~${fmtN(kcal)}`,'kcal',''],
       ...(hike?{climb:['Climb',`↑ ${Math.round(r.gainM||0)}`,'m',''],height:['Height',r.alt!=null?fmtN(r.alt):'—','m above sea','']}:{})};
     const lay={...REC_DEF[kind],...((prefs.recLayout||{})[kind]||{})};
@@ -3843,10 +3856,19 @@ Reply ONLY with valid JSON (no markdown):
           <h2 className="x-h2" style={{margin:0}}>Elevation</h2>
           <div className="x-sub" style={{fontSize:12.5,marginTop:-4}}>Height above sea level along the way · {fmtN(st.minAlt)}–{fmtN(st.maxAlt)} m{w.track.altSrc==='baro'?' (air-pressure sensor)':' (GPS height, approximate)'}</div>
           <LineChart points={st.profile.map(p=>({x:p.x+' km',y:p.y}))} color="var(--amber)" height={150} fmt={v=>v+' m'}/></div>}
-        {hike&&st.speed.length>=3&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:8}}>
-          <h2 className="x-h2" style={{margin:0}}>Speed</h2>
-          <div className="x-sub" style={{fontSize:12.5,marginTop:-4}}>km/h along the way (rests left out) · slower on the climbs</div>
-          <LineChart points={st.speed.map(p=>({x:p.x+' km',y:p.y}))} color="var(--mint)" height={120} fmt={v=>v+' km/h'}/></div>}
+        {gps&&(st.trend||[]).length>=4&&(()=>{const tr=st.trend,avg=f=>{const v=tr.map(x=>x[f]).filter(x=>x!=null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
+          const charts=[
+            ['⚡ Pace','min/km · higher = faster',tr.map(x=>({x:x.x,y:x.pace!=null?-x.pace/60:null})),'var(--pri)',v=>fmtPaceS(-v*60),st.dist>=50&&st.movingSec?fmtPaceS(st.movingSec/(st.dist/1000)):null],
+            ['🏎️ Speed','km/h',tr.map(x=>({x:x.x,y:x.kmh})),'var(--mint)',v=>v+' km/h',st.dist>=50&&st.movingSec?(st.dist/st.movingSec*3.6).toFixed(1)+' km/h':null],
+            ['🎵 Cadence','steps a minute',tr.map(x=>({x:x.x,y:x.cad})),'var(--sky)',v=>Math.round(v)+' spm',avg('cad')!=null?Math.round(avg('cad'))+' spm':null],
+            ['📏 Stride','cm a step',tr.map(x=>({x:x.x,y:x.stride})),'var(--violet)',v=>Math.round(v)+' cm',avg('stride')!=null?Math.round(avg('stride'))+' cm':null]];
+          return(<div className="x-card" style={{display:'flex',flexDirection:'column',gap:12}}>
+            <h2 className="x-h2" style={{margin:0}}>How it went over time</h2>
+            <div className="x-sub" style={{fontSize:12.5,marginTop:-8}}>Each point is the minute before it, by moving time{hike?'; slower on the climbs':''}. Tap a point for its value.</div>
+            {charts.filter(c=>c[2].filter(p=>p.y!=null).length>=3).map(([t,u,pts2,c,f,av])=><div key={t} style={{display:'flex',flexDirection:'column',gap:4}}>
+              <div style={{display:'flex',alignItems:'baseline',gap:8}}><b style={{fontSize:15}}>{t}</b><span className="x-sub" style={{fontSize:12,flex:1}}>{u}</span>{av&&<span style={{fontSize:12.5,fontWeight:750,color:'var(--fg2)'}}>avg {av}</span>}</div>
+              <LineChart points={pts2} color={c} height={100} fmt={f}/></div>)}
+          </div>);})()}
         <div className="x-grid2">{stats.map(([em,l,v,u])=><div key={l} className="x-stat"><small>{em} {l}</small><b>{v}</b><i>{u}</i></div>)}</div>
         {gps&&sp.length>0&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
           <h2 className="x-h2" style={{margin:0}}>{hike?'Each km: pace and climb':'Pace for each km'}</h2>

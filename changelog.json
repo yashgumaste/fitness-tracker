@@ -9,6 +9,13 @@
     {
       "text": "Recording a walk or hike: show as many big numbers as you like, not just 2. Big ones sit two to a row (an odd one out gets a whole row), and any number of small ones go below the map. Choose them under ⚙️ Layout.",
       "img": "docs/whatsnew/rec-more-big.png"
+    },
+    {
+      "text": "After a walk or hike: new “How it went over time” charts for pace, speed, cadence and stride, minute by minute, each with its average. Tap a point for its value. This works for walks you've already recorded too.",
+      "img": "docs/whatsnew/walk-over-time.png"
+    },
+    {
+      "text": "Recording a walk or hike: Stride now also shows your current stride in big, with the walk's average underneath, like Pace, Speed and Cadence."
     }
   ],
   "releases": [
