@@ -5,6 +5,10 @@
     },
     {
       "text": "Recording a walk or hike: Pace, Speed and Cadence now show what you're doing right now in big, with your average for the walk underneath. When you're paused or standing still, the big number is your average and says so."
+    },
+    {
+      "text": "Recording a walk or hike: show as many big numbers as you like, not just 2. Big ones sit two to a row (an odd one out gets a whole row), and any number of small ones go below the map. Choose them under ⚙️ Layout.",
+      "img": "docs/whatsnew/rec-more-big.png"
     }
   ],
   "releases": [

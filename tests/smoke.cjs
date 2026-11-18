@@ -119,7 +119,13 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);await click('.x-btn','Start a walk');await W(1500);
     await expect('Started');await expect('Now ');await expect('steps/min');
     if(await p.$('nav.dock-pill'))throw new Error('the floating island should be hidden while recording');
-    await click('.x-btn','Layout');await expect('Numbers on this screen');await click('.x-btn','Done');
+    await click('.x-btn','Layout');await expect('Numbers on this screen');
+    // more than 2 big numbers: Pace, Cadence and Calories join Time and Steps up top
+    for(const n of ['Pace','Cadence','Calories'])await p.evaluate(n=>{const row=[...document.querySelectorAll('div')].find(d=>d.children.length===4&&d.firstElementChild.textContent===n);row.querySelector('button').click();},n);
+    await W(300);
+    const bigs=await p.evaluate(()=>[...document.querySelectorAll('.x-eyebrow')].map(e=>e.textContent));
+    for(const n of ['Time','Steps','Pace','Cadence','Calories'])if(!bigs.some(t=>t.toLowerCase()===n.toLowerCase()))throw new Error(n+' is not big: '+bigs.join(', '));
+    await click('.x-btn','Done');
     await click('button','Pause');await expect('Resume');await click('button','Resume');
     await click('button','Finish');await expect('Finish this walk');await click('.x-btn','Save walk');await W(900);
     await expect('Pace for each km');await expect('Moving time');await expect('Elevation');
