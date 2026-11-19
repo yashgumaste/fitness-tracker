@@ -1,23 +1,28 @@
 {
-  "unreleased": [
-    {
-      "text": "Settings → About & updates now shows when the app was last updated and which app on your phone did it (for example an app store, or Android's installer if you opened an APK)."
-    },
-    {
-      "text": "Recording a walk or hike: every number has an icon next to its name (⏱️ Time, 👟 Steps, ⚡ Pace, 🎵 Cadence, 📏 Stride…), the same icons as the after-walk page. The name above and the line below each number now use the same text style, and every row is evenly spaced.",
-      "img": "docs/whatsnew/rec-icons.png"
-    },
-    {
-      "text": "The coach now plans tomorrow. When you ask for the day's review, it also sets reminders for the next day, each 15 minutes before your usual time: what to eat before breakfast, lunch, snack and dinner, your morning brisk walk (and a second walk when it asks for one), and a cheer to repeat something you did well. Its tips also show up in the water and move reminders. The review card lists what it set."
-    },
-    {
-      "text": "Morning walk reminder: if you usually walk in the morning, a nudge comes 15 minutes before your usual time (skipped once you've walked). Tapping 🚶 Start walk begins recording."
-    },
-    {
-      "text": "After dinner is logged and the day hasn't been reviewed yet, a reminder asks you to get the coach's review, so tomorrow's reminders can be set from it. Coach reviews are now also kept when the app is closed. Both switches are in Settings → Logging reminders, under “From the coach”."
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.31",
+      "date": "2026-11-20",
+      "items": [
+        {
+          "text": "Settings → About & updates now shows when the app was last updated and which app on your phone did it (for example an app store, or Android's installer if you opened an APK)."
+        },
+        {
+          "text": "Recording a walk or hike: every number has an icon next to its name (⏱️ Time, 👟 Steps, ⚡ Pace, 🎵 Cadence, 📏 Stride…), the same icons as the after-walk page. The name above and the line below each number now use the same text style, and every row is evenly spaced.",
+          "img": "docs/whatsnew/rec-icons.png"
+        },
+        {
+          "text": "The coach now plans tomorrow. When you ask for the day's review, it also sets reminders for the next day, each 15 minutes before your usual time: what to eat before breakfast, lunch, snack and dinner, your morning brisk walk (and a second walk when it asks for one), and a cheer to repeat something you did well. Its tips also show up in the water and move reminders. The review card lists what it set."
+        },
+        {
+          "text": "Morning walk reminder: if you usually walk in the morning, a nudge comes 15 minutes before your usual time (skipped once you've walked). Tapping 🚶 Start walk begins recording."
+        },
+        {
+          "text": "After dinner is logged and the day hasn't been reviewed yet, a reminder asks you to get the coach's review, so tomorrow's reminders can be set from it. Coach reviews are now also kept when the app is closed. Both switches are in Settings → Logging reminders, under “From the coach”."
+        }
+      ]
+    },
     {
       "version": "1.28",
       "date": "2026-11-19",
