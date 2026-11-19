@@ -1,5 +1,9 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "Settings → About & updates now shows when the app was last updated and which app on your phone did it (for example an app store, or Android's installer if you opened an APK)."
+    }
+  ],
   "releases": [
     {
       "version": "1.28",

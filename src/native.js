@@ -301,6 +301,8 @@
   }
   async function updateStatus(){if(!AppUpdate)return{state:'idle'};try{return await AppUpdate.status();}catch(_){return{state:'failed'};}}
   async function installUpdate(){if(AppUpdate)await AppUpdate.install();}
+  // which app installed / last updated this one, and when
+  async function installSource(){if(!AppUpdate||!AppUpdate.source)return null;try{return await AppUpdate.source();}catch(_){return null;}}
 
   /* What's new for a version: from the changelog on GitHub, else the release notes' bullet lines */
   const RAW='https://raw.githubusercontent.com/'+REPO+'/main/';
@@ -380,6 +382,6 @@
   window.LMNative={hc,provider,setProvider:p=>{try{localStorage.setItem('lm-ai-provider',p);}catch(_){}},hasFreeKey,
     setGeminiKey:async k=>{gemKeyCache=k||null;await kv.set('gemini_key',k||null);},hasGeminiKey:async()=>!!(await kv.get('gemini_key')),
 isNative,kv,ask,usage,MODELS,setKey:async k=>{keyCache=k||null;await kv.set('anthropic_key',k||null);},hasKey:async()=>!!(await apiKey()),
-    walk,drive,planLogs,testLog,clearLog,planWater,reminderExtras,testNotification,takeLoggedWater,planMove,testMove,shareBackup,openUrl,bars,setIcon,iconFor,logo:LOGO,checkUpdate,downloadUpdate,updateStatus,installUpdate,rawBase:RAW,version:'__APP_VERSION__',
+    walk,drive,planLogs,testLog,clearLog,planWater,reminderExtras,testNotification,takeLoggedWater,planMove,testMove,shareBackup,openUrl,bars,setIcon,iconFor,logo:LOGO,checkUpdate,downloadUpdate,updateStatus,installUpdate,installSource,rawBase:RAW,version:'__APP_VERSION__',
     releasesUrl:'https://github.com/'+REPO+'/releases/latest'};
 })();

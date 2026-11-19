@@ -5,6 +5,9 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.InstallSourceInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -60,6 +63,40 @@ public class AppUpdatePlugin extends Plugin {
     }
 
     /** Progress for the in-app bar: state = idle | downloading | done | failed, plus bytes. */
+    /**
+     * Which app installed this one, which app last updated it, and when (shown in Settings → About & updates).
+     * installer = installer of record (the last one to install or update it); initiator = the app that started
+     * that install; owner = the app Android lets update it without asking (Android 14+).
+     */
+    @PluginMethod
+    public void source(PluginCall call) {
+        JSObject r = new JSObject();
+        try {
+            PackageManager pm = getContext().getPackageManager();
+            String pkg = getContext().getPackageName();
+            PackageInfo pi = pm.getPackageInfo(pkg, 0);
+            r.put("installedAt", pi.firstInstallTime);
+            r.put("updatedAt", pi.lastUpdateTime);
+            if (Build.VERSION.SDK_INT >= 30) {
+                InstallSourceInfo s = pm.getInstallSourceInfo(pkg);
+                named(r, pm, "installer", s.getInstallingPackageName());
+                named(r, pm, "initiator", s.getInitiatingPackageName());
+                if (Build.VERSION.SDK_INT >= 34) named(r, pm, "owner", s.getUpdateOwnerPackageName());
+            } else {
+                named(r, pm, "installer", pm.getInstallerPackageName(pkg));
+            }
+        } catch (Exception e) {
+            r.put("error", String.valueOf(e.getMessage()));
+        }
+        call.resolve(r);
+    }
+
+    private void named(JSObject r, PackageManager pm, String key, String p) {
+        if (p == null) return;
+        r.put(key, p);
+        try { r.put(key + "Name", pm.getApplicationLabel(pm.getApplicationInfo(p, 0)).toString()); } catch (Exception e) { }
+    }
+
     @PluginMethod
     public void status(PluginCall call) {
         JSObject r = new JSObject();

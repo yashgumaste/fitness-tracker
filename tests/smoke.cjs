@@ -212,7 +212,10 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   await step('Coach',async()=>{await tab(1);await click('.x-card','Ask the coach');await W(600);await expect('Coach');await expect('🍽️ Food');await expect('Protein was low at lunch.');await expect('Add dal at dinner.');});
   await step('Free AI used by default',async()=>{const c=await p.evaluate(()=>window.__aiCalls);if(!c.some(u=>/generativelanguage/.test(u)))throw new Error('AI did not go to Gemini: '+c.join(','));});
   await step('Colour picker',async()=>{await tab(4);await click('.x-item','Theme & colour');await click('.x-btn','Make your own colour');for(const m of ['RGB','HSV','Hex'])await click('.x-seg button',m);await close();});
-  await step('Update check',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','About & updates');await click('.x-btn','Check for updates');await W(500);
+  await step('Update check',async()=>{await p.evaluate(()=>{window.LMNative.installSource=async()=>({installedAt:Date.parse('2026-11-01T10:00:00+05:30'),updatedAt:Date.parse('2026-11-09T01:58:00+05:30'),
+      installer:'com.google.android.packageinstaller',initiator:'dev.imranr.obtainium',initiatorName:'Obtainium'});});
+    await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','About & updates');await click('.x-btn','Check for updates');await W(500);
+    await expect('Last updated:');await expect('Obtainium (dev.imranr.obtainium)');await expect('Android’s installer');
     await expect('Version 99.1');await expect('Faster logging');await expect('Download & install');await expect('Previous versions');await expect('1.12');
     await p.click('[aria-label="Back to settings"]');});
   await step('Saved to storage',async()=>{await W(1200);const ok=await p.evaluate(()=>Object.keys(localStorage).some(k=>k.startsWith('fs:')));if(!ok)throw new Error('nothing was saved');});
