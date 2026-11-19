@@ -184,7 +184,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const items=await p.evaluate(()=>window.__planned||[]);const tags=items.filter(x=>x.kind==='nudge').map(x=>x.tag);
     for(const t of ['2026-11-10-Breakfast','2026-11-10-Dinner','2026-11-10-keep0','2026-11-10-walkPM'])if(!tags.includes(t))throw new Error('missing reminder '+t+'; got '+tags.join(', '));
     const b=items.find(x=>x.tag==='2026-11-10-Breakfast');if(!/boiled eggs/.test(b.body)||b.open!=='home'||b.icon!=='meal')throw new Error('breakfast tip is wrong: '+JSON.stringify(b));
-    const bt=new Date(b.at);if(!(bt.getHours()===8&&bt.getMinutes()===55))throw new Error('breakfast tip should be 15 min before the usual 9:10, at 8:55; got '+bt.toTimeString());
+    const bt=await p.evaluate(at=>{const d=new Date(at);return{h:d.getHours(),m:d.getMinutes(),s:d.toTimeString()};},b.at);if(!(bt.h===8&&bt.m===55))throw new Error('breakfast tip should be 15 min before the usual 9:10, at 8:55; got '+bt.s);
     await p.click('[aria-label="Close"]');await W();
   });
   await step('Reminder tapped: opens the right log',async()=>{await p.evaluate(()=>window.__lmLogOpen('sleep'));await W(600);await expect('How did you sleep?');await close();
