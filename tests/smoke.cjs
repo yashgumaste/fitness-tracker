@@ -127,9 +127,9 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     if(await p.$('nav.dock-pill'))throw new Error('the floating island should be hidden while recording');
     await click('.x-btn','Layout');await expect('Numbers on this screen');
     // more than 2 big numbers: Pace, Cadence and Calories join Time and Steps up top
-    for(const n of ['Pace','Cadence','Calories'])await p.evaluate(n=>{const row=[...document.querySelectorAll('div')].find(d=>d.children.length===4&&d.firstElementChild.textContent===n);row.querySelector('button').click();},n);
+    for(const n of ['Pace','Cadence','Calories'])await p.evaluate(n=>{const row=[...document.querySelectorAll('div')].find(d=>d.children.length===4&&d.firstElementChild.textContent.endsWith(n));row.querySelector('button').click();},n);
     await W(300);
-    const bigs=await p.evaluate(()=>[...document.querySelectorAll('.x-eyebrow')].map(e=>e.textContent));
+    const bigs=await p.evaluate(()=>[...document.querySelectorAll('[data-rec-big]')].map(e=>e.dataset.recBig));
     for(const n of ['Time','Steps','Pace','Cadence','Calories'])if(!bigs.some(t=>t.toLowerCase()===n.toLowerCase()))throw new Error(n+' is not big: '+bigs.join(', '));
     await click('.x-btn','Done');
     await click('button','Pause');await expect('Resume');await click('button','Resume');

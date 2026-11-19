@@ -3745,6 +3745,9 @@ Reply ONLY with valid JSON (no markdown):
         return ns?['Stride',String(Math.round(ns)),'cm a step',stride?`avg ${Math.round(stride)}`:'']:['Stride',stride?String(Math.round(stride)):'—','cm a step',stride?'average':''];})(),
       calories:['Calories',`~${fmtN(kcal)}`,'kcal',''],
       ...(hike?{climb:['Climb',`↑ ${Math.round(r.gainM||0)}`,'m',''],height:['Height',r.alt!=null?fmtN(r.alt):'—','m above sea','']}:{})};
+    const ICON_OF={time:'⏱️',distance:'📍',steps:'👟',pace:'⚡',speed:'🏎️',cadence:'🎵',stride:'📏',calories:'🔥',climb:'⛰️',height:'🏔️'};
+    const head=k=><>{ICON_OF[k]&&<span aria-hidden="true" style={{marginRight:6}}>{ICON_OF[k]}</span>}{M[k][0]}</>;
+    const subOf=k=>[M[k][2],M[k][3]].filter(Boolean).join(' · ');
     const lay={...REC_DEF[kind],...((prefs.recLayout||{})[kind]||{})};
     const big=lay.big.filter(k=>M[k]),small=lay.small.filter(k=>M[k]&&!big.includes(k));
     const val=(k,size)=>k==='time'?<RecClock ms={r.movingMs||0} at={r._at} running={running} size={size}/>
@@ -3772,25 +3775,24 @@ Reply ONLY with valid JSON (no markdown):
           <div className="x-sub" style={{fontSize:12.5}}>Pick as many big and small numbers as you like: big ones go two to a row, in the order you tap them. Saved for every {what} you record; {hike?'walks':'hikes'} keep their own layout.</div>
           {Object.keys(M).map(k=>{const at=big.includes(k)?'big':small.includes(k)?'small':'off';
             return(<div key={k} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0'}}>
-              <span style={{flex:1,fontWeight:750}}>{M[k][0]}</span>
+              <span style={{flex:1,fontWeight:750}}>{head(k)}</span>
               {[['big','Big'],['small','Small'],['off','Off']].map(([w,l])=><button key={w} className={`x-chip${at===w?' on':''}`} aria-pressed={at===w} onClick={()=>setLay(k,w)}>{l}</button>)}
             </div>);})}
         </div>}
         {/* big numbers two to a row; an odd one out gets the whole row */}
-        {big.length>0&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px 10px',padding:'6px 0 2px'}}>
-          {big.map((k,i)=>{const wide=big.length%2===1&&i===big.length-1;return(<div key={k} style={{gridColumn:wide?'1 / -1':undefined,minWidth:0,textAlign:'center'}}>
-            <div className="x-eyebrow" style={{color:'var(--fg2)'}}>{M[k][0]}</div>
-            <div style={{color:paused?'var(--fg2)':'var(--pri)',whiteSpace:'nowrap'}}>{val(k,wide?(big.length===1?88:72):k==='time'?50:58)}</div>
-            <div style={{fontWeight:800,color:'var(--fg2)',fontSize:14,marginTop:4}}>{M[k][2]}</div>
-            {M[k][3]&&<div style={{fontWeight:700,color:'var(--fg3)',fontSize:12.5}}>{M[k][3]}</div>}
+        {big.length>0&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'18px 10px',padding:'6px 0 2px'}}>
+          {big.map((k,i)=>{const wide=big.length%2===1&&i===big.length-1;return(<div key={k} data-rec-big={k} style={{gridColumn:wide?'1 / -1':undefined,minWidth:0,textAlign:'center'}}>
+            <div style={TILE_TXT}>{head(k)}</div>
+            <div style={{color:paused?'var(--fg2)':'var(--pri)',whiteSpace:'nowrap',height:wide?(big.length===1?88:72):58,display:'flex',alignItems:'center',justifyContent:'center',margin:'6px 0'}}>{val(k,wide?(big.length===1?88:72):k==='time'?50:58)}</div>
+            <div style={{...TILE_TXT,minHeight:18}}>{subOf(k)}</div>
           </div>);})}
         </div>}
         <RouteMap pts={r.pts.map(p=>[0,p[1],p[2]])} live height={big.length?220:290} dark={!isLight}/>
         {small.length>0&&<div className="x-grid3" style={{gap:8}}>
           {small.map((k,i)=><div key={k} className="x-card" style={{padding:'12px 8px',textAlign:'center',borderRadius:i%3===0?'28px 12px 12px 28px':i%3===2?'12px 28px 28px 12px':12}}>
-              <div style={{fontSize:12,fontWeight:750,color:'var(--fg2)'}}>{M[k][0]}</div>
-              <div style={{whiteSpace:'nowrap'}}>{val(k,k==='time'?20:24)}</div>
-              <div style={{fontSize:11,fontWeight:700,color:'var(--fg2)',minHeight:14}}>{[M[k][2],M[k][3]].filter(Boolean).join(' · ')}</div></div>)}
+              <div style={{...TILE_TXT,fontSize:12}}>{head(k)}</div>
+              <div style={{whiteSpace:'nowrap',height:26,display:'flex',alignItems:'center',justifyContent:'center',margin:'4px 0'}}>{val(k,k==='time'?20:24)}</div>
+              <div style={{...TILE_TXT,fontSize:12,minHeight:16}}>{subOf(k)}</div></div>)}
         </div>}
         {live&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:6,padding:'12px 14px'}}>
           <div className="x-eyebrow">Height so far</div>
@@ -6101,6 +6103,8 @@ function RecClock({ms,at,running,size}){
 // Live "now" numbers on the recording screen. Cadence comes from the step sensor's last 4 seconds (spm, from the
 // recorder), speed from the last ~10 s of GPS fixes, so jogging shows within a few seconds of speeding up.
 // Once jogging, it stays on until your steps clearly slow (about 3 s after you stop jogging), so it doesn't flicker.
+// recording screen: a number's heading and the line under it use the same type
+const TILE_TXT={fontSize:13.5,fontWeight:750,color:'var(--fg2)',lineHeight:1.3};
 let _jogging=false;
 function recNow(pts,spm){
   let cad=spm!=null?Math.round(spm):null,kmh=null;

@@ -2,6 +2,10 @@
   "unreleased": [
     {
       "text": "Settings → About & updates now shows when the app was last updated and which app on your phone did it (for example an app store, or Android's installer if you opened an APK)."
+    },
+    {
+      "text": "Recording a walk or hike: every number has an icon next to its name (⏱️ Time, 👟 Steps, ⚡ Pace, 🎵 Cadence, 📏 Stride…), the same icons as the after-walk page. The name above and the line below each number now use the same text style, and every row is evenly spaced.",
+      "img": "docs/whatsnew/rec-icons.png"
     }
   ],
   "releases": [
