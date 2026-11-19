@@ -25,6 +25,9 @@ import org.json.JSONObject
  * hands over a list of {at, kind, title, body}. When you log something, the app sends a new list,
  * so a reminder for a meal you already logged is dropped.
  * Tapping a reminder opens the app straight on the right log screen; "Later" asks again in 30 minutes.
+ * kind "nudge" is the coach's plan for the day (what to eat before a meal, a brisk walk, a good habit to keep,
+ * or "get tomorrow's plan" after dinner): it also carries tag (which nudge), open (what tapping opens) and
+ * icon ("meal", "walk", "star" or "coach").
  */
 @CapacitorPlugin(name = "LogReminder")
 class LogReminderPlugin : Plugin() {
@@ -63,7 +66,8 @@ class LogReminderPlugin : Plugin() {
     @PluginMethod
     fun clear(call: PluginCall) {
         val k = call.getString("kind", "") ?: ""
-        NotificationManagerCompat.from(context).cancel(Logs.noteId(k))
+        // "nudge:<tag>" clears one of the coach's nudges
+        NotificationManagerCompat.from(context).cancel(if (k.startsWith("nudge:")) Logs.nudgeId(k.removePrefix("nudge:")) else Logs.noteId(k))
         call.resolve()
     }
 
@@ -79,11 +83,13 @@ object Logs {
     const val EXTRA_KIND = "lm_log_kind"
     private const val CHANNEL = "logs"
     private const val ALARM_BASE = 9100
-    private const val MAX = 24
+    private const val MAX = 40
     private val KINDS = listOf("sleep", "Breakfast", "Lunch", "Snack", "Dinner", "bedtime")
 
     fun prefs(c: Context) = c.getSharedPreferences("log_reminder", Context.MODE_PRIVATE)
     fun noteId(kind: String) = 7500 + maxOf(0, KINDS.indexOf(kind))
+    fun nudgeId(tag: String) = 7520 + Math.floorMod(tag.hashCode(), 40)
+    fun idFor(o: JSONObject) = if (o.optString("kind") == "nudge") nudgeId(o.optString("tag")) else noteId(o.optString("kind"))
 
     private fun setExact(am: AlarmManager, at: Long, pi: PendingIntent) {
         try {
@@ -144,11 +150,13 @@ object Logs {
         val i = c.packageManager.getLaunchIntentForPackage(c.packageName) ?: return null
         i.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         i.putExtra(EXTRA_KIND, kind)
-        return PendingIntent.getActivity(c, noteId(kind), i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        // one request code per thing to open, so two reminders never swap where they lead
+        val code = if (kind in KINDS) noteId(kind) else 7600 + Math.floorMod(kind.hashCode(), 300)
+        return PendingIntent.getActivity(c, code, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
     private fun action(c: Context, o: JSONObject, what: String): PendingIntent =
-        PendingIntent.getBroadcast(c, noteId(o.optString("kind")) * 10 + (if (what == "later") 1 else 2),
+        PendingIntent.getBroadcast(c, idFor(o) * 10 + (if (what == "later") 1 else 2),
             Intent(c, LogActionReceiver::class.java).putExtra("what", what).putExtra("item", o.toString()),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
@@ -157,6 +165,7 @@ object Logs {
         if (!NotificationManagerCompat.from(c).areNotificationsEnabled()) return false
         val kind = o.optString("kind", "sleep"); val bed = kind == "bedtime"; val sleep = kind == "sleep" || bed
         val body = o.optString("body")
+        if (kind == "nudge") return postNudge(c, o, body)
         val n = NotificationCompat.Builder(c, CHANNEL)
             .setSmallIcon(Water.smallIcon(c)).setColor(if (sleep) 0xFFB39DDB.toInt() else 0xFFFFB74D.toInt())
             .setLargeIcon(Water.largeIcon(c, if (sleep) "ic_large_sleep" else "ic_large_meal"))
@@ -175,6 +184,31 @@ object Logs {
             .apply { if (kind == "Snack") addAction(0, "No snack", action(c, o, "skip")) }
             .build()
         return try { NotificationManagerCompat.from(c).notify(noteId(kind), n); true } catch (e: SecurityException) { false }
+    }
+
+    /** The coach's nudges: a tip before a meal, a brisk walk, a habit to keep, or "get tomorrow's plan". */
+    private fun postNudge(c: Context, o: JSONObject, body: String): Boolean {
+        val icon = o.optString("icon", "star"); val open = o.optString("open", "home")
+        val color = when (icon) { "meal" -> 0xFFFFB74D; "walk" -> 0xFF5CF2A6; "coach" -> 0xFF90CAF9; else -> 0xFFFFD54F }.toInt()
+        val n = NotificationCompat.Builder(c, CHANNEL)
+            .setSmallIcon(Water.smallIcon(c)).setColor(color)
+            .setLargeIcon(Water.largeIcon(c, "ic_large_$icon"))
+            .setContentTitle(o.optString("title"))
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(c, open))
+            .apply {
+                when (open) {
+                    "walk" -> addAction(0, "🚶 Start walk", openApp(c, "walk"))
+                    "coach" -> addAction(0, "🧠 Get my plan", openApp(c, "coach"))
+                    else -> addAction(0, "👍 Got it", action(c, o, "skip"))
+                }
+            }
+            .addAction(0, "⏰ Later", action(c, o, "later"))
+            .build()
+        return try { NotificationManagerCompat.from(c).notify(idFor(o), n); true } catch (e: SecurityException) { false }
     }
 
     /** "Later": ask again in 30 minutes. */
@@ -203,7 +237,7 @@ class LogAlarmReceiver : BroadcastReceiver() {
 class LogActionReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
         val o = try { JSONObject(i.getStringExtra("item") ?: "{}") } catch (e: Exception) { JSONObject() }
-        NotificationManagerCompat.from(c).cancel(Logs.noteId(o.optString("kind")))
+        NotificationManagerCompat.from(c).cancel(Logs.idFor(o))
         if (i.getStringExtra("what") == "later") Logs.snooze(c, o, System.currentTimeMillis() + 30 * 60_000L)
     }
 }

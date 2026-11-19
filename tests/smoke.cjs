@@ -47,7 +47,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
       if(/api\.github\.com/.test(String(u)))return{ok:true,status:200,json:async()=>({tag_name:'v99.1',html_url:'https://github.com/x/releases/v99.1',body:'**What\'s new**\n- Faster logging\n- Brighter charts',assets:[{name:'FitnessTracker-99.1.apk',browser_download_url:'https://github.com/x/FitnessTracker-99.1.apk'}]})};
       const body=o&&o.body?String(o.body):'';gem=/generativelanguage/.test(String(u));window.__aiCalls.push(String(u));
       if(/Split each meal/.test(body))return reply('[]');
-      if(/reviewing one whole day/.test(body))return reply(JSON.stringify({rating:'✅ Solid',summary:'A steady day.',food_insight:'Protein was low at lunch.',walk_insight:null,workout_insight:null,body_insight:'Slept well.',top_win:'Good sleep.',focus_next:'Add dal at dinner.',recovery_tip:'Drink water early.'}));
+      if(/reviewing one whole day/.test(body))return reply(JSON.stringify({rating:'✅ Solid',summary:'A steady day.',food_insight:'Protein was low at lunch.',walk_insight:null,workout_insight:null,body_insight:'Slept well.',top_win:'Good sleep.',focus_next:'Add dal at dinner.',recovery_tip:'Drink water early.',tomorrow:{Breakfast:'Protein first: 2 boiled eggs with 1 chapati.',Lunch:null,Snack:null,Dinner:'Dinner by 8 PM, half the rice.',walk_morning:'Aim for 11:30 min/km at 105 steps a minute.',walk_second:'A 20-minute brisk walk after tea.',keep:[{at:'Lunch',text:'Yesterday’s dal-and-sabji lunch was spot on. Same again?'}],water:'500 ml before 10 AM this time.',move:'Yesterday’s walk was great. Stand up and keep it rolling.'}}));
       // the free AI sometimes answers in words: first reply prose, the retry wraps JSON in a sentence
       if(/cabbage rice/.test(body)){window.__jsonMode=/responseMimeType|nutrition data API/.test(body);
         return reply(/not valid JSON/.test(body)?'Sure! {"emoji":"🍚","items":[{"name":"cabbage rice","calories":420,"protein":9,"carbs":70,"fat":11}]} Hope that helps.':'Cabbage is on the list, so the gas risk is high.');}
@@ -178,6 +178,15 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   await step('Logging reminders',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Logging reminders');
     await expect('Remind me this long after');await expect('Next ·');await click('.x-item','Snack');await click('.x-chip','1 h');
     await p.click('[aria-label="Back to settings"]');await W();});
+  await step('Coach plans tomorrow’s reminders',async()=>{
+    await p.evaluate(()=>{window.__planned=null;window.LMNative.planLogs=async items=>{window.__planned=items;return{ok:true,count:items.length,next:items[0]||null};};});
+    await tab(0);await p.evaluate(()=>window.__lmLogOpen('coach'));await W(2500);await expect('Reminders for');await expect('2 boiled eggs');
+    const items=await p.evaluate(()=>window.__planned||[]);const tags=items.filter(x=>x.kind==='nudge').map(x=>x.tag);
+    for(const t of ['2026-11-10-Breakfast','2026-11-10-Dinner','2026-11-10-keep0','2026-11-10-walkPM'])if(!tags.includes(t))throw new Error('missing reminder '+t+'; got '+tags.join(', '));
+    const b=items.find(x=>x.tag==='2026-11-10-Breakfast');if(!/boiled eggs/.test(b.body)||b.open!=='home'||b.icon!=='meal')throw new Error('breakfast tip is wrong: '+JSON.stringify(b));
+    const bt=new Date(b.at);if(!(bt.getHours()===8&&bt.getMinutes()===55))throw new Error('breakfast tip should be 15 min before the usual 9:10, at 8:55; got '+bt.toTimeString());
+    await p.click('[aria-label="Close"]');await W();
+  });
   await step('Reminder tapped: opens the right log',async()=>{await p.evaluate(()=>window.__lmLogOpen('sleep'));await W(600);await expect('How did you sleep?');await close();
     await p.evaluate(()=>window.__lmLogOpen('Lunch'));await W(600);
     const on=await p.evaluate(()=>[...document.querySelectorAll('.x-sheet .x-chip.on,.x-sheet [aria-pressed=true],.x-sheet .on')].map(e=>e.textContent).join('|'));

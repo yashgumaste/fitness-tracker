@@ -156,6 +156,11 @@ const MOON='M12.34,2.02C6.59,1.82 2,6.42 2,12c0,5.52 4.48,10 10,10c3.71,0 6.93,-
 const MEAL='M11,9H9V2H7v7H5V2H3v7c0,2.12 1.66,3.84 3.75,3.97V22h2.5v-9.03C11.34,12.84 13,11.12 13,9V2h-2V9zM16,6v8h2.5v8H21V2C18.24,2 16,4.24 16,6z';
 fs.writeFileSync(path.join(dr,'ic_large_sleep.xml'),big('#FFB39DDB','#FF21005D',MOON));
 fs.writeFileSync(path.join(dr,'ic_large_meal.xml'),big('#FFFFB74D','#FF3E2400',MEAL));
+// ...and for the coach's nudges: a star (keep a good habit going) and a light bulb (get the coach's plan)
+const STAR='M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z';
+const BULB='M9,21c0,0.55 0.45,1 1,1h4c0.55,0 1,-0.45 1,-1v-1H9v1zM12,2C8.14,2 5,5.14 5,9c0,2.38 1.19,4.47 3,5.74V17c0,0.55 0.45,1 1,1h6c0.55,0 1,-0.45 1,-1v-2.26c1.81,-1.27 3,-3.36 3,-5.74c0,-3.86 -3.14,-7 -7,-7z';
+fs.writeFileSync(path.join(dr,'ic_large_star.xml'),big('#FFFFD54F','#FF3E2E00',STAR));
+fs.writeFileSync(path.join(dr,'ic_large_coach.xml'),big('#FF90CAF9','#FF002F55',BULB));
 
 // Water reminders are posted by WaterReminderPlugin: alarm, notification-button and restart receivers
 m=fs.readFileSync(mf,'utf8');
