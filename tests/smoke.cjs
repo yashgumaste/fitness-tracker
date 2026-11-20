@@ -132,6 +132,11 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const bigs=await p.evaluate(()=>[...document.querySelectorAll('[data-rec-big]')].map(e=>e.dataset.recBig));
     for(const n of ['Time','Steps','Pace','Cadence','Calories'])if(!bigs.some(t=>t.toLowerCase()===n.toLowerCase()))throw new Error(n+' is not big: '+bigs.join(', '));
     await click('.x-btn','Done');
+    // leave the recording screen: a pinned pill at the top shows it's still going, and opens it again
+    await p.evaluate(()=>{const b=[...document.querySelectorAll('button')].find(b=>/^Back/.test(b.getAttribute('aria-label')||''));b&&b.click();});await W(1200);
+    const pill=await p.$('.top-pill.rec');if(!pill)throw new Error('no recording pill after leaving the recording screen');
+    if(!/Walk/.test(await pill.innerText())||!/km/.test(await pill.innerText()))throw new Error('recording pill text: '+await pill.innerText());
+    await pill.click();await W(600);if(await p.$('.top-pill.rec'))throw new Error('pill should hide on the recording screen');await expect('Started');
     await click('button','Pause');await expect('Resume');await click('button','Resume');
     await click('button','Finish');await expect('Finish this walk');await click('.x-btn','Save walk');await W(900);
     await expect('Pace for each km');await expect('Moving time');await expect('Elevation');

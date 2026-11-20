@@ -2,6 +2,10 @@
   "unreleased": [
     {
       "text": "About & updates: when the app was updated through Android's shell, it now says what that means (an app using Shizuku, or a computer over ADB) instead of just “Shell”."
+    },
+    {
+      "text": "A walk or hike being recorded now shows as a bright red pill pinned at the top of every page (with a blinking dot, distance and time), so it never scrolls away. Tap it to go back to the recording. “Version x is out” is a pinned pill on Home too, with ✕ to hide it.",
+      "img": "docs/whatsnew/rec-pill.png"
     }
   ],
   "releases": [

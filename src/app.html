@@ -648,6 +648,15 @@ input.m3-input{border-radius:999px;}
 .page-pad{padding-bottom:calc(var(--dock-h) + 40px + env(safe-area-inset-bottom,0px));}
 
 /* Floating dock: accent pill with icon tabs (active = black circle) + detached Log button */
+/* status pills pinned at the top: a walk being recorded, an update that's out */
+.top-pills{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:0;right:0;z-index:121;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:0 12px;pointer-events:none}
+.top-pill{pointer-events:auto;display:inline-flex;align-items:center;gap:8px;min-height:42px;padding:0 18px;border-radius:999px;border:none;font-weight:820;font-size:15px;font-variant-numeric:tabular-nums;box-shadow:0 6px 20px rgba(0,0,0,.35);white-space:nowrap}
+.top-pill.rec{background:var(--err);color:var(--on-err)}
+.top-pill.upd{background:var(--pri);color:var(--on-pri);padding:0 6px 0 16px}
+.top-pill .x{width:30px;height:30px;border-radius:15px;border:none;background:rgba(0,0,0,.18);color:inherit;font-weight:900;display:grid;place-items:center}
+.rec-dot{width:10px;height:10px;border-radius:5px;background:currentColor;animation:lm-blink 1.2s ease-in-out infinite}
+.rec-dot.paused{animation:none;opacity:.6}
+@keyframes lm-blink{0%,100%{opacity:1}50%{opacity:.25}}
 .dock{position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:120;pointer-events:none;height:64px;
   display:flex;justify-content:center;align-items:center;gap:10px;}
 .dock>*{pointer-events:auto;}
@@ -3209,6 +3218,27 @@ Reply ONLY with valid JSON (no markdown):
 
 
 
+  // Pinned at the top on every page: the walk or hike being recorded, and an update that's out (Home only)
+  function topPills(){
+    const out=[];
+    if(rec&&!recOpen)out.push('rec');
+    if(tab==='home'&&update&&!updSkipped)out.push('upd');
+    return out;
+  }
+  function renderTopPills(pills){
+    if(!pills.length)return null;
+    return(<div className="top-pills">
+      {pills.includes('rec')&&<button className="top-pill rec" onClick={()=>setRecOpen(true)} aria-label={`${rec.state==='paused'?'Paused':'Recording'} ${rec.kind==='hike'?'hike':'walk'}: open`}>
+        <span className={`rec-dot${rec.state==='paused'?' paused':''}`}/>
+        <span>{rec.state==='paused'?'Paused':rec.kind==='hike'?'🥾 Hike':'🚶 Walk'}</span>
+        <span style={{opacity:.9}}>{((rec.distanceM||0)/1000).toFixed(2)} km · {fmtDur((rec.movingMs||0)/1000)}{rec.kind==='hike'&&rec.gainM>=1?` · ↑ ${Math.round(rec.gainM)} m`:''}</span>
+      </button>}
+      {pills.includes('upd')&&<span className="top-pill upd" role="status">
+        <button onClick={()=>goSettings('app')} style={{border:'none',background:'none',color:'inherit',font:'inherit',padding:0}}>🎁 Version {update.latest} is out</button>
+        <button className="x" aria-label="Not now" onClick={()=>{try{localStorage.setItem('lm-update-skip',update.latest);}catch(_){}setUpdate({...update});}}>✕</button>
+      </span>}
+    </div>);
+  }
   function renderDock(){
     const tabs=[['home',ICON.home,'Home'],['diet',ICON.food,'Food'],['fitness',ICON.fit,'Fitness'],['progress',ICON.chart,'Progress'],['settings',ICON.gear,'Settings']];
     const active=pillPreview?pillPreview.tab:tab;
@@ -4158,11 +4188,6 @@ Reply ONLY with valid JSON (no markdown):
             </button>);})}
         </div>
         <div className="x-wrap" style={{marginTop:14}}>
-          {rec&&!recOpen&&<Nudge emoji="🔴" text={`${rec.state==='paused'?(rec.kind==='hike'?'Hike':'Walk')+' paused':'Recording your '+(rec.kind==='hike'?'hike':'walk')} · ${((rec.distanceM||0)/1000).toFixed(2)} km · ${fmtDur((rec.movingMs||0)/1000)}${rec.kind==='hike'&&rec.gainM>=1?` · ↑ ${Math.round(rec.gainM)} m`:''}`} action="Open" onClick={()=>setRecOpen(true)}/>}
-          {isT&&update&&!updSkipped&&<div style={{display:'flex',gap:8,alignItems:'stretch'}}>
-            <div style={{flex:1,display:'flex'}}><Nudge emoji="🎁" text={`Version ${update.latest} is out`} action="See what’s new" onClick={()=>goSettings('app')}/></div>
-            <button className="x-ibtn" aria-label="Not now" onClick={()=>{try{localStorage.setItem('lm-update-skip',update.latest);}catch(_){}setUpdate({...update});}}
-              style={{width:44,borderRadius:22,background:'var(--s2)'}}>✕</button></div>}
           {isT&&!prefs.goalsSet&&<Nudge emoji="🎯" text="Your calorie and protein goals are still the defaults" action="Personalise" onClick={()=>goSettings('goals')}/>}
           {renderFuel(m,()=>{setTab('diet');setDietView(isT?'today':'history');})}
           <div className="x-grid2">
@@ -6018,6 +6043,7 @@ Reply ONLY with valid JSON (no markdown):
 
         {/* Current page — only the active page renders, ghost is a separate clone below */}
         <div className="page-pad" style={{flex:1,display:'flex',flexDirection:'column'}}>
+          {!sheet&&!setupOpen&&topPills().length>0&&<div style={{height:46,flexShrink:0}} aria-hidden="true"/>}
           {tab==='home'&&renderHomeX()}
           {tab==='settings'&&renderSettingsX()}
           {tab==='diet'&&dietView==='today'&&renderFoodToday()}
@@ -6032,6 +6058,7 @@ Reply ONLY with valid JSON (no markdown):
       </div>
 
       {!kbOpen&&!sheet&&!setupOpen&&!recOpen&&renderDock()}
+      {!sheet&&!setupOpen&&renderTopPills(topPills())}
       {sheet&&renderSheetX()}
     </div>
   );
