@@ -649,10 +649,15 @@ input.m3-input{border-radius:999px;}
 
 /* Floating dock: accent pill with icon tabs (active = black circle) + detached Log button */
 /* status pills pinned at the top: a walk being recorded, an update that's out */
-.top-pills{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:0;right:0;z-index:121;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:0 12px;pointer-events:none}
+.top-pills{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:0;right:0;z-index:121;display:flex;justify-content:safe center;gap:8px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:2px 12px 10px;pointer-events:none}
+.top-pills::-webkit-scrollbar{display:none}
 .top-pill{pointer-events:auto;display:inline-flex;align-items:center;gap:8px;min-height:42px;padding:0 18px;border-radius:999px;border:none;font-weight:820;font-size:15px;font-variant-numeric:tabular-nums;box-shadow:0 6px 20px rgba(0,0,0,.35);white-space:nowrap}
-.top-pill.rec{background:var(--err);color:var(--on-err)}
-.top-pill.upd{background:var(--pri);color:var(--on-pri);padding:0 6px 0 16px}
+.top-pill{padding:0 4px 0 14px;flex-shrink:0}
+.top-pill.setup{box-shadow:0 4px 14px rgba(0,0,0,.25),inset 0 0 0 1.5px var(--s3)}
+.top-pill .pill-main{border:none;background:none;color:inherit;font:inherit;display:inline-flex;align-items:center;gap:8px;padding:0 10px 0 0;min-height:42px}
+.top-pill:not(:has(.x)) .pill-main{padding-right:10px}
+.pill-card{position:fixed;top:calc(60px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);width:min(92vw,440px);z-index:122;
+  background:var(--s2);color:var(--fg);border-radius:28px;padding:16px;box-shadow:0 12px 32px rgba(0,0,0,.45)}
 .top-pill .x{width:30px;height:30px;border-radius:15px;border:none;background:rgba(0,0,0,.18);color:inherit;font-weight:900;display:grid;place-items:center}
 .rec-dot{width:10px;height:10px;border-radius:5px;background:currentColor;animation:lm-blink 1.2s ease-in-out infinite}
 .rec-dot.paused{animation:none;opacity:.6}
@@ -3218,26 +3223,70 @@ Reply ONLY with valid JSON (no markdown):
 
 
 
-  // Pinned at the top on every page: the walk or hike being recorded, and an update that's out (Home only)
-  function topPills(){
-    const out=[];
-    if(rec&&!recOpen)out.push('rec');
-    if(tab==='home'&&update&&!updSkipped)out.push('upd');
-    return out;
+  // ── Pills pinned at the top ──
+  // What's live (a recording), what's due (a reminder whose time has passed and isn't done yet, whether or not
+  // its notification is still there), an update that's out, and the current page's setup prompts.
+  // Colour and icon tell them apart; reminders and tips open into a card; ✕ puts one away for a while.
+  let pagePill=()=>null;   // set just before the page renders
+  const [pillOpen,setPillOpen]=useState(null);
+  const [pillHide,setPillHide]=useState(()=>{try{return JSON.parse(localStorage.getItem('lm-pill-hide')||'{}')||{};}catch(_){return{};}});
+  const hidePill=(id,ms)=>setPillHide(p=>{const n={...p,[id]:Date.now()+ms};Object.keys(n).forEach(k=>{if(n[k]<Date.now())delete n[k];});
+    try{localStorage.setItem('lm-pill-hide',JSON.stringify(n));}catch(_){}return n;});
+  const [,setMinuteTick]=useState(0);   // due reminders appear on time while the app is open
+  useEffect(()=>{const t=setInterval(()=>setMinuteTick(x=>x+1),60000);return()=>clearInterval(t);},[]);
+  const PILL_TONE={err:['var(--err)','var(--on-err)'],pri:['var(--pri)','var(--on-pri)'],amber:['var(--amber)','var(--bg)'],violet:['var(--violet)','var(--bg)'],
+    night:['var(--night)','var(--bg)'],sky:['var(--sky)','var(--bg)'],mint:['var(--mint)','var(--bg)'],pink:['var(--pink)','var(--bg)'],setup:['var(--s4)','var(--fg)']};
+  function allPills(pagePills){
+    const out=[],now=Date.now();
+    if(rec&&!recOpen)out.push({id:'rec',tone:'err',icon:<span className={`rec-dot${rec.state==='paused'?' paused':''}`}/>,
+      text:`${rec.state==='paused'?'Paused':rec.kind==='hike'?'🥾 Hike':'🚶 Walk'} ${((rec.distanceM||0)/1000).toFixed(2)} km · ${fmtDur((rec.movingMs||0)/1000)}${rec.kind==='hike'&&rec.gainM>=1?` · ↑ ${Math.round(rec.gainM)} m`:''}`,
+      tap:()=>setRecOpen(true),label:'Open the recording'});
+    const EM={Breakfast:'🍳',Lunch:'🍛',Snack:'🍎',Dinner:'🍽️'};
+    let due=[];try{due=storageReady?planLogItems(true):[];}catch(e){console.warn(e);}
+    due.forEach(it=>{const id='due-'+(it.tag||it.day+'-'+it.kind),d={title:it.title,body:it.body};
+      if(it.kind==='sleep')out.push({id,tone:'violet',icon:'😴',text:'How did you sleep?',tap:()=>logOpenRef.current('sleep'),snooze:true});
+      else if(EM[it.kind])out.push({id,tone:'amber',icon:EM[it.kind],text:`Log ${it.kind.toLowerCase()}`,tap:()=>logOpenRef.current(it.kind),snooze:true,
+        extra:it.kind==='Snack'?[['No snack',()=>hidePill(id,20*3600000)]]:null});
+      else if(it.kind==='bedtime')out.push({id,tone:'night',icon:'🌙',text:now>it.bedMs?'Bedtime passed':`Lights out ${fmtTime(it.bedMs)}`,detail:d,snooze:true});
+      else if(it.kind==='nudge'){
+        if(it.open==='coach')out.push({id,tone:'sky',icon:'🧠',text:'Get tomorrow’s plan',tap:()=>logOpenRef.current('coach'),snooze:true});
+        else if(it.open==='walk')out.push({id,tone:'mint',icon:'🚶',text:/PM$/.test(it.tag)?'Second walk time':'Walk time',detail:d,snooze:true,
+          act:['🚶 Start walk',()=>{hidePill(id,20*3600000);startRecording('walk');}]});
+        else if(it.icon==='star')out.push({id,tone:'pink',icon:'⭐',text:'Keep it going',detail:d,snooze:true});
+        else{const mt=MEAL_TYPES.find(m=>it.tag.endsWith('-'+m));out.push({id,tone:'sky',icon:mt?EM[mt]:'🧠',text:`Coach’s ${mt?mt.toLowerCase()+' ':''}tip`,detail:d,snooze:true});}
+      }});
+    if(tab==='home'&&!stepsPage&&!actPage&&update&&!updSkipped)out.push({id:'upd',tone:'pri',icon:'🎁',text:`Version ${update.latest} is out`,tap:()=>goSettings('app'),
+      close:()=>{try{localStorage.setItem('lm-update-skip',update.latest);}catch(_){}setUpdate({...update});}});
+    pagePills.forEach(p=>out.push({...p,close:p.close||(()=>hidePill(p.id,7*86400000))}));
+    return out.filter(p=>!(pillHide[p.id]>now));
   }
   function renderTopPills(pills){
     if(!pills.length)return null;
-    return(<div className="top-pills">
-      {pills.includes('rec')&&<button className="top-pill rec" onClick={()=>setRecOpen(true)} aria-label={`${rec.state==='paused'?'Paused':'Recording'} ${rec.kind==='hike'?'hike':'walk'}: open`}>
-        <span className={`rec-dot${rec.state==='paused'?' paused':''}`}/>
-        <span>{rec.state==='paused'?'Paused':rec.kind==='hike'?'🥾 Hike':'🚶 Walk'}</span>
-        <span style={{opacity:.9}}>{((rec.distanceM||0)/1000).toFixed(2)} km · {fmtDur((rec.movingMs||0)/1000)}{rec.kind==='hike'&&rec.gainM>=1?` · ↑ ${Math.round(rec.gainM)} m`:''}</span>
-      </button>}
-      {pills.includes('upd')&&<span className="top-pill upd" role="status">
-        <button onClick={()=>goSettings('app')} style={{border:'none',background:'none',color:'inherit',font:'inherit',padding:0}}>🎁 Version {update.latest} is out</button>
-        <button className="x" aria-label="Not now" onClick={()=>{try{localStorage.setItem('lm-update-skip',update.latest);}catch(_){}setUpdate({...update});}}>✕</button>
-      </span>}
-    </div>);
+    const open=pills.find(p=>p.id===pillOpen&&p.detail);
+    return(<>
+      <div className="top-pills" role="region" aria-label="Status">
+        {pills.map(p=>{const [bg,fg]=PILL_TONE[p.tone]||PILL_TONE.setup;
+          const tap=p.detail?()=>setPillOpen(o=>o===p.id?null:p.id):p.tap;
+          return(<span key={p.id} className={`top-pill${p.tone==='setup'?' setup':''}`} style={{background:bg,color:fg}}>
+            <button className="pill-main" onClick={tap} aria-label={p.label||p.text} aria-expanded={p.detail?pillOpen===p.id:undefined}>
+              {typeof p.icon==='string'?<span aria-hidden="true">{p.icon}</span>:p.icon}<span>{p.text}</span></button>
+            {(p.snooze||p.close)&&<button className="x" aria-label={p.snooze?`Later: ${p.text}`:`Hide: ${p.text}`} onClick={()=>{p.close?p.close():hidePill(p.id,30*60000);if(pillOpen===p.id)setPillOpen(null);}}>✕</button>}
+          </span>);})}
+      </div>
+      {open&&(()=>{const [bg,fg]=PILL_TONE[open.tone];return(
+        <div className="pill-card" role="dialog" aria-label={open.detail.title}>
+          <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+            <span style={{width:36,height:36,borderRadius:18,background:bg,color:fg,display:'grid',placeItems:'center',fontSize:18,flexShrink:0}}>{open.icon}</span>
+            <div style={{flex:1,minWidth:0}}><b style={{display:'block',fontSize:15.5}}>{open.detail.title}</b>
+              <div className="t-reading" style={{fontSize:14.5,marginTop:4,color:'var(--fg2)'}}>{open.detail.body}</div></div>
+          </div>
+          <div style={{display:'flex',gap:8,justifyContent:'flex-end',flexWrap:'wrap',marginTop:12}}>
+            <button className="x-btn tonal sm" onClick={()=>{hidePill(open.id,30*60000);setPillOpen(null);}}>⏰ Later</button>
+            <button className="x-btn tonal sm" onClick={()=>{hidePill(open.id,20*3600000);setPillOpen(null);}}>👍 Got it</button>
+            {open.act&&<button className="x-btn sm" style={{background:bg,color:fg}} onClick={()=>{setPillOpen(null);open.act[1]();}}>{open.act[0]}</button>}
+          </div>
+        </div>);})()}
+    </>);
   }
   function renderDock(){
     const tabs=[['home',ICON.home,'Home'],['diet',ICON.food,'Food'],['fitness',ICON.fit,'Fitness'],['progress',ICON.chart,'Progress'],['settings',ICON.gear,'Settings']];
@@ -3561,33 +3610,36 @@ Reply ONLY with valid JSON (no markdown):
     return {title,body};
   }
   // Today's and tomorrow's reminders, minus anything already logged (meals logged later in the day count too)
-  function planLogItems(){
+  // due=true: instead of what's coming, today's reminders whose time has passed (in the last few hours)
+  // and whose thing still isn't done. These show as pills at the top of the app.
+  function planLogItems(due=false){
     if(!logCfg.on)return [];
     const U=usualTimes(),now=Date.now(),out=[];
-    for(const day of [TODAY,calAddDays(TODAY,1)]){
+    const ok=(at,win=4*3600000)=>due?at<=now&&now-at<win:at>now+60000;
+    for(const day of due?[TODAY]:[TODAY,calAddDays(TODAY,1)]){
       const ms=m=>new Date(day+'T00:00:00').getTime()+m*60000,we=isWeekend(day);
       if(logCfg.sleep&&!sleepMin(sleepLog[day])){const at=ms(Math.min(11*60,Math.max(6*60,(we?U.sleep.we:U.sleep.wd)+30)));
-        if(at>now+60000)out.push({at,kind:'sleep',day,...logMessage('sleep',day,at)});}
+        if(ok(at))out.push({at,kind:'sleep',day,...logMessage('sleep',day,at)});}
       if(logCfg.bedtime&&!sleepMin(sleepLog[calAddDays(day,1)])){const b=bedPlan(day);
         // missed the 30-min warning but lights-out is still 15+ min away: nudge in 5 min
-        const at=b.at>now+60000?b.at:b.bedMs-now>=15*60000?now+5*60000:0;
-        if(at)out.push({at,kind:'bedtime',day,...logMessage('bedtime',day,at)});}
+        const at=due?b.at:b.at>now+60000?b.at:b.bedMs-now>=15*60000?now+5*60000:0;
+        if(at&&ok(at,b.bedMs+3600000-b.at))out.push({at,kind:'bedtime',day,bedMs:b.bedMs,...logMessage('bedtime',day,at)});}
       const logged=new Set((dietGrouped[day]||[]).map(e=>e.mealType));
       MEAL_TYPES.forEach((mt,i)=>{if(!logCfg[mt])return;
         if(MEAL_TYPES.slice(i).some(x=>logged.has(x)))return;   // this meal, or a later one, is already in
         const at=ms(Math.min(23*60,Math.max(6*60,(we?U[mt].we:U[mt].wd)+(mt==='Snack'?Math.max(60,+logCfg.after):+logCfg.after))));
-        if(at>now+60000)out.push({at,kind:mt,day,...logMessage(mt,day,at)});});
-      out.push(...planNudges(day,U,ms,we,logged,now));
+        if(ok(at))out.push({at,kind:mt,day,...logMessage(mt,day,at)});});
+      out.push(...planNudges(day,U,ms,we,logged,now,ok,due));
     }
     return out.sort((a,b)=>a.at-b.at);
   }
   // The coach's plan, as reminders 15 minutes before the usual time of each thing: what to eat before a meal,
   // the morning brisk walk (and a second one if the coach asked for it), a good habit to repeat.
   // After dinner on a day with no review yet: a nudge to get one, so tomorrow's reminders can be planned.
-  function planNudges(day,U,ms,we,logged,now){
+  function planNudges(day,U,ms,we,logged,now,ok,due){
     const out=[],plan=planFor(day),n=(profile.name||'').trim().split(/\s+/)[0]||'';
     const add=(min,tag,open,icon,title,body)=>{const at=ms(Math.min(23*60,Math.max(5*60+30,min)));
-      if(at>now+60000&&body)out.push({at,kind:'nudge',tag:day+'-'+tag,open,icon,day,title,body:String(body).trim()});};
+      if(ok(at,tag==='walkAM'||tag==='walkPM'?2*3600000:3*3600000)&&body)out.push({at,kind:'nudge',tag:day+'-'+tag,open,icon,day,title,body:String(body).trim()});};
     const mealAt=mt=>(we?U[mt].we:U[mt].wd)-15;
     const mv=day===TODAY?moveDay(day):null;
     const walked=when=>mv?mv.walks.some(w=>w.start!=null&&(when==='am'?w.start<12*60:w.start>=15*60)):false;
@@ -3612,8 +3664,8 @@ Reply ONLY with valid JSON (no markdown):
     // dinner is logged but the day hasn't been reviewed: ask for the review so tomorrow can be planned
     if(logCfg.coach&&day===TODAY&&logged.has('Dinner')&&!(prefs.coach||{})[TODAY]){
       const din=(dietGrouped[TODAY]||[]).filter(e=>e.mealType==='Dinner').map(e=>mealTime(e).ts).sort((a,b)=>b-a)[0]||now;
-      const at=Math.max(din+30*60000,now+2*60000),late=new Date(at);
-      if(localDate(late)===TODAY&&late.getHours()<23)out.push({at,kind:'nudge',tag:TODAY+'-coach',open:'coach',icon:'coach',day,
+      const at=due?din+30*60000:Math.max(din+30*60000,now+2*60000),late=new Date(at);
+      if(localDate(late)===TODAY&&late.getHours()<23&&(!due||at<=now))out.push({at,kind:'nudge',tag:TODAY+'-coach',open:'coach',icon:'coach',day,
         title:`Dinner’s in${n?', '+n:''}. Get tomorrow’s plan 🧠`,body:'Ask the coach to review today. Tomorrow’s meal tips and walk reminders get set from it.'});
     }
     return out;
@@ -4015,7 +4067,7 @@ Reply ONLY with valid JSON (no markdown):
           <h2 className="x-h2" style={{margin:0}}>Elevation</h2>
           <LineChart points={st.profile.map(p=>({x:p.x+' km',y:p.y}))} color="var(--amber)" height={120} fmt={v=>v+' m'}/></div>}
         {gps&&window.LMNative?.isNative&&(hcState.write||[]).includes('ExerciseSession')&&!routeShared&&
-          <Nudge emoji="🗺️" text="Show this route in Google Health too" action="Allow" onClick={()=>connectHC()}/>}
+          pagePill({id:'route',tone:'setup',icon:'🗺️',text:'Show this route in Google Health',tap:()=>connectHC()})}
         {w.src==='hc'&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
           <div className="x-sub" style={{lineHeight:1.5}}>Found from your phone’s steps, so distance, pace and stride (≈) are estimated from your steps. Next time, tap <b>Start a walk</b> to record the route, pace for each km and climb.</div>
           {date===TODAY&&!rec&&<button className="x-btn" onClick={()=>startRecording('walk')}>▶  Start a walk</button>}</div>}
@@ -4063,7 +4115,7 @@ Reply ONLY with valid JSON (no markdown):
       body=<>
         {navRow(isT?'Today':dateLong(date),null,()=>set({date:calAddDays(date,-1),sel:null}),()=>set({date:calAddDays(date,1),sel:null}),date<TODAY,
           !isT&&<button className="x-btn sm outline" onClick={()=>set({date:TODAY,sel:null})} style={{alignSelf:'center'}}>Back to today</button>)}
-        {isT&&(rec?<Nudge emoji="🔴" text={`Recording · ${((rec.distanceM||0)/1000).toFixed(2)} km`} action="Open" onClick={()=>setRecOpen(true)}/>
+        {isT&&(rec?null
           :<div style={{display:'flex',gap:10}}>
             <button className="x-btn" onClick={()=>startRecording('walk')} style={{flex:1,height:60,borderRadius:'30px 12px 12px 30px',fontSize:16}}>▶  Start a walk</button>
             <button className="x-btn tonal" onClick={()=>startRecording('hike')} style={{flex:1,height:60,borderRadius:'12px 30px 30px 12px',fontSize:16}}>▶  Start a hike</button></div>)}
@@ -4089,7 +4141,7 @@ Reply ONLY with valid JSON (no markdown):
             {[['var(--mint)','Walks'],['var(--pri-c)','Everyday movement'],...(isT?[['var(--pri)','This hour']]:[])].map(([c,l])=>
               <span key={l} style={{display:'flex',alignItems:'center',gap:6}}><i style={{width:10,height:10,borderRadius:5,background:c,display:'inline-block'}}/>{l}</span>)}</div>}
         </div>
-        {native&&!hcOn&&!mv.hours&&<Nudge emoji="❤️" text="Get steps by the hour from your phone" action="Connect" onClick={()=>goSettings('health')}/>}
+        {native&&!hcOn&&!mv.hours&&pagePill({id:'hc-hours',tone:'setup',icon:'❤️',text:'Get steps by the hour',tap:()=>goSettings('health')})}
         <div className="x-sec"><h2 className="x-h2">Walks</h2><span className="x-sub">{mv.walks.length?`${mv.walks.length} · ${mv.walkMin} min`:''}</span></div>
         {mv.walks.length?<div style={{display:'flex',flexDirection:'column',gap:10}}>{mv.walks.map(w=>renderWalkRow(date,w))}</div>
           :<div className="x-card" style={{color:'var(--fg2)'}}>{mv.src==='hc'?`No walks found ${isT?'yet today':'this day'}. A walk shows up here once you’ve walked steadily for about 10 minutes.`:'No walks yet.'}</div>}
@@ -4188,7 +4240,7 @@ Reply ONLY with valid JSON (no markdown):
             </button>);})}
         </div>
         <div className="x-wrap" style={{marginTop:14}}>
-          {isT&&!prefs.goalsSet&&<Nudge emoji="🎯" text="Your calorie and protein goals are still the defaults" action="Personalise" onClick={()=>goSettings('goals')}/>}
+          {isT&&!prefs.goalsSet&&pagePill({id:'goals',tone:'setup',icon:'🎯',text:'Set your own calorie & protein goals',tap:()=>goSettings('goals')})}
           {renderFuel(m,()=>{setTab('diet');setDietView(isT?'today':'history');})}
           <div className="x-grid2">
             <button className="x-card mint sb" onClick={()=>openStepsPage(day)} aria-label="Steps and walks" style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8,padding:'16px 10px'}}>
@@ -4608,8 +4660,8 @@ Reply ONLY with valid JSON (no markdown):
           </div>)}
 
         <div className="x-sec"><h2 className="x-h2">Body</h2><button className="x-btn sm tonal" onClick={openBody}>Edit</button></div>
-        {!currentBF&&<Nudge emoji="📏" text={profile.gender==='female'?'Add height, neck, waist and hips to see your body fat':'Add height, neck and waist to see your body fat'} action="Add" onClick={openBody}/>}
-        {!profile.targetKg&&<Nudge emoji="🎯" text="Set a goal weight to see it on your weight chart" onClick={()=>goSettings('goals')}/>}
+        {!currentBF&&pagePill({id:'bodyfat',tone:'setup',icon:'📏',text:'Add measurements for body fat',tap:openBody})}
+        {!profile.targetKg&&pagePill({id:'goalkg',tone:'setup',icon:'🎯',text:'Set a goal weight',tap:()=>goSettings('goals')})}
         {currentBF&&<button className="x-card sb" onClick={openBody} style={{display:'flex',flexDirection:'column',gap:12}}>
           <div style={{display:'flex',alignItems:'baseline',gap:8}}>
             <span className="x-num" style={{fontSize:52,color:bf>=30?'var(--err)':bf>=25?'var(--amber)':bf>=18?'var(--mint)':'var(--pri)'}}>{bf||'—'}</span>
@@ -4908,7 +4960,7 @@ Reply ONLY with valid JSON (no markdown):
     let content=null;
     if(settingsPage==='profile')content=renderProfileSettings();
     if(settingsPage==='body')content=<div className="x-wrap" style={{paddingTop:0}}>
-      {!bodySaved&&<Nudge emoji="📏" text="Add your measurements for body fat and calorie suggestions" action="Add" onClick={openBody}/>}
+      {!bodySaved&&pagePill({id:'measure',tone:'setup',icon:'📏',text:'Add your measurements',tap:openBody})}
           <button className="x-card sa" onClick={openBody} style={{display:'flex',flexDirection:'column',gap:12}}>
             <div className="x-grid3">
               {[['Body fat',currentBF?currentBF+'%':'—','var(--pink)'],['Lean',leanMassKg?leanMassKg.toFixed(1)+' kg':'—','var(--mint)'],['Weight',(latestWeight?.w||bm.weightKg)+' kg','var(--violet)'],
@@ -6027,6 +6079,19 @@ Reply ONLY with valid JSON (no markdown):
   const fitTodayInfo=getDayInfo(TODAY);
   const fitTodayDoneCount=fitTodayInfo&&!todayFitDone?(()=>{const sug=getWorkout(fitTodayInfo.type,getWeekNum(TODAY),TODAY,!hasCompletedBefore(TODAY));return sug.exercises.filter(ex=>fitLogs[TODAY]?.[ex.id]?.done).length+'/'+sug.exercises.length;})():null;
 
+  // the page is rendered first: it can add its own prompts as pills (pagePill), shown pinned at the top
+  const pagePills=[];
+  pagePill=p=>{pagePills.push(p);return null;};
+  const pageEl=<>
+    {tab==='home'&&renderHomeX()}
+    {tab==='settings'&&renderSettingsX()}
+    {tab==='diet'&&dietView==='today'&&renderFoodToday()}
+    {tab==='diet'&&dietView==='history'&&renderFoodHistory()}
+    {tab==='fitness'&&fitView==='day'&&renderFitDay()}
+    {tab==='fitness'&&fitView==='calendar'&&renderFitHistory()}
+    {tab==='progress'&&renderProgressX()}
+  </>;
+  const pillsNow=sheet||setupOpen?[]:allPills(pagePills);
   return(
     <div style={{minHeight:'100dvh',background:'var(--bg)',color:'var(--text-primary)',display:'flex',flexDirection:'column',position:'relative'}}>
       {toast&&<div className="x-snack" role="status" style={sheet?{top:'calc(12px + env(safe-area-inset-top,0px))',bottom:'auto'}:null}><i style={{background:toast.color}}/>{toast.msg}</div>}
@@ -6043,14 +6108,8 @@ Reply ONLY with valid JSON (no markdown):
 
         {/* Current page — only the active page renders, ghost is a separate clone below */}
         <div className="page-pad" style={{flex:1,display:'flex',flexDirection:'column'}}>
-          {!sheet&&!setupOpen&&topPills().length>0&&<div style={{height:46,flexShrink:0}} aria-hidden="true"/>}
-          {tab==='home'&&renderHomeX()}
-          {tab==='settings'&&renderSettingsX()}
-          {tab==='diet'&&dietView==='today'&&renderFoodToday()}
-          {tab==='diet'&&dietView==='history'&&renderFoodHistory()}
-          {tab==='fitness'&&fitView==='day'&&renderFitDay()}
-          {tab==='fitness'&&fitView==='calendar'&&renderFitHistory()}
-          {tab==='progress'&&renderProgressX()}
+          {pillsNow.length>0&&<div style={{height:46,flexShrink:0}} aria-hidden="true"/>}
+          {pageEl}
         </div>
 
 
@@ -6058,7 +6117,7 @@ Reply ONLY with valid JSON (no markdown):
       </div>
 
       {!kbOpen&&!sheet&&!setupOpen&&!recOpen&&renderDock()}
-      {!sheet&&!setupOpen&&renderTopPills(topPills())}
+      {renderTopPills(pillsNow)}
       {sheet&&renderSheetX()}
     </div>
   );

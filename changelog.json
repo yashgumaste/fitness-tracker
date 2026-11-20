@@ -6,6 +6,13 @@
     {
       "text": "A walk or hike being recorded now shows as a bright red pill pinned at the top of every page (with a blinking dot, distance and time), so it never scrolls away. Tap it to go back to the recording. “Version x is out” is a pinned pill on Home too, with ✕ to hide it.",
       "img": "docs/whatsnew/rec-pill.png"
+    },
+    {
+      "text": "Pills at the top for everything that needs you, each in its own colour and icon: 🍽️ log a meal (amber), 😴 log your sleep (violet), 🌙 bedtime (indigo), 🧠 the coach's tips and “get tomorrow's plan” (blue), 🚶 walk time (green), ⭐ keep a good habit going (pink). They appear once a reminder is due, even if you opened the app without tapping the notification or it was dismissed, and go away once it's done. Tap to act or open the full message; ✕ or Later hides one for 30 minutes.",
+      "img": "docs/whatsnew/pills.png"
+    },
+    {
+      "text": "Setup prompts are pills too (set your goals, add measurements, a goal weight, steps by the hour, show a route in Google Health): grey, on the page they belong to. ✕ hides one for a week."
     }
   ],
   "releases": [

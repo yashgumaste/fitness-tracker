@@ -134,9 +134,9 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await click('.x-btn','Done');
     // leave the recording screen: a pinned pill at the top shows it's still going, and opens it again
     await p.evaluate(()=>{const b=[...document.querySelectorAll('button')].find(b=>/^Back/.test(b.getAttribute('aria-label')||''));b&&b.click();});await W(1200);
-    const pill=await p.$('.top-pill.rec');if(!pill)throw new Error('no recording pill after leaving the recording screen');
+    const pill=await p.$('[aria-label="Open the recording"]');if(!pill)throw new Error('no recording pill after leaving the recording screen');
     if(!/Walk/.test(await pill.innerText())||!/km/.test(await pill.innerText()))throw new Error('recording pill text: '+await pill.innerText());
-    await pill.click();await W(600);if(await p.$('.top-pill.rec'))throw new Error('pill should hide on the recording screen');await expect('Started');
+    await pill.click();await W(600);if(await p.$('[aria-label="Open the recording"]'))throw new Error('pill should hide on the recording screen');await expect('Started');
     await click('button','Pause');await expect('Resume');await click('button','Resume');
     await click('button','Finish');await expect('Finish this walk');await click('.x-btn','Save walk');await W(900);
     await expect('Pace for each km');await expect('Moving time');await expect('Elevation');
@@ -192,6 +192,18 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const bt=await p.evaluate(at=>{const d=new Date(at);return{h:d.getHours(),m:d.getMinutes(),s:d.toTimeString()};},b.at);if(!(bt.h===8&&bt.m===55))throw new Error('breakfast tip should be 15 min before the usual 9:10, at 8:55; got '+bt.s);
     await p.click('[aria-label="Close"]');await W();
   });
+  await step('Due reminders show as pills',async()=>{try{
+    // late evening, dinner not logged: a "Log dinner" pill and a bedtime pill, even with no notification tapped
+    await p.clock.setFixedTime(new Date('2026-11-09T23:05:00+05:30'));await p.evaluate(()=>{try{localStorage.removeItem('lm-pill-hide')}catch(_){}});
+    await tab(1);await tab(0);await W(800);
+    const pills=await p.evaluate(()=>[...document.querySelectorAll('.top-pill')].map(e=>e.innerText));
+    if(!pills.some(t=>/Log dinner/.test(t)))throw new Error('no Log dinner pill: '+pills.join(' | '));
+    if(!pills.some(t=>/Bedtime passed|Lights out/.test(t)))throw new Error('no bedtime pill: '+pills.join(' | '));
+    await click('.top-pill button','Bedtime passed');await expect('Start winding down');
+    await click('.pill-card button','Got it');await W(400);
+    if(await p.evaluate(()=>[...document.querySelectorAll('.top-pill')].some(e=>/Bedtime passed/.test(e.innerText))))throw new Error('bedtime pill should go after Got it');
+    await click('.top-pill button','Log dinner');await expect('Write it the way you');await close();
+    }finally{await p.clock.setFixedTime(new Date('2026-11-09T20:30:00+05:30'));}});
   await step('Reminder tapped: opens the right log',async()=>{await p.evaluate(()=>window.__lmLogOpen('sleep'));await W(600);await expect('How did you sleep?');await close();
     await p.evaluate(()=>window.__lmLogOpen('Lunch'));await W(600);
     const on=await p.evaluate(()=>[...document.querySelectorAll('.x-sheet .x-chip.on,.x-sheet [aria-pressed=true],.x-sheet .on')].map(e=>e.textContent).join('|'));
