@@ -13,6 +13,14 @@
     },
     {
       "text": "Setup prompts are pills too (set your goals, add measurements, a goal weight, steps by the hour, show a route in Google Health): grey, on the page they belong to. ✕ hides one for a week."
+    },
+    {
+      "text": "New Burned card on Home, under Fuel: how many calories you've burned so far and where they came from (resting, walks, everyday steps, workout, and digesting food), with a coloured bar like Fuel's macros. Its tag shows how far you are into a deficit or surplus.",
+      "img": "docs/whatsnew/burned-card.png"
+    },
+    {
+      "text": "Tap Burned for the new In & out page: what you ate and what you burned, side by side for every day of a week or month, and for the average day of each week of a quarter or each month of a year, against your eating target. It adds up the deficit or surplus and roughly what that means in kg.",
+      "img": "docs/whatsnew/in-and-out.png"
     }
   ],
   "releases": [

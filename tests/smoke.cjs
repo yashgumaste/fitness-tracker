@@ -183,6 +183,12 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   await step('Logging reminders',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Logging reminders');
     await expect('Remind me this long after');await expect('Next ·');await click('.x-item','Snack');await click('.x-chip','1 h');
     await p.click('[aria-label="Back to settings"]');await W();});
+  await step('Burned card and In & out page',async()=>{await tab(0);await expect('Burned');await expect('Resting');await expect('Digesting');
+    await p.click('[aria-label^="Calories burned"]');await W(600);await expect('In & out');await expect('Eating target');
+    for(const v of ['Month','Qtr','Year','Day','Week'])await click('.x-seg button',v);
+    await expect('a day');
+    const pairs=await p.evaluate(()=>document.querySelectorAll('svg[aria-label="Calories eaten and burned"] g').length);if(pairs!==7)throw new Error('week should have 7 pairs, got '+pairs);
+    await p.click('[aria-label="Back"]');await W();await expect('Fuel');});
   await step('Coach plans tomorrow’s reminders',async()=>{
     await p.evaluate(()=>{window.__planned=null;window.LMNative.planLogs=async items=>{window.__planned=items;return{ok:true,count:items.length,next:items[0]||null};};});
     await tab(0);await p.evaluate(()=>window.__lmLogOpen('coach'));await W(2500);await expect('Reminders for');await expect('2 boiled eggs');

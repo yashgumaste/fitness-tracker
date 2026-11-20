@@ -3255,7 +3255,7 @@ Reply ONLY with valid JSON (no markdown):
         else if(it.icon==='star')out.push({id,tone:'pink',icon:'⭐',text:'Keep it going',detail:d,snooze:true});
         else{const mt=MEAL_TYPES.find(m=>it.tag.endsWith('-'+m));out.push({id,tone:'sky',icon:mt?EM[mt]:'🧠',text:`Coach’s ${mt?mt.toLowerCase()+' ':''}tip`,detail:d,snooze:true});}
       }});
-    if(tab==='home'&&!stepsPage&&!actPage&&update&&!updSkipped)out.push({id:'upd',tone:'pri',icon:'🎁',text:`Version ${update.latest} is out`,tap:()=>goSettings('app'),
+    if(tab==='home'&&!stepsPage&&!actPage&&!energyPage&&update&&!updSkipped)out.push({id:'upd',tone:'pri',icon:'🎁',text:`Version ${update.latest} is out`,tap:()=>goSettings('app'),
       close:()=>{try{localStorage.setItem('lm-update-skip',update.latest);}catch(_){}setUpdate({...update});}});
     pagePills.forEach(p=>out.push({...p,close:p.close||(()=>hidePill(p.id,7*86400000))}));
     return out.filter(p=>!(pillHide[p.id]>now));
@@ -3310,6 +3310,31 @@ Reply ONLY with valid JSON (no markdown):
   const dateNice=k=>new Date(k+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
   const dateLong=k=>new Date(k+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
   const SHAPE_OF={meal:'cookie9',walk:'sunny',rec:'sunny',workout:'cookie6',weight:'cookie4',feel:'flower',sleep:'clover',water:'cookie12'};
+  // ── Calories burned in a day ──
+  // Resting (Mifflin–St Jeor BMR; today only up to now), walks and everyday steps (moveDay: what moving adds on
+  // top of resting), the workout (sets ≈ 1.5 min at ~4 MET, timed cardio ≈ 6 MET, resting not counted twice)
+  // and digesting food (~10% of what was eaten).
+  function bmrOf(day){
+    const w=parseFloat(weightLog[day])||latestWeight?.w||+bodyMeasure.weightKg||75,h=+bodyMeasure.heightCm||170,a=+bodyMeasure.age||30;
+    return Math.max(900,10*w+6.25*h-5*a+(profile.gender==='female'?-161:profile.gender==='male'?5:-78));
+  }
+  function workoutKcal(day){
+    const {sug}=daySug(day),dl=fitLogs[day]||{},kg=parseFloat(weightLog[day])||latestWeight?.w||+bodyMeasure.weightKg||75;
+    let sets=0,cardioMin=0;
+    (sug?.exercises||[]).forEach(ex=>{if(isWalkCardio(ex))return;const l=dl[ex.id]||{};
+      if(ex.unit==='min'){if(l.done)cardioMin+=+(l.reps||ex.reps)||0;return;}
+      if(l.setLog&&l.setLog.length)sets+=l.setLog.length;else if(l.done)sets+=+(l.sets||ex.sets)||3;});
+    (dl._custom||[]).forEach(a=>{sets+=(a.sets||[]).length;});
+    return Math.round((sets*1.5/60*(4-1)+cardioMin/60*(6-1))*kg);
+  }
+  function burnDay(day){
+    if(day>TODAY)return{total:0,parts:[],partial:false};
+    const mv=moveDay(day),now=new Date(),frac=day===TODAY?(now.getHours()*60+now.getMinutes())/1440:1;
+    const parts=[['rest','😴','Resting',Math.round(bmrOf(day)*frac),'var(--violet)'],['walks','🚶','Walks',mv.walkKcal||0,'var(--mint)'],
+      ['steps','🏠','Everyday',mv.otherKcal||0,'var(--sky)'],['workout','💪','Workout',workoutKcal(day),'var(--amber)'],
+      ['food','🍽️','Digesting',Math.round(macrosOf(day).cal*0.1),'var(--pink)']];
+    return{total:parts.reduce((x,q)=>x+q[3],0),parts,partial:day===TODAY};
+  }
   function macrosOf(day){return (dietGrouped[day]||[]).reduce((a,e)=>{const m=entryMacros(e);return{cal:a.cal+m.cal,pro:a.pro+m.pro,carbs:a.carbs+m.carbs,fat:a.fat+m.fat};},{cal:0,pro:0,carbs:0,fat:0});}
   function daySug(day){
     const base=getDayInfo(day);
@@ -3370,6 +3395,7 @@ Reply ONLY with valid JSON (no markdown):
     if(recOpen){setRecOpen(false);return true;}
     if(actPage){setActPage(null);return true;}
     if(stepsPage){setStepsPage(null);return true;}
+    if(energyPage){setEnergyPage(null);return true;}
     if(setupOpen){if(setupStep>0){setSetupStep(n=>n-1);return true;}return false;}
     if(tab==='settings'&&settingsPage){setSettingsPage(null);return true;}
     if(tab!=='home'){setTab('home');setHomeDay(null);return true;}return false;};
@@ -3759,6 +3785,33 @@ Reply ONLY with valid JSON (no markdown):
       </Tag>);
   }
 
+  // Burned, like Fuel: the total and where it came from. Tag: in minus out so far.
+  function renderBurn(day,onClick){
+    const b=burnDay(day),inK=Math.round(macrosOf(day).cal),net=inK-b.total;
+    const tag=!inK?null:net>0?[`${fmtN(net)} more in than out`,'var(--amber)']:[`${fmtN(-net)} kcal deficit`,'var(--mint)'];
+    return(
+      <button className="x-card sc" onClick={onClick} aria-label="Calories burned: see in and out by day, week, month" style={{padding:'18px 18px 16px',background:'var(--amber-c)',color:'var(--on-amber-c)',textAlign:'left'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span className="x-eyebrow" style={{color:'var(--on-amber-c)'}}>Burned</span>
+          {tag&&<span className="x-tag" style={{marginLeft:'auto',background:'var(--bg)',color:tag[1]}}>{tag[0]}</span>}
+        </div>
+        <div style={{display:'flex',alignItems:'baseline',gap:8,margin:'10px 0 12px',flexWrap:'wrap'}}>
+          <span className="x-num" style={{fontSize:48,color:'var(--fg)'}}>{fmtN(b.total)}</span>
+          <span style={{fontWeight:750}}>kcal{b.partial?' so far today':''}</span>
+        </div>
+        <div style={{display:'flex',height:16,borderRadius:8,overflow:'hidden',gap:3,background:'rgba(0,0,0,.3)'}} aria-hidden="true">
+          {b.parts.filter(q=>q[3]>0).map(q=><i key={q[0]} style={{flex:q[3],background:q[4],borderRadius:5}}/>)}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px 8px',marginTop:16}}>
+          {b.parts.map(([k,em,l,v,c])=>(
+            <div key={k} style={{minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:750,display:'flex',alignItems:'center',gap:5}}><i style={{width:9,height:9,borderRadius:5,background:c,display:'inline-block'}}/>{l}</div>
+              <div style={{marginTop:3,whiteSpace:'nowrap'}}><span aria-hidden="true">{em} </span><span className="x-num" style={{fontSize:19,color:'var(--fg)'}}>{fmtN(v)}</span></div>
+            </div>))}
+        </div>
+      </button>);
+  }
+
   // The day's coach card, the same on Home, Food, Food history and Fitness
   function renderCoach(day){
     if(!(dietGrouped[day]||[]).length&&!buildTimeline(day).length)return null;
@@ -4095,6 +4148,94 @@ Reply ONLY with valid JSON (no markdown):
       </span>
     </button>);
   }
+  // ── In & out: calories eaten vs burned, by day, week, month, quarter, year ──
+  // Paired bars on one scale; longer views show the average day, so they read against the daily target.
+  const [energyPage,setEnergyPage]=useState(null);   // {view:'day'|'week'|'month'|'quarter'|'year', date, sel}
+  function renderEnergyPage(){
+    const ep=energyPage,v=ep.view,set=f=>setEnergyPage(p=>({...p,...f})),lo=GOALS.calories.min,hi=GOALS.calories.max;
+    const day=d=>{const b=burnDay(d),i=Math.round(macrosOf(d).cal);return{inK:i,outK:b.total,b,logged:i>0};};
+    const fmtD=d=>new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+    const navRow=(title,prev,next,canNext)=>(<div style={{display:'flex',alignItems:'center',gap:10}}>
+      <button className="x-ibtn" aria-label="Earlier" onClick={prev}><Ico d={ICON.left} size={24}/></button>
+      <div style={{flex:1,textAlign:'center',fontWeight:820,fontSize:16}}>{title}</div>
+      <button className="x-ibtn" aria-label="Later" onClick={next} disabled={!canNext} style={{opacity:canNext?1:.35}}><Ico d={ICON.right} size={24}/></button></div>);
+    const legend=<div style={{display:'flex',gap:16,justifyContent:'center',fontSize:12.5,fontWeight:750,color:'var(--fg2)'}}>
+      {[['var(--pri)','Eaten'],['var(--amber)','Burned'],['color-mix(in srgb, var(--pri) 25%, transparent)','Eating target']].map(([c,l])=>
+        <span key={l} style={{display:'flex',alignItems:'center',gap:6}}><i style={{width:12,height:12,borderRadius:4,background:c,display:'inline-block'}}/>{l}</span>)}</div>;
+    const balance=(inK,outK,days)=>{const net=inK-outK;return(
+      <div className="x-card" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,textAlign:'center'}}>
+        {[['Eaten',inK,'var(--pri)'],['Burned',outK,'var(--amber)'],[net>0?'Surplus':'Deficit',Math.abs(net),net>0?'var(--err)':'var(--mint)']].map(([l,x,c])=>
+          <div key={l}><div style={{fontSize:12,fontWeight:750,color:'var(--fg2)'}}>{l}{days>1?' a day':''}</div>
+            <div className="x-num" style={{fontSize:24,color:c,marginTop:2}}>{fmtN(Math.round(x))}</div><div style={{fontSize:11.5,fontWeight:700,color:'var(--fg2)'}}>kcal</div></div>)}
+      </div>);};
+    let body;
+    if(v==='day'){
+      const d=ep.date,isT=d===TODAY,x=day(d);
+      body=<>
+        {navRow(isT?'Today':dateLong(d),()=>set({date:calAddDays(d,-1)}),()=>set({date:calAddDays(d,1)}),d<TODAY)}
+        {balance(x.inK,x.outK,1)}
+        {renderBurn(d,null)}
+        <div className="x-sub" style={{fontSize:12.5,lineHeight:1.5,padding:'0 4px'}}>
+          Resting is what your body burns doing nothing, worked out from your weight, height, age and sex{isT?' (counted up to now)':''}. Walks, everyday steps and the workout add only what moving burns on top of that. Digesting is about a tenth of what you ate. All are estimates.</div>
+      </>;
+    }else{
+      const a=ep.date;let groups=[],title,prev,next,canNext;
+      const mk=(key,label,days,show)=>{const past=days.filter(dd=>dd<=TODAY),xs=past.map(day).filter(q=>q.logged);
+        const avg=f=>xs.length?xs.reduce((p,q)=>p+q[f],0)/xs.length:0;
+        return{key,label,show,days,n:xs.length,inK:avg('inK'),outK:avg('outK'),today:days.includes(TODAY),future:days[0]>TODAY};};
+      if(v==='week'){const ws=calStartOfWeek(a),days=Array.from({length:7},(_,i)=>calAddDays(ws,i));title=`${fmtD(days[0])} – ${fmtD(days[6])}`;
+        prev=()=>set({date:calAddDays(ws,-7),sel:null});next=()=>set({date:calAddDays(ws,7),sel:null});canNext=days[6]<TODAY;
+        groups=days.map(dd=>mk(dd,new Date(dd+'T00:00:00').toLocaleDateString('en-IN',{weekday:'narrow'}),[dd],true));}
+      else if(v==='month'){const ms=calStartOfMonth(a),n=calDaysInMonth(a),days=Array.from({length:n},(_,i)=>calAddDays(ms,i));
+        title=new Date(ms+'T00:00:00').toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+        const dt=new Date(ms+'T00:00:00'),mo=o=>localDate(new Date(dt.getFullYear(),dt.getMonth()+o,1));
+        prev=()=>set({date:mo(-1),sel:null});next=()=>set({date:mo(1),sel:null});canNext=days[n-1]<TODAY;
+        groups=days.map((dd,i)=>mk(dd,String(i+1),[dd],[0,7,14,21,28].includes(i)));}
+      else if(v==='quarter'){const dt=new Date(a+'T00:00:00'),q=Math.floor(dt.getMonth()/3),qs=localDate(new Date(dt.getFullYear(),q*3,1)),qe=calAddDays(localDate(new Date(dt.getFullYear(),q*3+3,1)),-1);
+        title=`${['Jan – Mar','Apr – Jun','Jul – Sep','Oct – Dec'][q]} ${dt.getFullYear()}`;
+        prev=()=>set({date:localDate(new Date(dt.getFullYear(),q*3-3,1)),sel:null});next=()=>set({date:localDate(new Date(dt.getFullYear(),q*3+3,1)),sel:null});canNext=qe<TODAY;
+        for(let ws=calStartOfWeek(qs),i=0;ws<=qe;ws=calAddDays(ws,7),i++){const days=Array.from({length:7},(_,k)=>calAddDays(ws,k)).filter(dd=>dd>=qs&&dd<=qe);
+          groups.push(mk(ws,fmtD(days[0]).split(' ')[0]+(i%4===0?' '+fmtD(days[0]).split(' ')[1]:''),days,i%2===0));}}
+      else{const y=+a.slice(0,4);title=String(y);prev=()=>set({date:`${y-1}-01-01`,sel:null});next=()=>set({date:`${y+1}-01-01`,sel:null});canNext=`${y}-12-31`<TODAY;
+        for(let m=0;m<12;m++){const ms=`${y}-${String(m+1).padStart(2,'0')}-01`,n=calDaysInMonth(ms);
+          groups.push(mk(ms,new Date(ms+'T00:00:00').toLocaleDateString('en-IN',{month:'narrow'}),Array.from({length:n},(_,i)=>calAddDays(ms,i)),true));}}
+      const withData=groups.filter(g=>g.n>0),tot=withData.reduce((p,g)=>p+g.n,0);
+      const avgIn=tot?withData.reduce((p,g)=>p+g.inK*g.n,0)/tot:0,avgOut=tot?withData.reduce((p,g)=>p+g.outK*g.n,0)/tot:0;
+      const netKg=(avgIn-avgOut)*tot/7700;
+      const sel=groups.find(g=>g.key===ep.sel);
+      const unit=v==='week'||v==='month'?'day':v==='quarter'?'week':'month';
+      body=<>
+        {navRow(title,prev,next,canNext)}
+        <div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
+          <EnergyBars key={v+title} items={groups} lo={lo} hi={hi} sel={ep.sel} onPick={g=>set({sel:ep.sel===g.key?null:g.key})}/>
+          {legend}
+          <div className="x-sub" style={{fontSize:12.5,textAlign:'center',minHeight:18}}>{sel
+            ?(sel.n?<><b>{unit==='day'?dateLong(sel.key):unit==='week'?`Week of ${fmtD(sel.days[0])}`:new Date(sel.key+'T00:00:00').toLocaleDateString('en-IN',{month:'long'})}</b>{unit!=='day'?' · a day on average':''}: ate {fmtN(Math.round(sel.inK))}, burned {fmtN(Math.round(sel.outK))} kcal
+              {unit==='day'&&<> · <button className="x-btn sm ghost" style={{display:'inline-flex',minHeight:28,padding:'0 8px'}} onClick={()=>set({view:'day',date:sel.key})}>Open day</button></>}</>:'Nothing logged here')
+            :v==='week'||v==='month'?'Each pair is one day · tap one for its numbers':`Each pair is the average day in that ${unit} · tap one`}</div>
+        </div>
+        {tot>0?<>{balance(avgIn,avgOut,2)}
+          <div className="x-card" style={{display:'flex',gap:12,alignItems:'center'}}>
+            <Shape kind="cookie12" size={44} fill={netKg>0?'var(--amber-c)':'var(--mint-c)'} color={netKg>0?'var(--on-amber-c)':'var(--on-mint-c)'} font={20}>⚖️</Shape>
+            <span style={{flex:1,minWidth:0,lineHeight:1.45}}><b>{Math.abs(netKg)<0.05?'About even':`About ${Math.abs(netKg).toFixed(Math.abs(netKg)<1?2:1)} kg ${netKg>0?'gained':'lost'}`}</b>
+              <span className="x-sub" style={{display:'block',fontSize:12.5}}>from the gap between eating and burning over {tot} logged day{tot===1?'':'s'} (7,700 kcal ≈ 1 kg). Days with no food logged are left out.</span></span>
+          </div></>
+          :<div className="x-card" style={{color:'var(--fg2)'}}>No food logged in this {v}. Days count once you log what you eat.</div>}
+      </>;
+    }
+    return(<div>
+      <div className="x-head" style={{alignItems:'center',justifyContent:'flex-start'}}>
+        <button className="x-ibtn" aria-label="Back" onClick={()=>setEnergyPage(null)}><Ico d={ICON.left} size={24}/></button>
+        <Shape kind="cookie9" size={44} fill="var(--amber-c)" color="var(--on-amber-c)" font={20}>🔥</Shape>
+        <h1 style={{fontSize:28}}>In &amp; out</h1>
+      </div>
+      <div className="x-wrap" style={{paddingTop:0}}>
+        <Seg items={[['day','Day'],['week','Week'],['month','Month'],['quarter','Qtr'],['year','Year']]} value={v} onChange={x=>set({view:x,sel:null})}/>
+        {body}
+      </div>
+    </div>);
+  }
+
   function renderStepsPage(){
     const sp=stepsPage,v=sp.view,set=f=>setStepsPage(p=>({...p,...f}));
     const goal=WALK_GOAL.day,k=kfmt;
@@ -4242,6 +4383,7 @@ Reply ONLY with valid JSON (no markdown):
         <div className="x-wrap" style={{marginTop:14}}>
           {isT&&!prefs.goalsSet&&pagePill({id:'goals',tone:'setup',icon:'🎯',text:'Set your own calorie & protein goals',tap:()=>goSettings('goals')})}
           {renderFuel(m,()=>{setTab('diet');setDietView(isT?'today':'history');})}
+          {renderBurn(day,()=>{setEnergyPage({view:'week',date:day});window.scrollTo(0,0);})}
           <div className="x-grid2">
             <button className="x-card mint sb" onClick={()=>openStepsPage(day)} aria-label="Steps and walks" style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8,padding:'16px 10px'}}>
               <span className="x-eyebrow" style={{color:'var(--on-mint-c)',alignSelf:'flex-start',paddingLeft:6}}>Move</span>
@@ -6082,7 +6224,9 @@ Reply ONLY with valid JSON (no markdown):
   // the page is rendered first: it can add its own prompts as pills (pagePill), shown pinned at the top
   const pagePills=[];
   pagePill=p=>{pagePills.push(p);return null;};
-  const pageEl=<>
+  const overlayEl=!sheet&&!setupOpen&&(recOpen||actPage||stepsPage||energyPage)?(recOpen?renderRecPage():actPage?renderActPage():stepsPage?renderStepsPage():renderEnergyPage()):null;
+  const nOverlayPills=pagePills.length;
+  const pageEl=overlayEl?null:<>
     {tab==='home'&&renderHomeX()}
     {tab==='settings'&&renderSettingsX()}
     {tab==='diet'&&dietView==='today'&&renderFoodToday()}
@@ -6091,15 +6235,17 @@ Reply ONLY with valid JSON (no markdown):
     {tab==='fitness'&&fitView==='calendar'&&renderFitHistory()}
     {tab==='progress'&&renderProgressX()}
   </>;
+  if(overlayEl)pagePills.length=nOverlayPills;   // a full-screen page is up: only its own prompts
   const pillsNow=sheet||setupOpen?[]:allPills(pagePills);
   return(
     <div style={{minHeight:'100dvh',background:'var(--bg)',color:'var(--text-primary)',display:'flex',flexDirection:'column',position:'relative'}}>
       {toast&&<div className="x-snack" role="status" style={sheet?{top:'calc(12px + env(safe-area-inset-top,0px))',bottom:'auto'}:null}><i style={{background:toast.color}}/>{toast.msg}</div>}
       {setupOpen&&!sheet&&renderSetup()}
       {renderBigWater()}
-      {!sheet&&!setupOpen&&(recOpen||actPage||stepsPage)&&<div className="page-pad" style={{flex:1,display:'flex',flexDirection:'column'}}>
-        {recOpen?renderRecPage():actPage?renderActPage():renderStepsPage()}</div>}
-      <div style={{display:sheet||setupOpen||stepsPage||actPage||recOpen?'none':'flex',flexDirection:'column',flex:1}}>
+      {overlayEl&&<div className="page-pad" style={{flex:1,display:'flex',flexDirection:'column'}}>
+        {pillsNow.length>0&&<div style={{height:46,flexShrink:0}} aria-hidden="true"/>}
+        {overlayEl}</div>}
+      <div style={{display:sheet||setupOpen||overlayEl?'none':'flex',flexDirection:'column',flex:1}}>
       {tab==='diet'&&<div>{head('Food',dateLong(TODAY))}<div style={{padding:'0 16px 12px'}}><Seg items={[['today','Today'],['history','History']]} value={pillPreview?.dietView||dietView} onChange={setDietView}/></div></div>}
       {tab==='fitness'&&<div>{head('Fitness',fitView==='day'?'Plan · walks · workout':'Your history')}<div style={{padding:'0 16px 12px'}}><Seg items={[['day','Today'],['calendar','History']]} value={pillPreview?.fitView||fitView} onChange={setFitView}/></div></div>}
       {tab==='progress'&&head('Progress','Body, trends and weekly review')}
@@ -6389,6 +6535,23 @@ function HourChart({hours,walks,now,sel,onSel}){
   </svg>);
 }
 // Steps per day (or per month): pill bars with a dotted goal line; days at goal in mint
+// In vs out: for each day (or week, or month) a pair of bars side by side on one scale, food eaten (Fuel colour)
+// and calories burned (amber), with the intake target band. Tap a pair to pick it.
+function EnergyBars({items,lo,hi,sel,onPick}){
+  const W=336,H=190,top=22,bot=H-24,n=items.length,gap=n>14?3:n>8?6:12,gw=(W-gap*(n-1))/n,bw=Math.max(2,(gw-(n>14?1:3))/2);
+  const mx=Math.max(hi*1.25,...items.map(i=>Math.max(i.inK||0,i.outK||0)));const y=v=>bot-(bot-top)*v/mx;
+  return(<svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Calories eaten and burned" style={{display:'block',overflow:'visible'}}>
+    <rect x="0" width={W} y={y(hi)} height={Math.max(1,y(lo)-y(hi))} rx="4" style={{fill:'var(--pri)',opacity:.13}}/>
+    {items.map((it,i)=>{const x=i*(gw+gap),on=sel===it.key,f=it.future;
+      const bar=(v,bx,c)=>v>0?<rect x={bx} y={y(v)} width={bw} height={bot-y(v)} rx={Math.min(bw/2,6)} className="lm-grow" style={{fill:c,animationDelay:`${i*(n>14?8:25)}ms`}}/>:null;
+      return(<g key={it.key} onClick={()=>!f&&onPick&&onPick(it)} style={{cursor:f?'default':'pointer',opacity:f?.3:sel&&!on?.55:1}}>
+        <rect x={x-gap/2} y={0} width={gw+gap} height={H} fill="transparent"/>
+        {on&&<rect x={x-gap/2+1} y={top-14} width={gw+gap-2} height={bot-top+14} rx="10" style={{fill:'var(--s3)'}}/>}
+        {bar(it.inK,x,'var(--pri)')}{bar(it.outK,x+bw+(n>14?1:3),'var(--amber)')}
+        {it.show&&<text x={x+gw/2} y={H-6} textAnchor="middle" fontSize="11" fontWeight={it.today||on?850:700} style={{fill:it.today?'var(--pri)':'var(--fg2)'}}>{it.label}</text>}
+      </g>);})}
+  </svg>);
+}
 function PeriodBars({items,goal,onPick}){
   const W=336,PW=W-46,H=176,top=26,bot=H-24,n=items.length,gap=n>14?2:n>8?4:8,bw=(PW-gap*(n-1))/n;
   const mx=Math.max(goal*1.2,...items.map(i=>i.v||0));const gy=bot-(bot-top)*goal/mx;
