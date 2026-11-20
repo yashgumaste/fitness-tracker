@@ -81,6 +81,8 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   await step('Home loads',async()=>{await expect('Fuel');await expect('Timeline');});
   await step('Food today',async()=>{await tab(1);await expect('Breakfast');await expect('Water');});
   await step('Food history',async()=>{await click('.x-seg button','History');await expect('kcal');
+    const meals=await p.evaluate(()=>[...document.querySelectorAll('section[aria-label]')].map(x=>x.getAttribute('aria-label')));
+    if(!meals.some(m=>['Breakfast','Lunch','Snack','Dinner'].includes(m)))throw new Error('history days should be split by meal; got '+meals.join(', '));
     // log for a past day: the app's own date picker, not the browser's
     await click('.x-btn','Log food for a past day');await expect('8 Nov');
     if(await p.$('.x-sheet input[type=date]'))throw new Error('the browser date field is back');

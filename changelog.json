@@ -21,6 +21,10 @@
     {
       "text": "Tap Burned for the new In & out page: what you ate and what you burned, side by side for every day of a week or month, and for the average day of each week of a quarter or each month of a year, against your eating target. It adds up the deficit or surplus and roughly what that means in kg.",
       "img": "docs/whatsnew/in-and-out.png"
+    },
+    {
+      "text": "Food → History: each day's food is now split into Breakfast, Lunch, Snack and Dinner like Today, with each meal's calories and protein and a + to add to that meal on that day.",
+      "img": "docs/whatsnew/history-meals.png"
     }
   ],
   "releases": [

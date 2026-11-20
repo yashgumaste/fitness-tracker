@@ -4514,7 +4514,21 @@ Reply ONLY with valid JSON (no markdown):
                     </div>)}
                 </div>
               </div>}
-              <div style={{padding:'0 8px 8px'}}>{es.map(renderEntry)}</div>
+              {/* the day's food under Breakfast, Lunch, Snack and Dinner, like Today */}
+              <div style={{padding:'0 8px 8px',display:'flex',flexDirection:'column',gap:6}}>
+                {[...MEAL_TYPES,'Other'].map((t,i)=>{
+                  const list=es.filter(e=>t==='Other'?!MEAL_TYPES.includes(e.mealType):e.mealType===t);if(!list.length)return null;
+                  const mm=list.reduce((a,e)=>{const x=entryMacros(e);return{cal:a.cal+x.cal,pro:a.pro+x.pro};},{cal:0,pro:0});
+                  return(<section key={t} aria-label={t}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 8px 2px'}}>
+                      <Shape kind={['cookie9','cookie12','sunny','flower','cookie4'][i]} size={34} fill={['var(--amber-c)','var(--pri-c)','var(--pink-c)','var(--violet-c)','var(--s3)'][i]} font={16}>{t==='Other'?'🍽️':MEAL_ICONS[t]}</Shape>
+                      <div style={{flex:1,minWidth:0}}><b style={{fontSize:15.5}}>{t}</b>
+                        <span className="x-sub" style={{fontSize:12.5,marginLeft:8}}>{fmtN(mm.cal)} kcal · {rnd(mm.pro)} g protein</span></div>
+                      {t!=='Other'&&<button className="x-ibtn sm" aria-label={`Add ${t} on ${dateLong(dk)}`} onClick={()=>openFood(dk,t)}><Ico d={ICON.add} size={20}/></button>}
+                    </div>
+                    {list.map(renderEntry)}
+                  </section>);})}
+              </div>
               {syms.length>0&&<div className="x-chips" style={{padding:'0 16px 10px'}}>
                 {syms.map(e=>{const sx=SYMPTOMS.find(x=>x.id===e.id);return sx?<button key={e.ts} className={`x-chip ${sx.id==='good'?'mint':'pink'}`} onClick={()=>openFeel(dk,e.id)}>{sx.emoji} {sx.label}{COUNT_IDS.includes(sx.id)&&(e.count||1)>1?` ×${e.count}`:''}</button>:null;})}
               </div>}
