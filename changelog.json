@@ -1,5 +1,9 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "About & updates: when the app was updated through Android's shell, it now says what that means (an app using Shizuku, or a computer over ADB) instead of just “Shell”."
+    }
+  ],
   "releases": [
     {
       "version": "1.31",
