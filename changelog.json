@@ -1,33 +1,38 @@
 {
-  "unreleased": [
-    {
-      "text": "About & updates: when the app was updated through Android's shell, it now says what that means (an app using Shizuku, or a computer over ADB) instead of just “Shell”."
-    },
-    {
-      "text": "A walk or hike being recorded now shows as a bright red pill pinned at the top of every page (with a blinking dot, distance and time), so it never scrolls away. Tap it to go back to the recording. “Version x is out” is a pinned pill on Home too, with ✕ to hide it.",
-      "img": "docs/whatsnew/rec-pill.png"
-    },
-    {
-      "text": "Pills at the top for everything that needs you, each in its own colour and icon: 🍽️ log a meal (amber), 😴 log your sleep (violet), 🌙 bedtime (indigo), 🧠 the coach's tips and “get tomorrow's plan” (blue), 🚶 walk time (green), ⭐ keep a good habit going (pink). They appear once a reminder is due, even if you opened the app without tapping the notification or it was dismissed, and go away once it's done. Tap to act or open the full message; ✕ or Later hides one for 30 minutes.",
-      "img": "docs/whatsnew/pills.png"
-    },
-    {
-      "text": "Setup prompts are pills too (set your goals, add measurements, a goal weight, steps by the hour, show a route in Google Health): grey, on the page they belong to. ✕ hides one for a week."
-    },
-    {
-      "text": "New Burned card on Home, under Fuel: how many calories you've burned so far and where they came from (resting, walks, everyday steps, workout, and digesting food), with a coloured bar like Fuel's macros. Its tag shows how far you are into a deficit or surplus.",
-      "img": "docs/whatsnew/burned-card.png"
-    },
-    {
-      "text": "Tap Burned for the new In & out page: what you ate and what you burned, side by side for every day of a week or month, and for the average day of each week of a quarter or each month of a year, against your eating target. It adds up the deficit or surplus and roughly what that means in kg.",
-      "img": "docs/whatsnew/in-and-out.png"
-    },
-    {
-      "text": "Food → History: each day's food is now split into Breakfast, Lunch, Snack and Dinner like Today, with each meal's calories and protein and a + to add to that meal on that day.",
-      "img": "docs/whatsnew/history-meals.png"
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.33",
+      "date": "2026-11-21",
+      "items": [
+        {
+          "text": "About & updates: when the app was updated through Android's shell, it now says what that means (an app using Shizuku, or a computer over ADB) instead of just “Shell”."
+        },
+        {
+          "text": "A walk or hike being recorded now shows as a bright red pill pinned at the top of every page (with a blinking dot, distance and time), so it never scrolls away. Tap it to go back to the recording. “Version x is out” is a pinned pill on Home too, with ✕ to hide it.",
+          "img": "docs/whatsnew/rec-pill.png"
+        },
+        {
+          "text": "Pills at the top for everything that needs you, each in its own colour and icon: 🍽️ log a meal (amber), 😴 log your sleep (violet), 🌙 bedtime (indigo), 🧠 the coach's tips and “get tomorrow's plan” (blue), 🚶 walk time (green), ⭐ keep a good habit going (pink). They appear once a reminder is due, even if you opened the app without tapping the notification or it was dismissed, and go away once it's done. Tap to act or open the full message; ✕ or Later hides one for 30 minutes.",
+          "img": "docs/whatsnew/pills.png"
+        },
+        {
+          "text": "Setup prompts are pills too (set your goals, add measurements, a goal weight, steps by the hour, show a route in Google Health): grey, on the page they belong to. ✕ hides one for a week."
+        },
+        {
+          "text": "New Burned card on Home, under Fuel: how many calories you've burned so far and where they came from (resting, walks, everyday steps, workout, and digesting food), with a coloured bar like Fuel's macros. Its tag shows how far you are into a deficit or surplus.",
+          "img": "docs/whatsnew/burned-card.png"
+        },
+        {
+          "text": "Tap Burned for the new In & out page: what you ate and what you burned, side by side for every day of a week or month, and for the average day of each week of a quarter or each month of a year, against your eating target. It adds up the deficit or surplus and roughly what that means in kg.",
+          "img": "docs/whatsnew/in-and-out.png"
+        },
+        {
+          "text": "Food → History: each day's food is now split into Breakfast, Lunch, Snack and Dinner like Today, with each meal's calories and protein and a + to add to that meal on that day.",
+          "img": "docs/whatsnew/history-meals.png"
+        }
+      ]
+    },
     {
       "version": "1.31",
       "date": "2026-11-20",
