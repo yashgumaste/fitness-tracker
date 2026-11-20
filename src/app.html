@@ -5037,7 +5037,7 @@ Reply ONLY with valid JSON (no markdown):
             {instSrc&&instSrc.updatedAt>0&&(()=>{
               // app names Android gives for its own installers, in plain words
               const nm=k=>{const p=instSrc[k];if(!p)return null;const n=instSrc[k+'Name'];
-                return /packageinstaller$/.test(p)?'Android’s installer (an APK you opened)':p===window.LMNative?.appId||p==='com.yashgumaste.fitnesstracker'?'this app’s own updater':n&&n!==p?`${n} (${p})`:p;};
+                return /packageinstaller$/.test(p)?'Android’s installer (an APK you opened)':p==='com.android.shell'?'Android’s shell (an app using Shizuku, or a computer over ADB)':p===window.LMNative?.appId||p==='com.yashgumaste.fitnesstracker'?'this app’s own updater':n&&n!==p?`${n} (${p})`:p;};
               const when=ts=>new Date(ts).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
               const by=nm('initiator')||nm('installer');
               return(<div style={{fontSize:13.5,lineHeight:1.5,padding:'10px 12px',borderRadius:16,background:'var(--s2)'}}>
