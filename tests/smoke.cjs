@@ -183,7 +183,14 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await click('.x-btn','+1 glass');await W(600);
     await tab(4);await click('.x-item','Water reminders');await click('button','ml');await p.click('[aria-label="Back to settings"]');await W();await tab(0);await expect('+250');});
   await step('Logging reminders',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Logging reminders');
-    await expect('Remind me this long after');await expect('Next ·');await click('.x-item','Snack');await click('.x-chip','1 h');
+    await expect('Logging reminders');await expect('Coach’s reminders');await expect('Next ·');await click('.x-item','Snack');
+    // each reminder has its own timing: move Dinner's to 1 h after, the coach's to 2 h before
+    const dinnerAt=async()=>p.evaluate(()=>{const r=[...document.querySelectorAll('button.x-item')].find(e=>/\bDinner\b/.test(e.innerText)&&/Usually/.test(e.innerText));return r?r.innerText:'';});
+    await p.click('[aria-label="Dinner: 1 h after your usual time"]');await W(300);
+    const row=await dinnerAt();if(!/Reminder (today|tomorrow) 9:\d\d PM/.test(row))throw new Error('Dinner reminder should move to ~1 h after its usual time: '+row.replace(/\n/g,' '));
+    await p.click('[aria-label="Coach’s plan: 2 h before each usual meal"]');await W(300);
+    if(!await p.$('[aria-label="Coach’s plan: 2 h before each usual meal"].on'))throw new Error('coach timing chip did not stick');
+    if(await p.$('[aria-label="Brisk walk: 2 h before your usual walk"]'))throw new Error('walk chips should be their own');
     await p.click('[aria-label="Back to settings"]');await W();});
   await step('Burned card and In & out page',async()=>{await tab(0);await expect('Burned');await expect('Resting');await expect('Digesting');
     await p.click('[aria-label^="Calories burned"]');await W(600);await expect('In & out');await expect('Eating target');
@@ -198,7 +205,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const items=await p.evaluate(()=>window.__planned||[]);const tags=items.filter(x=>x.kind==='nudge').map(x=>x.tag);
     for(const t of ['2026-11-10-Breakfast','2026-11-10-Dinner','2026-11-10-keep0','2026-11-10-walkPM'])if(!tags.includes(t))throw new Error('missing reminder '+t+'; got '+tags.join(', '));
     const b=items.find(x=>x.tag==='2026-11-10-Breakfast');if(!/boiled eggs/.test(b.body)||b.open!=='home'||b.icon!=='meal')throw new Error('breakfast tip is wrong: '+JSON.stringify(b));
-    const bt=await p.evaluate(at=>{const d=new Date(at);return{h:d.getHours(),m:d.getMinutes(),s:d.toTimeString()};},b.at);if(!(bt.h===8&&bt.m===10))throw new Error('breakfast tip should be 1 h before the usual 9:10, at 8:10; got '+bt.s);
+    const bt=await p.evaluate(at=>{const d=new Date(at);return{h:d.getHours(),m:d.getMinutes(),s:d.toTimeString()};},b.at);if(!(bt.h===7&&bt.m===10))throw new Error('breakfast tip should be 2 h (set in the reminders step) before the usual 9:10, at 7:10; got '+bt.s);
     const wp=items.find(x=>x.tag==='2026-11-10-walkPM');
     if(!/after lunch/.test(wp.title))throw new Error('second walk should be the after-lunch walk: '+wp.title);
     const wt=await p.evaluate(at=>new Date(at).getHours(),wp.at);if(wt<11||wt>=15)throw new Error('after-lunch walk nudge should come around lunch, got hour '+wt);

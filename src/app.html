@@ -1962,6 +1962,12 @@ function App(){
   /* ─── PERSISTENT STORAGE via artifact db ─── */
   const [storageReady,setStorageReady]=useState(false);
   // the coach's plan for a day: made when the day before was reviewed
+  // each reminder's own timing (Settings → Logging reminders, under each switch), in minutes
+  const REM_OPTS={sleep:[[15,30,60,90],'after you usually wake'],Breakfast:[[30,45,60,90],'after your usual time'],Lunch:[[30,45,60,90],'after your usual time'],
+    Snack:[[30,45,60,90],'after your usual time'],Dinner:[[30,45,60,90],'after your usual time'],bedtime:[[15,30,45,60],'before lights-out'],
+    coach:[[30,60,90,120],'before each usual meal'],walk:[[15,30,60,90],'before your usual walk']};
+  const remOff=k=>{const o=((prefs.logrem||{}).offs||{})[k];if(o!=null)return +o;const c=prefs.logrem||{};
+    return k==='sleep'||k==='bedtime'?30:k==='coach'||k==='walk'?(+c.lead||60):k==='Snack'?Math.max(60,+(c.after||45)):+(c.after||45);};
   const planFor=day=>((prefs.coach||{})[calAddDays(day,-1)]||{}).tomorrow||null;
   // coach reviews saved earlier (the last few days) show again after the app restarts
   useEffect(()=>{if(storageReady&&prefs.coach)setDayInsight(p=>({...prefs.coach,...p}));
@@ -2760,7 +2766,7 @@ Give a JSON response ONLY (no markdown):
   "focus_next": "<one specific thing to do next: ${isT?'the next meal or the rest of today':'next time, on a day like this'}>",
   "recovery_tip": "<practical tip for tonight and tomorrow: food, sleep, water or rest, based on the whole day>"${wantPlan?`,
   "tomorrow": {
-    "_": "Reminders the app sends on ${planDay}, ${(logCfg.lead||60)>=60?((logCfg.lead||60)/60)+' hour'+((logCfg.lead||60)>60?'s':''):(logCfg.lead||60)+' minutes'} before the usual time of each thing, so there's time to plan it. Each line is a phone notification: under 110 characters, specific, friendly, in plain words. Use null where there is nothing specific to say.",
+    "_": "Reminders the app sends on ${planDay}: meal tips ${fmtLead(remOff('coach'))} and walk nudges ${fmtLead(remOff('walk'))} before the usual time, so there's time to plan. Each line is a phone notification: under 110 characters, specific, friendly, in plain words. Use null where there is nothing specific to say.",
     "Breakfast": "<what to eat at breakfast, from what this day lacked or overdid, e.g. 'Protein first: 2 boiled eggs or 150 g dahi with 1 chapati'>",
     "Lunch": "<same for lunch>", "Snack": "<same for the snack, or null>", "Dinner": "<same for dinner, e.g. timing or a lighter plate>",
     "walk_morning": "<the morning brisk walk: a target pace in m:ss min/km, steps/min or minutes, from this day's walks>",
@@ -3657,16 +3663,17 @@ Reply ONLY with valid JSON (no markdown):
     const ok=(at,win=4*3600000)=>due?at<=now&&now-at<win:at>now+60000;
     for(const day of due?[TODAY]:[TODAY,calAddDays(TODAY,1)]){
       const ms=m=>new Date(day+'T00:00:00').getTime()+m*60000,we=isWeekend(day);
-      if(logCfg.sleep&&!sleepMin(sleepLog[day])){const at=ms(Math.min(11*60,Math.max(6*60,(we?U.sleep.we:U.sleep.wd)+30)));
+      if(logCfg.sleep&&!sleepMin(sleepLog[day])){const at=ms(Math.min(11*60,Math.max(6*60,(we?U.sleep.we:U.sleep.wd)+remOff('sleep'))));
         if(ok(at))out.push({at,kind:'sleep',day,...logMessage('sleep',day,at)});}
       if(logCfg.bedtime&&!sleepMin(sleepLog[calAddDays(day,1)])){const b=bedPlan(day);
         // missed the 30-min warning but lights-out is still 15+ min away: nudge in 5 min
-        const at=due?b.at:b.at>now+60000?b.at:b.bedMs-now>=15*60000?now+5*60000:0;
-        if(at&&ok(at,b.bedMs+3600000-b.at))out.push({at,kind:'bedtime',day,bedMs:b.bedMs,...logMessage('bedtime',day,at)});}
+        const bAt=b.bedMs-remOff('bedtime')*60000;
+        const at=due?bAt:bAt>now+60000?bAt:b.bedMs-now>=15*60000?now+5*60000:0;
+        if(at&&ok(at,b.bedMs+3600000-bAt))out.push({at,kind:'bedtime',day,bedMs:b.bedMs,...logMessage('bedtime',day,at)});}
       const logged=new Set((dietGrouped[day]||[]).map(e=>e.mealType));
       MEAL_TYPES.forEach((mt,i)=>{if(!logCfg[mt])return;
         if(MEAL_TYPES.slice(i).some(x=>logged.has(x)))return;   // this meal, or a later one, is already in
-        const at=ms(Math.min(23*60,Math.max(6*60,(we?U[mt].we:U[mt].wd)+(mt==='Snack'?Math.max(60,+logCfg.after):+logCfg.after))));
+        const at=ms(Math.min(23*60,Math.max(6*60,(we?U[mt].we:U[mt].wd)+remOff(mt))));
         if(ok(at))out.push({at,kind:mt,day,...logMessage(mt,day,at)});});
       out.push(...planNudges(day,U,ms,we,logged,now,ok,due));
     }
@@ -3681,7 +3688,7 @@ Reply ONLY with valid JSON (no markdown):
       if(ok(at,tag==='walkAM'||tag==='walkPM'?2*3600000:3*3600000)&&body)out.push({at,kind:'nudge',tag:day+'-'+tag,open,icon,day,title,body:String(body).trim()});};
     // the coach's nudges come this long before the usual time (Settings: 30 min – 2 h), so there's time to plan;
     // never before you're usually up
-    const lead=logCfg.lead||60,wake=we?U.sleep.we:U.sleep.wd,early=m=>Math.max(wake,m-lead);
+    const lead=remOff('coach'),wLead=remOff('walk'),wake=we?U.sleep.we:U.sleep.wd,early=m=>Math.max(wake,m-lead),earlyW=m=>Math.max(wake,m-wLead);
     const mealAt=mt=>early(we?U[mt].we:U[mt].wd);
     const mv=day===TODAY?moveDay(day):null;
     const walked=when=>mv?mv.walks.some(w=>w.start!=null&&(when==='am'?w.start<11*60:w.start>=11*60)):false;
@@ -3697,14 +3704,14 @@ Reply ONLY with valid JSON (no markdown):
     }
     if(logCfg.walk){
       // morning brisk walk: at your usual time, if you usually walk in the morning (or the coach planned one)
-      const amAt=W.am!=null?early(W.am):plan&&plan.walk_morning?wake+45:null;
+      const amAt=W.am!=null?earlyW(W.am):plan&&plan.walk_morning?wake+45:null;
       if(amAt!=null&&!walked('am'))add(amAt,'walkAM','walk','walk',pickBy(day+'am',[`Brisk walk o’clock${n?', '+n:''} 🚶`,'Shoes on, morning walk time 👟','Your morning walk is waiting 🚶']),
         plan&&plan.walk_morning||`Your usual ${fmt12(m2hm(W.am))} walk. Aim for 100+ steps a minute to make it brisk.`);
       // a second brisk walk, when the coach asked for one
       // the second walk: after lunch if that's when you take it (or nothing's known yet), else your usual later walk
       if(logCfg.coach&&plan&&plan.walk_second&&!walked('pm')){
         const L=(day===TODAY?lunchMin(day):null)??(we?U.Lunch.we:U.Lunch.wd),afterLunch=W.lunchOff!=null||W.pm==null;
-        add(early(afterLunch?L+(W.lunchOff??20):W.pm),'walkPM','walk','walk',afterLunch?'Walk after lunch 🚶':'Second brisk walk 🚶',plan.walk_second);}
+        add(earlyW(afterLunch?L+(W.lunchOff??20):W.pm),'walkPM','walk','walk',afterLunch?'Walk after lunch 🚶':'Second brisk walk 🚶',plan.walk_second);}
     }
     // dinner is logged but the day hasn't been reviewed: ask for the review so tomorrow can be planned
     if(logCfg.coach&&day===TODAY&&logged.has('Dinner')&&!(prefs.coach||{})[TODAY]){
@@ -3879,7 +3886,7 @@ Reply ONLY with valid JSON (no markdown):
             return rows.length>0&&<div key="plan" className="x-card" style={{padding:'12px 14px',borderRadius:20,background:'var(--s3)'}}>
               <div className="x-eyebrow" style={{marginBottom:6}}>⏰ Reminders for {calAddDays(day,1)===TODAY?'today':dateNice(calAddDays(day,1))}</div>
               {rows.map(([l,tx],i)=><div key={i} style={{fontSize:14,lineHeight:1.45,marginTop:i?6:0}}><b>{l}:</b> {tx}</div>)}
-              <div className="x-sub" style={{fontSize:12,marginTop:6}}>Sent {fmtLead(logCfg.lead||60)} before your usual times. Change in Settings → Logging reminders.</div></div>;})()}
+              <div className="x-sub" style={{fontSize:12,marginTop:6}}>Meal tips come {fmtLead(remOff('coach'))} and walks {fmtLead(remOff('walk'))} before your usual times. Change in Settings → Logging reminders.</div></div>;})()}
         </div>}
       </div>);
   }
@@ -4969,51 +4976,61 @@ Reply ONLY with valid JSON (no markdown):
       </div>
     </>);
   }
+
+  // timing chips under a reminder's switch
+  function remTiming(k,setL){
+    const [opts,what]=REM_OPTS[k],cur=remOff(k);
+    return(<div key={k+'-t'} className="x-item" style={{minHeight:0,padding:'0 14px 14px 62px',display:'block'}}>
+      <span className="x-sub" style={{fontSize:12.5,display:'block',marginBottom:6}}>Remind me {what}</span>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
+        {opts.map(m=><button key={m} className={`x-chip${cur===m?' on':''}`} aria-label={`${l2(k)}: ${fmtLead(m)} ${what}`} onClick={()=>setL(c=>({offs:{...(c.offs||{}),[k]:m}}))}
+          style={{minHeight:34,padding:'0 4px',fontSize:13.5,justifyContent:'center',whiteSpace:'nowrap'}}>{fmtLead(m)}</button>)}
+      </div>
+    </div>);
+  }
+  const l2=k=>({sleep:'Sleep',bedtime:'Bedtime',coach:'Coach’s plan',walk:'Brisk walk'}[k]||k);
   function renderLogSettings(){
-    const c=logCfg;const setL=f=>setPrefs(p=>({...p,logrem:{...c,...f}}));
+    const c=logCfg;const setL=f=>setPrefs(p=>{const cur={...c,...(p.logrem||{})};return{...p,logrem:{...cur,...(typeof f==='function'?f(cur):f)}};});
     const native=window.LMNative?.isNative;const U=usualTimes();
     const items=planLogItems();const nx=items[0];
     const when=at=>{const d=new Date(at);return `${localDate(d)===TODAY?'today':'tomorrow'} ${fmt12(m2hm(d.getHours()*60+d.getMinutes()))}`;};
     const fmtM=m=>fmt12(m2hm(m));
     return(<>
       <div className="x-card" style={{display:'flex',flexDirection:'column',gap:12}}>
-        <div className="x-sub">A good-morning check-in to log your sleep, and a nudge after your usual meal times if you haven’t logged yet. Tap it to log straight away.</div>
+        <div className="x-sub">Logging reminders: a good-morning check-in to log your sleep, a nudge after your usual meal times if you haven’t logged yet, and a bedtime reminder. Below them, the coach’s reminders, which come <i>before</i> the usual time.</div>
         <Seg items={[['off','Off'],['on','On']]} value={c.on?'on':'off'} onChange={v=>setL({on:v==='on'})}/>
         {c.on&&nx&&<div style={{background:'var(--s4)',borderRadius:22,padding:'12px 14px',display:'flex',gap:12,alignItems:'flex-start'}}>
             <Shape kind="cookie9" size={40} fill={nx.kind==='sleep'?'var(--violet-c)':'var(--amber-c)'} color={nx.kind==='sleep'?'var(--on-violet-c)':'var(--on-amber-c)'} font={19}>{nx.kind==='sleep'||nx.kind==='bedtime'?'🌙':nx.kind==='nudge'?({walk:'🚶',star:'⭐',coach:'🧠'}[nx.icon]||'🍽️'):'🍽️'}</Shape>
             <div style={{flex:1,minWidth:0}}><div className="x-eyebrow" style={{marginBottom:3}}>Next · {when(nx.at)}</div>
             <b style={{display:'block'}}>{nx.title}</b><div className="x-sub" style={{marginTop:2}}>{nx.body}</div></div></div>}
         {c.on&&<>
+          <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Logging reminders</div>
           <div className="x-list">
             {LOG_KINDS.map(([k,em,l,sub])=>{const u=U[k];const nextK=items.find(x=>x.kind===k);
               const bp=k==='bedtime'?bedPlan(new Date().getHours()<4?calAddDays(TODAY,-1):TODAY):null;
-              return(<button key={k} className="x-item" onClick={()=>setL({[k]:!c[k]})} style={{minHeight:64}}>
+              return(<React.Fragment key={k}><button className="x-item" onClick={()=>setL({[k]:!c[k]})} style={{minHeight:64}}>
                 <span style={{fontSize:24,width:34,textAlign:'center'}}>{em}</span>
                 <span style={{flex:1,minWidth:0}}><span className="t" style={{display:'block'}}>{l}</span>
                   {bp?<span className="s" style={{display:'block'}}>Lights out {fmtTime(bp.bedMs)} for {fmtHM(bp.need)} · up {fmtTime(bp.wakeMs)} {bp.src==='lastweek'?`like last ${bp.dayName}`:bp.src==='today'?'like this morning':bp.src==='usual'?'as usual':''}</span>
                   :<span className="s" style={{display:'block'}}>{k==='sleep'?'Up at':'Usually'} {fmtM(u.wd)}{u.we!==u.wd?`, weekends ${fmtM(u.we)}`:''}</span>}
                   {c[k]&&nextK&&<span className="s" style={{display:'block',color:'var(--pri)'}}>Reminder {when(nextK.at)}</span>}</span>
                 <span className={`m3-switch${c[k]?' on':''}`} aria-checked={!!c[k]} role="switch"><span className="m3-switch-thumb"/></span>
-              </button>);})}
+              </button>{c[k]&&remTiming(k,setL)}</React.Fragment>);})}
           </div>
-          <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>From the coach</div>
+          <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Coach’s reminders</div>
           <div className="x-list">
             {[['coach','🧠','Coach’s plan','After you ask the coach to review a day: a food tip before each usual meal, a cheer for a habit worth repeating, and after dinner a nudge to get the review if you haven’t'],
               ['walk','🚶','Brisk walk',(()=>{const W=usualWalks();const second=W.lunchOff!=null?`a walk ${W.lunchOff<10?'right':`about ${W.lunchOff} min`} after lunch`:W.pm!=null?`your usual ${fmt12(m2hm(W.pm))} walk`:'a walk after lunch';
                 return W.am!=null?`Before your usual ${fmt12(m2hm(W.am))} morning walk, plus ${second} when the coach asks for one`:`Once you’ve walked in the morning a few times, before your usual time. Plus ${second} when the coach asks for one`;})()]]
               .map(([k,em,l,sub])=>{const nextK=items.find(x=>x.kind==='nudge'&&(k==='walk'?x.open==='walk':x.open!=='walk'));
-              return(<button key={k} className="x-item" onClick={()=>setL({[k]:!c[k]})} style={{minHeight:64}}>
+              return(<React.Fragment key={k}><button className="x-item" onClick={()=>setL({[k]:!c[k]})} style={{minHeight:64}}>
                 <span style={{fontSize:24,width:34,textAlign:'center'}}>{em}</span>
                 <span style={{flex:1,minWidth:0}}><span className="t" style={{display:'block'}}>{l}</span><span className="s" style={{display:'block'}}>{sub}</span>
                   {c[k]&&nextK&&<span className="s" style={{display:'block',color:'var(--pri)'}}>Next {when(nextK.at)}: {nextK.title}</span>}</span>
                 <span className={`m3-switch${c[k]?' on':''}`} aria-checked={!!c[k]} role="switch"><span className="m3-switch-thumb"/></span>
-              </button>);})}
+              </button>{c[k]&&remTiming(k,setL)}</React.Fragment>);})}
           </div>
-          <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Coach’s tips and walk nudges come this long before</div>
-          <div className="x-chips">{[30,60,90,120].map(m=><button key={m} className={`x-chip${(c.lead||60)===m?' on':''}`} onClick={()=>setL({lead:m})}>{fmtLead(m)}</button>)}</div>
-          <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Remind me this long after the usual time</div>
-          <div className="x-chips">{[[30,'30 min'],[45,'45 min'],[60,'1 h'],[90,'1 h 30']].map(([m,l])=><button key={m} className={`x-chip${+c.after===m?' on':''}`} onClick={()=>setL({after:m})}>{l}</button>)}</div>
-          <div className="x-sub">Usual times are learned from when you log (last 4 weeks, weekdays and weekends apart). The sleep check-in comes 30 minutes after you usually wake up. Bedtime comes 30 minutes before lights-out: tomorrow’s wake-up time (same weekday last week, else this morning, else your usual) minus the sleep you need for your age (8 h up to 25, 7 h 30 after), plus 30 min after a short night and 15 min after a hard day. Nothing comes if you’ve already logged it (or a later meal), or before 6 AM or after 11 PM. “Later” asks again in 30 minutes.</div>
+          <div className="x-sub">Each reminder has its own timing, under its switch. Usual times are learned from when you log (last 4 weeks, weekdays and weekends apart). Bedtime counts back from lights-out: tomorrow’s wake-up time (same weekday last week, else this morning, else your usual) minus the sleep you need for your age (8 h up to 25, 7 h 30 after), plus 30 min after a short night and 15 min after a hard day. The coach’s nudges never come before you usually wake. Nothing comes if you’ve already logged it (or a later meal), or before 6 AM or after 11 PM. “Later” asks again in 30 minutes.</div>
           {native&&<button className="x-btn outline" onClick={()=>{const k='sleep',at=Date.now();const msg=logMessage(k,TODAY,new Date(TODAY+'T'+m2hm((isWeekend(TODAY)?U.sleep.we:U.sleep.wd)+30)+':00').getTime());
             window.LMNative.testLog({kind:k,...msg}).then(ok=>showToast(ok?'Test reminder sent':'Notifications are blocked',ok?'var(--ok)':'var(--warn)'));}}>Send a test reminder</button>}
           {!native&&<div className="x-sub">Reminders work in the Android app.</div>}
