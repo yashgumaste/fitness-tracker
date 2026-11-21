@@ -3314,10 +3314,15 @@ Reply ONLY with valid JSON (no markdown):
   // Resting (Mifflin–St Jeor BMR; today only up to now), walks and everyday steps (moveDay: what moving adds on
   // top of resting), the workout (sets ≈ 1.5 min at ~4 MET, timed cardio ≈ 6 MET, resting not counted twice)
   // and digesting food (~10% of what was eaten).
-  function bmrOf(day){
-    const w=parseFloat(weightLog[day])||latestWeight?.w||+bodyMeasure.weightKg||75,h=+bodyMeasure.heightCm||170,a=+bodyMeasure.age||30;
-    return Math.max(900,10*w+6.25*h-5*a+(profile.gender==='female'?-161:profile.gender==='male'?5:-78));
+  // what resting is worked out from, so the In & out page can show it (and say when it's guessing)
+  function bmrInfo(day){
+    const wDay=parseFloat(weightLog[day]),wLog=latestWeight?.w,wM=bodySaved?+bodyMeasure.weightKg:0;
+    const w=wDay||wLog||wM||75,wSrc=wDay?'weighed that day':wLog?`last weigh-in, ${dateNice(latestWeight.date)}`:wM?'your measurements':'a guess';
+    const h=bodySaved&&+bodyMeasure.heightCm?+bodyMeasure.heightCm:0,a=+(profile.age||(bodySaved&&bodyMeasure.age)||0);
+    const kcal=Math.max(900,10*w+6.25*(h||170)-5*(a||30)+(profile.gender==='female'?-161:profile.gender==='male'?5:-78));
+    return{kcal,w,wSrc,h,a,sex:profile.gender,guess:!h||!a||!profile.gender||wSrc==='a guess'};
   }
+  function bmrOf(day){return bmrInfo(day).kcal;}
   function workoutKcal(day){
     const {sug}=daySug(day),dl=fitLogs[day]||{},kg=parseFloat(weightLog[day])||latestWeight?.w||+bodyMeasure.weightKg||75;
     let sets=0,cardioMin=0;
@@ -4176,7 +4181,11 @@ Reply ONLY with valid JSON (no markdown):
         {balance(x.inK,x.outK,1)}
         {renderBurn(d,null)}
         <div className="x-sub" style={{fontSize:12.5,lineHeight:1.5,padding:'0 4px'}}>
-          Resting is what your body burns doing nothing, worked out from your weight, height, age and sex{isT?' (counted up to now)':''}. Walks, everyday steps and the workout add only what moving burns on top of that. Digesting is about a tenth of what you ate. All are estimates.</div>
+          {(()=>{const r=bmrInfo(d);return(<>
+            <b>Resting {fmtN(Math.round(r.kcal))} kcal a day</b>{isT?' (counted up to now)':''}: what your body burns doing nothing, from the Mifflin–St Jeor formula with{' '}
+            {Math.round(r.w*10)/10} kg ({r.wSrc}), {r.h?Math.round(r.h)+' cm':'170 cm (a guess)'}, {r.a?r.a+' years':'30 years (a guess)'}, {r.sex==='female'?'woman':r.sex==='male'?'man':'sex not set'}.
+            {r.guess&&<> Some of these are guesses: <button className="x-btn sm ghost" style={{display:'inline-flex',minHeight:28,padding:'0 8px'}} onClick={openBody}>add your measurements</button></>}
+            {' '}Walks, everyday steps and the workout add only what moving burns on top of resting. Digesting is about a tenth of what you ate. All are estimates.</>);})()}</div>
       </>;
     }else{
       const a=ep.date;let groups=[],title,prev,next,canNext;

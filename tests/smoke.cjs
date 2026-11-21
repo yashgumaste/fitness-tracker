@@ -187,6 +187,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await p.click('[aria-label="Back to settings"]');await W();});
   await step('Burned card and In & out page',async()=>{await tab(0);await expect('Burned');await expect('Resting');await expect('Digesting');
     await p.click('[aria-label^="Calories burned"]');await W(600);await expect('In & out');await expect('Eating target');
+    await click('.x-seg button','Day');await expect('Mifflin');await expect(' kg (');
     for(const v of ['Month','Qtr','Year','Day','Week'])await click('.x-seg button',v);
     await expect('a day');
     const pairs=await p.evaluate(()=>document.querySelectorAll('svg[aria-label="Calories eaten and burned"] g').length);if(pairs!==7)throw new Error('week should have 7 pairs, got '+pairs);
