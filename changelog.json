@@ -2,6 +2,9 @@
   "unreleased": [
     {
       "text": "In & out → Day now shows exactly how resting calories were worked out: your daily resting burn, and the weight (and which weigh-in it came from), height, age and sex it used. If any of these are guesses because they aren't set, it says so with a button to add them. Resting now uses the age from your profile."
+    },
+    {
+      "text": "The coach's meal tips, walk nudges and habit cheers now come 1 hour before your usual time (instead of 15 minutes), so there's time to plan lunch or get ready to walk. Never before you usually wake up. Choose 30 min, 1 h, 1 h 30 or 2 h in Settings → Logging reminders."
     }
   ],
   "releases": [
