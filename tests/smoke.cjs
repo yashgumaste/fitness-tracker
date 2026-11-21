@@ -44,6 +44,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
       :{content:[{type:'text',text:t}],usage:{input_tokens:100,output_tokens:50}}});
     window.__aiCalls=[];
     window.fetch=async(u,o)=>{
+      while(window.__slowAI)await new Promise(r=>setTimeout(r,50));   // lets a test see the loading state
       if(/api\.github\.com/.test(String(u)))return{ok:true,status:200,json:async()=>({tag_name:'v99.1',html_url:'https://github.com/x/releases/v99.1',body:'**What\'s new**\n- Faster logging\n- Brighter charts',assets:[{name:'FitnessTracker-99.1.apk',browser_download_url:'https://github.com/x/FitnessTracker-99.1.apk'}]})};
       const body=o&&o.body?String(o.body):'';gem=/generativelanguage/.test(String(u));window.__aiCalls.push(String(u));
       if(/Split each meal/.test(body))return reply('[]');
@@ -209,7 +210,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const wp=items.find(x=>x.tag==='2026-11-10-walkPM');
     if(!/after lunch/.test(wp.title))throw new Error('second walk should be the after-lunch walk: '+wp.title);
     const wt=await p.evaluate(at=>new Date(at).getHours(),wp.at);if(wt<11||wt>=15)throw new Error('after-lunch walk nudge should come around lunch, got hour '+wt);
-    await p.click('[aria-label="Close"]');await W();
+    await p.click('[aria-label="Back"]');await W(600);
   });
   await step('Due reminders show as pills',async()=>{try{
     // late evening, dinner not logged: a "Log dinner" pill and a bedtime pill, even with no notification tapped
@@ -254,7 +255,14 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await p.fill('.x-sheet input','78.4');await click('.x-sheet-foot button','Save');});
   await step('Feeling',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Feeling');
     await click('.x-sheet .x-chip','Gas');await close();});
-  await step('Coach',async()=>{await tab(1);await click('.x-card','Ask the coach');await W(600);await expect('Coach');await expect('🍽️ Food');await expect('Protein was low at lunch.');await expect('Add dal at dinner.');});
+  await step('Coach',async()=>{await tab(1);
+    // the coach opens full screen from anywhere; it shows the loading indicator while it thinks
+    await p.click('button.x-card[aria-label="Ask the coach"], button.x-card[aria-label="Open the coach’s review"]');await W(700);
+    await expect('Coach');await expect('🍽️ Food');await expect('Protein was low at lunch.');await expect('Add dal at dinner.');
+    await p.evaluate(()=>{window.__slowAI=true;});await p.click('[aria-label="Get a fresh review"]');await W(150);
+    if(!await p.$('svg[role=progressbar]'))throw new Error('no loading indicator while the coach thinks');await expect('Reading');
+    await p.evaluate(()=>{window.__slowAI=false;});await W(1500);await expect('Protein was low at lunch.');
+    await p.click('[aria-label="Back"]');await W(600);await expect('Breakfast');});
   await step('Free AI used by default',async()=>{const c=await p.evaluate(()=>window.__aiCalls);if(!c.some(u=>/generativelanguage/.test(u)))throw new Error('AI did not go to Gemini: '+c.join(','));});
   await step('Colour picker',async()=>{await tab(4);await click('.x-item','Theme & colour');await click('.x-btn','Make your own colour');for(const m of ['RGB','HSV','Hex'])await click('.x-seg button',m);await close();});
   await step('Update check',async()=>{await p.evaluate(()=>{window.LMNative.installSource=async()=>({installedAt:Date.parse('2026-11-01T10:00:00+05:30'),updatedAt:Date.parse('2026-11-09T01:58:00+05:30'),

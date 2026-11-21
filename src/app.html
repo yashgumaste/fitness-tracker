@@ -648,8 +648,54 @@ input.m3-input{border-radius:999px;}
 .page-pad{padding-bottom:calc(var(--dock-h) + 40px + env(safe-area-inset-bottom,0px));}
 
 /* Floating dock: accent pill with icon tabs (active = black circle) + detached Log button */
+/* ── Motion (Material 3 Expressive) ──
+   Screen changes use View Transitions: opening a page grows it out of what you tapped (container transform),
+   back slides along the X axis, tabs fade through, sheets rise from the bottom. Springs: fast spatial with a
+   little overshoot for movement, quick ease for fades. Buttons themselves never animate transform/opacity
+   (Android WebView draws them square); pressing morphs their corners instead. */
+:root{--m-spatial:linear(0,0.009,0.035 2.1%,0.141 4.4%,0.723 12.9%,0.938 16.7%,1.017 19.4%,1.067,1.077 23.4%,1.072 25.4%,1.035 30.5%,1.004 36.2%,0.995 40.6%,1.001 54.5%,1);
+  --m-effects:cubic-bezier(.31,.94,.34,1);--m-emph:cubic-bezier(.2,0,0,1)}
+::view-transition-group(*){animation-duration:.42s;animation-timing-function:var(--m-spatial)}
+::view-transition-old(*),::view-transition-new(*){animation-timing-function:var(--m-effects)}
+::view-transition-group(lm-hero){animation-duration:.5s;border-radius:28px;overflow:hidden}
+::view-transition-old(lm-hero){height:100%;object-fit:cover;animation:lm-vt-fade-out .1s linear both}
+::view-transition-new(lm-hero){height:100%;object-fit:cover;animation:lm-vt-in .24s var(--m-effects) .05s both}
+:root[data-vt=open]::view-transition-old(root){animation:lm-vt-recede .35s var(--m-effects) both}
+:root[data-vt=open]::view-transition-new(root){animation:lm-vt-in .35s var(--m-effects) both}
+:root[data-vt=back]::view-transition-old(root){animation:lm-vt-out-r .3s var(--m-emph) both}
+:root[data-vt=back]::view-transition-new(root){animation:lm-vt-in-l .38s var(--m-emph) both}
+:root[data-vt=tab]::view-transition-old(root){animation:lm-vt-fade-out .09s linear both}
+:root[data-vt=tab]::view-transition-new(root){animation:lm-vt-through .3s var(--m-effects) .06s both}
+:root[data-vt=sheet]::view-transition-new(root){animation:lm-vt-rise .42s var(--m-spatial) both}
+:root[data-vt=sheet]::view-transition-old(root){animation:lm-vt-fade-out .2s linear both}
+:root[data-vt=unsheet]::view-transition-old(root){animation:lm-vt-sink .3s var(--m-emph) both;z-index:2}
+:root[data-vt=unsheet]::view-transition-new(root){animation:none}
+::view-transition-group(lm-dock),::view-transition-group(lm-pills){animation-duration:.3s}
+::view-transition-group(lm-pop){animation-duration:.45s;border-radius:28px;overflow:hidden}
+::view-transition-old(lm-pop){height:100%;object-fit:cover;animation:lm-vt-fade-out .1s linear both}
+::view-transition-new(lm-pop){height:100%;object-fit:cover;animation:lm-vt-in .22s var(--m-effects) .05s both}
+:root[data-vt=pop]::view-transition-old(root),:root[data-vt=pop]::view-transition-new(root){animation:none}
+@keyframes lm-vt-recede{to{opacity:.4;transform:scale(.94)}}
+@keyframes lm-vt-in{from{opacity:0}}
+@keyframes lm-vt-out-r{to{opacity:0;transform:translateX(18%)}}
+@keyframes lm-vt-in-l{from{opacity:0;transform:translateX(-12%)}}
+@keyframes lm-vt-fade-out{to{opacity:0}}
+@keyframes lm-vt-through{from{opacity:0;transform:scale(.92)}}
+@keyframes lm-vt-rise{from{transform:translateY(55%);opacity:.2}}
+@keyframes lm-vt-sink{to{transform:translateY(60%);opacity:0}}
+/* things arriving on a new screen rise into place one after another */
+.lm-rise{animation:lm-rise .5s var(--m-spatial) both}
+@keyframes lm-rise{from{opacity:0;transform:translateY(18px)}}
+@media (prefers-reduced-motion:reduce){.lm-rise{animation:none}::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}
+/* press feedback: corners morph (and a shade), the M3 Expressive way */
+button.x-card{transition:border-radius .3s var(--spring)!important}
+button.x-card:active{border-radius:20px!important}
+.top-pill{transition:border-radius .3s var(--spring)}
+.top-pill:has(.pill-main:active){border-radius:16px}
+button.x-item{transition:border-radius .3s var(--spring),background .15s!important}
+button.x-item:active{border-radius:14px}
 /* status pills pinned at the top: a walk being recorded, an update that's out */
-.top-pills{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:0;right:0;z-index:121;display:flex;justify-content:safe center;gap:8px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:2px 12px 10px;pointer-events:none}
+.top-pills{view-transition-name:lm-pills;position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:0;right:0;z-index:121;display:flex;justify-content:safe center;gap:8px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:2px 12px 10px;pointer-events:none}
 .top-pills::-webkit-scrollbar{display:none}
 .top-pill{pointer-events:auto;display:inline-flex;align-items:center;gap:8px;min-height:42px;padding:0 18px;border-radius:999px;border:none;font-weight:820;font-size:15px;font-variant-numeric:tabular-nums;box-shadow:0 6px 20px rgba(0,0,0,.35);white-space:nowrap}
 .top-pill{padding:0 4px 0 14px;flex-shrink:0}
@@ -662,7 +708,7 @@ input.m3-input{border-radius:999px;}
 .rec-dot{width:10px;height:10px;border-radius:5px;background:currentColor;animation:lm-blink 1.2s ease-in-out infinite}
 .rec-dot.paused{animation:none;opacity:.6}
 @keyframes lm-blink{0%,100%{opacity:1}50%{opacity:.25}}
-.dock{position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:120;pointer-events:none;height:64px;
+.dock{view-transition-name:lm-dock;position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:120;pointer-events:none;height:64px;
   display:flex;justify-content:center;align-items:center;gap:10px;}
 .dock>*{pointer-events:auto;}
 .dock-pill{display:flex;align-items:center;gap:2px;padding:6px;border-radius:999px;background:var(--pri);
@@ -1809,14 +1855,36 @@ Reply ONLY with JSON:
 
 // Spinner for round action buttons: SVG arc rotated with SMIL (painted, not a GPU layer —
 // Android WebView drew the CSS-rotated ring as a solid white square). Uses the button's text colour.
-function BtnSpinner({size=20}){
-  return(
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-label="Saving">
-      <circle cx="12" cy="12" r="8.5" strokeOpacity="0.28"/>
-      <path d="M12 3.5a8.5 8.5 0 0 1 8.5 8.5">
-        <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/>
-      </path>
-    </svg>);
+// inside a button: the same morphing shape, without its round container, in the button's text colour
+function BtnSpinner({size=20}){return <span style={{display:'inline-block',flexShrink:0}}><LoadingIndicator size={size} bare color="currentColor" label="Working"/></span>;}
+// Material 3 Expressive loading indicator: a soft shape that keeps morphing (cookie → pentagon → clover → burst →
+// pill → …) while it turns, inside a round container. Points are moved one by one, so any shape can become any other.
+function LoadingIndicator({size=72,color='var(--pri)',bg='var(--pri-c)',label='Loading',bare=false}){
+  const ref=useRef(null),gRef=useRef(null);
+  useEffect(()=>{
+    const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const S=[[9,.13],[5,.2],[4,.22],[12,.09],[2,.26],[7,.16],[3,.18]];   // [lobes, depth]
+    const N=120,R=bare?46:31,radius=([n,d],th)=>R*(1-d*(1-Math.cos(n*th))/2)*(n===2?1.08:1);
+    const path=(a,b,k)=>{let p='';for(let i=0;i<N;i++){const th=i/N*Math.PI*2,r=radius(a,th)*(1-k)+radius(b,th)*k;
+      p+=(i?'L':'M')+(r*Math.cos(th)).toFixed(2)+' '+(r*Math.sin(th)).toFixed(2);}return p+'Z';};
+    let raf,t0=performance.now(),rot=0,last=t0;
+    const tick=now=>{const t=(now-t0)/1000,per=reduce?2:0.7,i=Math.floor(t/per),f=t/per-i;
+      // spring-like settle: fast in, slight overshoot, rest
+      const k=Math.min(1,f*1.7),e=k<1?1-Math.pow(1-k,3)*(1-2.4*k*(1-k)):1;
+      const a=S[i%S.length],b=S[(i+1)%S.length];
+      rot+=(now-last)/1000*(reduce?40:(f<.6?300:120));last=now;
+      if(ref.current)ref.current.setAttribute('d',path(a,b,Math.min(1.06,e)));
+      if(gRef.current)gRef.current.setAttribute('transform',`rotate(${(rot%360).toFixed(1)})`);
+      raf=requestAnimationFrame(tick);};
+    raf=requestAnimationFrame(tick);return()=>cancelAnimationFrame(raf);
+  },[bare]);
+  return(<svg width={size} height={size} viewBox="-50 -50 100 100" role="progressbar" aria-label={label} style={{display:'block'}}>
+    {!bare&&<circle r="50" style={{fill:bg}}/>}<g ref={gRef}><path ref={ref} style={{fill:color}}/></g></svg>);
+}
+function CoachLoadingText(){
+  const L=['Reading what you ate…','Adding up protein and calories…','Looking at your walks…','Checking sleep and water…','Comparing with yesterday…','Planning tomorrow’s reminders…'];
+  const [i,setI]=useState(0);useEffect(()=>{const t=setInterval(()=>setI(x=>(x+1)%L.length),2200);return()=>clearInterval(t);},[]);
+  return <div key={i} className="lm-rise" aria-live="polite" style={{fontFamily:'var(--font-ui)',fontStretch:'115%',fontWeight:820,fontSize:18}}>{L[i]}</div>;
 }
 function Spinner({size=8,color='var(--acc)'}){
   return <span style={{display:'inline-block',width:size,height:size,border:`1.5px solid var(--outline)`,borderTopColor:color,borderRadius:'50%',animation:'spin 0.7s linear infinite'}}/>;
@@ -1829,8 +1897,47 @@ function Spinner({size=8,color='var(--acc)'}){
 ═══════════════════════════════════════════════════════════ */
 function App(){
   // Tab: 'diet' | 'fitness' | 'progress'
-  const [tab,setTab]=useState('home');
-  const [sheet,setSheet]=useState(null);
+  // ── Screen transitions ──
+  // Setters that change the screen run inside a View Transition with a kind: 'open' (grows out of what you just
+  // tapped), 'back', 'tab' (fade through), 'sheet' / 'unsheet'. See the Motion styles. Without support, or with
+  // reduced motion, the change just happens.
+  const vtCur=useRef({}),lastTap=useRef(null),vtBack=useRef([]);
+  const heroKey=e=>(e.getAttribute('aria-label')||'')+'|'+(e.textContent||'').slice(0,40);
+  useEffect(()=>{const h=e=>{lastTap.current={el:e.target.closest&&e.target.closest('button,[role=button],.top-pill'),t:Date.now()};};
+    document.addEventListener('pointerdown',h,true);return()=>document.removeEventListener('pointerdown',h,true);},[]);
+  function vtRun(kind,update){
+    const d=document,root=d.documentElement;
+    if(!d.startViewTransition||!(window.ReactDOM&&ReactDOM.flushSync)||d.hidden||(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)){update();return;}
+    // grow out of what was tapped, unless a full-screen page (which already carries the name) is up
+    const busy=d.querySelector('[style*="view-transition-name: lm-hero"]');
+    const tp=lastTap.current,hero=!busy&&kind==='open'&&tp&&tp.el&&tp.el.isConnected&&Date.now()-tp.t<1500?tp.el:null;
+    if(kind==='open')vtBack.current.push({y:window.scrollY,key:hero?heroKey(hero):null});
+    const back=kind==='back'?vtBack.current.pop():null;
+    root.dataset.vt=kind;if(hero)hero.style.viewTransitionName='lm-hero';
+    try{const t=d.startViewTransition(()=>{if(hero)hero.style.viewTransitionName='';ReactDOM.flushSync(update);
+        if(back){window.scrollTo(0,back.y);
+          // Back: the page shrinks into the same card it grew out of (found again by its label and text)
+          const el=back.key&&[...d.querySelectorAll('button,[role=button]')].find(e=>heroKey(e)===back.key&&!e.closest('[style*="view-transition-name: lm-hero"]'));
+          if(el){el.style.viewTransitionName='lm-hero';t.finished.catch(()=>{}).finally(()=>{el.style.viewTransitionName='';});}}});
+      // a newer transition can cut this one short: that's fine, the update has still run
+      t.ready.catch(()=>{});t.updateCallbackDone.catch(()=>{});
+      t.finished.catch(()=>{}).finally(()=>{if(root.dataset.vt===kind)delete root.dataset.vt;});}
+    catch(e){if(hero)hero.style.viewTransitionName='';update();}
+  }
+  // a small thing growing into a bigger one in place (a pill into its card), named lm-pop
+  function vtPop(el,update){
+    if(!document.startViewTransition||!(window.ReactDOM&&ReactDOM.flushSync)||(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)){update();return;}
+    if(el)el.style.viewTransitionName='lm-pop';document.documentElement.dataset.vt='pop';
+    try{const t=document.startViewTransition(()=>{if(el)el.style.viewTransitionName='';ReactDOM.flushSync(update);});
+      t.ready.catch(()=>{});t.updateCallbackDone.catch(()=>{});t.finished.catch(()=>{}).finally(()=>{if(document.documentElement.dataset.vt==='pop')delete document.documentElement.dataset.vt;});}
+    catch(e){if(el)el.style.viewTransitionName='';update();}
+  }
+  function vtSet(name,raw,kindOf){return v=>{const prev=vtCur.current[name],next=typeof v==='function'?v(prev):v;
+    const k=kindOf(prev,next);if(!k){raw(v);return;}vtCur.current={...vtCur.current,[name]:next};vtRun(k,()=>raw(next));};}
+  const [tab,setTab_]=useState('home');
+  const setTab=vtSet('tab',setTab_,(a,b)=>a!==b?'tab':null);
+  const [sheet,setSheet_]=useState(null);
+  const setSheet=vtSet('sheet',setSheet_,(a,b)=>!a&&b?'sheet':a&&!b?'unsheet':null);
   const [sinceEdit,setSinceEdit]=useState(null);   // which feeling's exact start time is being picked   // {type,...params} — the one bottom sheet
   const [draft,setDraft]=useState({});
   const [arm,setArm]=useState(false);      // delete armed
@@ -1844,7 +1951,8 @@ function App(){
   const dlTimer=useRef(null);
   const [setupStep,setSetupStep]=useState(0);
   const [setupDraft,setSetupDraft]=useState({});
-  const [settingsPage,setSettingsPage]=useState(null);
+  const [settingsPage,setSettingsPage_]=useState(null);
+  const setSettingsPage=vtSet('settingsPage',setSettingsPage_,(a,b)=>!a&&b?'open':a&&!b?'back':null);
   useEffect(()=>{if(settingsPage==='app')window.LMNative?.installSource?.().then(setInstSrc);},[settingsPage]);   // read each time About opens
   const [hcState,setHcState]=useState({read:[],write:[]});
   const [aiState,setAiState]=useState({hasKey:false});
@@ -1871,7 +1979,8 @@ function App(){
   const [dietEntries,setDietEntries]=useState([]);
   const [mealType,setMealType]=useState('Breakfast');
   const [isLogging,setIsLogging]=useState(false);
-  const [dietView,setDietView]=useState('today'); // 'today' | 'history'
+  const [dietView,setDietView_]=useState('today'); // 'today' | 'history'
+  const setDietView=vtSet('dietView',setDietView_,(a,b)=>a!==b?'tab':null);
   const [editingId,setEditingId]=useState(null);
   const [editText,setEditText]=useState('');
   const [editMT,setEditMT]=useState('Breakfast');
@@ -1918,7 +2027,8 @@ function App(){
   const [fitLogs,setFitLogs]=useState({});
   const [weightLog,setWeightLog]=useState({});
   const [selectedDate,setSelectedDate]=useState(todayKey());
-  const [fitView,setFitView]=useState('day'); // 'day' | 'calendar'
+  const [fitView,setFitView_]=useState('day'); // 'day' | 'calendar'
+  const setFitView=vtSet('fitView',setFitView_,(a,b)=>a!==b?'tab':null);
   const [calView,setCalView]=useState('week'); // 'day' | 'week' | 'month'
   const [calAnchor,setCalAnchor]=useState(todayKey); // todayKey as initializer fn, not TODAY which is defined later
   const [noteText,setNoteText]=useState('');
@@ -3020,12 +3130,15 @@ Reply ONLY with valid JSON (no markdown):
     return [...mv.walks.map(w=>`${w.name}${w.end?` ${fmtSpan(w.start,w.end)}`:''}${w.min?` (${w.min} min)`:''}, ${fmtN(w.steps)} steps, ${w.km.toFixed(1)} km${w.cadence?`, ${w.cadence} steps/min`:''}, ~${w.kcal} kcal`),
       `Whole day: ${fmtN(mv.steps)} / ${fmtN(WALK_GOAL.day)} steps, ${mv.km.toFixed(1)} km, ~${mv.kcal} kcal burned by moving (walks ${mv.walkKcal}, everyday steps ${mv.otherKcal})`].join('; ');};
   // ── Steps page (Day / Week / Month / Year) ──
-  const [stepsPage,setStepsPage]=useState(null);   // {view:'day'|'week'|'month'|'year', date, sel}
+  const [stepsPage,setStepsPage_]=useState(null);   // {view:'day'|'week'|'month'|'year', date, sel}
+  const setStepsPage=vtSet('stepsPage',setStepsPage_,(a,b)=>!a&&b?'open':a&&!b?'back':null);
   const openStepsPage=date=>{setStepsPage({view:'day',date:date||TODAY,sel:null});window.scrollTo(0,0);};
   // ── Recording a walk (Start / Pause / Finish) ──
   const [rec,setRec]=useState(null);        // live: {state,start,movingMs,distanceM,steps,gps,pts:[[ms,lat,lon,alt,acc]],confirm}
-  const [recOpen,setRecOpen]=useState(false);
-  const [actPage,setActPage]=useState(null);  // {date,id}: one walk's details
+  const [recOpen,setRecOpen_]=useState(false);
+  const setRecOpen=vtSet('recOpen',setRecOpen_,(a,b)=>!a&&b?'open':a&&!b?'back':null);
+  const [actPage,setActPage_]=useState(null);  // {date,id}: one walk's details
+  const setActPage=vtSet('actPage',setActPage_,(a,b)=>!a&&b?'open':a&&!b?'back':null);
   const recRef=useRef(null);recRef.current=rec;
   const openAct=(date,id)=>{setActPage({date,id});window.scrollTo(0,0);};
   async function startRecording(kind){
@@ -3262,7 +3375,7 @@ Reply ONLY with valid JSON (no markdown):
         else if(it.icon==='star')out.push({id,tone:'pink',icon:'⭐',text:'Keep it going',detail:d,snooze:true});
         else{const mt=MEAL_TYPES.find(m=>it.tag.endsWith('-'+m));out.push({id,tone:'sky',icon:mt?EM[mt]:'🧠',text:`Coach’s ${mt?mt.toLowerCase()+' ':''}tip`,detail:d,snooze:true});}
       }});
-    if(tab==='home'&&!stepsPage&&!actPage&&!energyPage&&update&&!updSkipped)out.push({id:'upd',tone:'pri',icon:'🎁',text:`Version ${update.latest} is out`,tap:()=>goSettings('app'),
+    if(tab==='home'&&!stepsPage&&!actPage&&!energyPage&&!coachPage&&update&&!updSkipped)out.push({id:'upd',tone:'pri',icon:'🎁',text:`Version ${update.latest} is out`,tap:()=>goSettings('app'),
       close:()=>{try{localStorage.setItem('lm-update-skip',update.latest);}catch(_){}setUpdate({...update});}});
     pagePills.forEach(p=>out.push({...p,close:p.close||(()=>hidePill(p.id,7*86400000))}));
     return out.filter(p=>!(pillHide[p.id]>now));
@@ -3273,7 +3386,7 @@ Reply ONLY with valid JSON (no markdown):
     return(<>
       <div className="top-pills" role="region" aria-label="Status">
         {pills.map(p=>{const [bg,fg]=PILL_TONE[p.tone]||PILL_TONE.setup;
-          const tap=p.detail?()=>setPillOpen(o=>o===p.id?null:p.id):p.tap;
+          const tap=p.detail?e=>{const el=e.currentTarget.closest('.top-pill');vtPop(pillOpen===p.id?null:el,()=>setPillOpen(o=>o===p.id?null:p.id));}:p.tap;
           return(<span key={p.id} className={`top-pill${p.tone==='setup'?' setup':''}`} style={{background:bg,color:fg}}>
             <button className="pill-main" onClick={tap} aria-label={p.label||p.text} aria-expanded={p.detail?pillOpen===p.id:undefined}>
               {typeof p.icon==='string'?<span aria-hidden="true">{p.icon}</span>:p.icon}<span>{p.text}</span></button>
@@ -3281,7 +3394,7 @@ Reply ONLY with valid JSON (no markdown):
           </span>);})}
       </div>
       {open&&(()=>{const [bg,fg]=PILL_TONE[open.tone];return(
-        <div className="pill-card" role="dialog" aria-label={open.detail.title}>
+        <div className="pill-card" role="dialog" aria-label={open.detail.title} style={{viewTransitionName:'lm-pop'}}>
           <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
             <span style={{width:36,height:36,borderRadius:18,background:bg,color:fg,display:'grid',placeItems:'center',fontSize:18,flexShrink:0}}>{open.icon}</span>
             <div style={{flex:1,minWidth:0}}><b style={{display:'block',fontSize:15.5}}>{open.detail.title}</b>
@@ -3398,7 +3511,9 @@ Reply ONLY with valid JSON (no markdown):
       `${sleepMin(sl)?` · slept ${sleepText(sl)}`:''}${waterMl(day)?` · water ${fmtL(waterMl(day))}`:''}${weightLog[day]?` · ${weightLog[day]} kg`:''}${sy.length?` · felt: ${sy.map(s=>symptomText(s,day)).join(', ')}`:''}`;}
   const defaultMeal=()=>{const h=new Date().getHours();return h<11?'Breakfast':h<16?'Lunch':h<19?'Snack':'Dinner';};
   function openSheet(type,params={},d={}){if(!sheet)sheetBack.current={y:window.scrollY,k:tab+dietView+fitView};setSheet({type,...params});setDraft(d);setArm(false);}
-  function closeSheet(){setSheet(null);setDraft({});setArm(false);}
+  // the sheet and its contents go together inside the transition, so it never draws once with its contents cleared
+  function closeSheet(){if(!sheet){setDraft({});setArm(false);return;}vtCur.current={...vtCur.current,sheet:null};
+    vtRun('unsheet',()=>{setSheet_(null);setDraft({});setArm(false);});}
   // Android back button: close the open sheet, else go back to Home, else leave the app
   const backRef=useRef(null);
   backRef.current=()=>{if(bigWater&&bigWater.phase==='pick'){setBigWater(null);return true;}
@@ -3407,6 +3522,7 @@ Reply ONLY with valid JSON (no markdown):
     if(recOpen){setRecOpen(false);return true;}
     if(actPage){setActPage(null);return true;}
     if(stepsPage){setStepsPage(null);return true;}
+    if(coachPage){setCoachPage(null);return true;}
     if(energyPage){setEnergyPage(null);return true;}
     if(setupOpen){if(setupStep>0){setSetupStep(n=>n-1);return true;}return false;}
     if(tab==='settings'&&settingsPage){setSettingsPage(null);return true;}
@@ -3748,7 +3864,7 @@ Reply ONLY with valid JSON (no markdown):
   const logOpenRef=useRef(null);
   logOpenRef.current=k=>{setTab('home');window.scrollTo(0,0);
     if(k==='bedtime'||k==='home')return;
-    if(k==='coach'){fetchDayInsight(TODAY);return;}
+    if(k==='coach'){openCoach(TODAY,!(prefs.coach||{})[TODAY]);return;}
     if(k==='walk'){startRecording('walk');return;}
     if(k==='sleep'){const U=usualTimes(),w=isWeekend(TODAY)?U.sleep.we:U.sleep.wd;const sl=sleepLog[TODAY]||{};
       openSheet('sleep',{date:TODAY},{bed:sl.bed||'23:00',wake:sl.wake||m2hm(w),q:sl.q||0,wakes:sl.wakes||0,open:null});}
@@ -3887,40 +4003,58 @@ Reply ONLY with valid JSON (no markdown):
       </button>);
   }
 
-  // The day's coach card, the same on Home, Food, Food history and Fitness
+  // ── The coach ──
+  // Everywhere (Home, Food, Food history, Fitness, the pill, the notification) "Ask the coach" opens the same
+  // full-screen review, growing out of what you tapped. The card on each page is just the way in, with a peek
+  // at the last review if there is one.
+  const [coachPage,setCoachPage_]=useState(null);   // {date}
+  const setCoachPage=vtSet('coachPage',setCoachPage_,(a,b)=>!a&&b?'open':a&&!b?'back':null);
+  function openCoach(day,refresh){
+    setCoachPage({date:day});window.scrollTo(0,0);
+    const ins=dayInsight[day];if(refresh||!ins||ins.error)fetchDayInsight(day);
+  }
   function renderCoach(day){
     if(!(dietGrouped[day]||[]).length&&!buildTimeline(day).length)return null;
-    const isT=day===TODAY,ins=dayInsight[day],loading=dayInsightLoading===day;
-    const open=!!showDayInsight[day]&&(loading||!!ins);
-    const ask=()=>ins&&!ins.error?setShowDayInsight(p=>({...p,[day]:true})):fetchDayInsight(day);
-    if(!open)return(
-      <button className="x-card" onClick={ask} style={{display:'flex',alignItems:'center',gap:14}}>
-        <Shape kind="flower" size={50} fill="var(--pri-c)" color="var(--pri)">🧠</Shape>
-        <span style={{flex:1,minWidth:0}}><span style={{display:'block',fontWeight:820,fontSize:16}}>Ask the coach</span>
-          <span className="x-sub">{isT&&(dietGrouped[day]||[]).some(e=>e.mealType==='Dinner')&&!(prefs.coach||{})[day]
-            ?'Dinner’s logged: review today and set tomorrow’s meal tips and walk reminders'
+    const isT=day===TODAY,ins=dayInsight[day],loading=dayInsightLoading===day,has=ins&&!ins.error&&ins.summary;
+    return(
+      <button className="x-card" onClick={()=>openCoach(day)} aria-label={has?'Open the coach’s review':'Ask the coach'} style={{display:'flex',alignItems:'center',gap:14,textAlign:'left'}}>
+        {loading?<LoadingIndicator size={50} label="The coach is thinking"/>:<Shape kind="flower" size={50} fill="var(--pri-c)" color="var(--pri)">🧠</Shape>}
+        <span style={{flex:1,minWidth:0}}>
+          <span style={{display:'block',fontWeight:820,fontSize:16}}>{loading?'The coach is thinking…':has?`Coach: ${ins.rating}`:'Ask the coach'}</span>
+          <span className="x-sub" style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{loading?'Tap to watch it come in'
+            :has?ins.summary
+            :isT&&(dietGrouped[day]||[]).some(e=>e.mealType==='Dinner')&&!(prefs.coach||{})[day]?'Dinner’s logged: review today and set tomorrow’s meal tips and walk reminders'
             :`A full review of ${isT?'today':'this day'}: food, walks, workout, sleep and water`}</span></span>
         <Ico d={ICON.right} size={26} style={{color:'var(--pri)'}}/>
       </button>);
-    const walks=moveDay(day).walks;
+  }
+  function renderCoachPage(){
+    const day=coachPage.date,isT=day===TODAY,ins=dayInsight[day],loading=dayInsightLoading===day;
+    const walks=moveDay(day).walks;let n=0;
     const sec=(label,cls,text,extra)=>text&&(
-      <div key={label} className={'x-card '+(cls==='plain'?'':cls)} style={{padding:'12px 14px',borderRadius:20,...(cls==='plain'?{background:'var(--s3)'}:{})}}>
+      <div key={label} className={'x-card lm-rise '+(cls==='plain'?'':cls)} style={{padding:'14px 16px',borderRadius:24,animationDelay:`${80+(n++)*70}ms`,...(cls==='plain'?{background:'var(--s3)'}:{})}}>
         <div className="x-eyebrow" style={{color:'inherit',marginBottom:6}}>{label}</div>{extra}
         <div className="t-reading" style={{color:'var(--fg)'}}>{text}</div></div>);
-    return(
-      <div className="x-card sb" style={{background:'var(--s2)'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-          <Shape kind="flower" size={40} fill="var(--pri-c)" color="var(--pri)">🧠</Shape>
-          <span style={{flex:1,minWidth:0}}><span className="x-eyebrow" style={{display:'block',color:'var(--pri)'}}>Coach · {isT?'today':dateNice(day)}</span>
-            {ins&&ins._at&&!loading&&<span className="x-sub" style={{fontSize:12}}>as of {fmtTime(ins._at)}{isT?' · ↻ for the latest':''}</span>}</span>
-          <button className="x-ibtn sm" aria-label="Refresh" onClick={()=>fetchDayInsight(day)} disabled={loading}>↻</button>
-          <button className="x-ibtn sm" aria-label="Close" onClick={()=>setShowDayInsight(p=>({...p,[day]:false}))}>✕</button>
-        </div>
-        {loading?<i className="t-reading" style={{color:'var(--pri)'}}>Thinking… reading everything logged</i>
-        :ins.error?<div style={{color:'var(--err)',fontWeight:650}}>{ins.error}</div>
-        :<div style={{display:'flex',flexDirection:'column',gap:8}}>
-          <div className="x-num" style={{fontSize:22}}>{ins.rating}</div>
-          <div className="t-reading" style={{color:'var(--fg2)'}}>{ins.summary}</div>
+    return(<div>
+      <div className="x-head" style={{alignItems:'center',justifyContent:'flex-start'}}>
+        <button className="x-ibtn" aria-label="Back" onClick={()=>setCoachPage(null)}><Ico d={ICON.left} size={24}/></button>
+        <Shape kind="flower" size={44} fill="var(--pri-c)" color="var(--pri)" font={20}>🧠</Shape>
+        <div style={{flex:1,minWidth:0}}><h1 style={{fontSize:28,margin:0}}>Coach</h1>
+          <div className="x-sub" style={{fontSize:13}}>{isT?'Today':dateLong(day)}{ins&&ins._at&&!loading?` · as of ${fmtTime(ins._at)}`:''}</div></div>
+        <button className="x-ibtn" aria-label="Get a fresh review" onClick={()=>fetchDayInsight(day)} disabled={loading} style={{opacity:loading?.4:1,fontSize:20}}>↻</button>
+      </div>
+      <div className="x-wrap" style={{paddingTop:0}}>
+        {loading?<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:18,padding:'56px 12px 24px',textAlign:'center'}}>
+            <LoadingIndicator size={96} label="The coach is thinking"/>
+            <CoachLoadingText/>
+            <div className="x-sub" style={{fontSize:12.5,maxWidth:300}}>Reading everything you logged {isT?'today':'that day'} and the day before. Usually 10–30 seconds. You can leave this screen; the review will be here when you come back.</div>
+          </div>
+        :!ins?<button className="x-btn lm-rise" onClick={()=>fetchDayInsight(day)}>Ask the coach</button>
+        :ins.error?<div className="x-card lm-rise" style={{display:'flex',flexDirection:'column',gap:12}}><div style={{color:'var(--err)',fontWeight:650}}>{ins.error}</div>
+            <button className="x-btn" onClick={()=>fetchDayInsight(day)}>Try again</button></div>
+        :<>
+          <div className="lm-rise" style={{padding:'4px 4px 0'}}><div className="x-num" style={{fontSize:26}}>{ins.rating}</div>
+            <div className="t-reading" style={{color:'var(--fg2)',marginTop:6}}>{ins.summary}</div></div>
           {sec('🍽️ Food','amber',ins.food_insight)}
           {sec('🚶 Walks','mint',ins.walk_insight,walks.length>0&&<div className="x-chips" style={{marginBottom:6}}>{walks.map(w=>
             <span key={w.id} className="x-tag" style={{background:'var(--bg)',color:'inherit'}}>{w.emoji} {w.name} · {fmtN(w.steps)} steps{w.cadence?` · ${w.cadence} spm`:''}</span>)}</div>)}
@@ -3929,14 +4063,15 @@ Reply ONLY with valid JSON (no markdown):
           {sec('🏆 Top win','pri',ins.top_win)}
           {sec(isT?'🎯 Next':'🎯 Next time','plain',ins.focus_next)}
           {sec('🌙 Recovery','violet',ins.recovery_tip)}
-          {ins.tomorrow&&(()=>{const t=ins.tomorrow,rows=[...MEAL_TYPES.filter(m=>t[m]).map(m=>[m,t[m]]),t.walk_morning&&['Morning walk',t.walk_morning],t.walk_second&&['Second walk',t.walk_second],
+          {ins.tomorrow&&(()=>{const t=ins.tomorrow,rows=[...MEAL_TYPES.filter(m=>t[m]).map(m=>[m,t[m]]),t.walk_morning&&['Morning walk',t.walk_morning],t.walk_second&&['Walk after lunch',t.walk_second],
               ...(Array.isArray(t.keep)?t.keep:[]).filter(h=>h&&h.text).map(h=>['Keep it up',h.text])].filter(Boolean);
-            return rows.length>0&&<div key="plan" className="x-card" style={{padding:'12px 14px',borderRadius:20,background:'var(--s3)'}}>
-              <div className="x-eyebrow" style={{marginBottom:6}}>⏰ Reminders for {calAddDays(day,1)===TODAY?'today':dateNice(calAddDays(day,1))}</div>
+            return rows.length>0&&<div key="plan" className="x-card lm-rise" style={{padding:'14px 16px',borderRadius:24,background:'var(--s3)',animationDelay:`${80+(n++)*70}ms`}}>
+              <div className="x-eyebrow" style={{marginBottom:6}}>⏰ Reminders for {calAddDays(day,1)===TODAY?'today':calAddDays(day,1)===calAddDays(TODAY,1)?'tomorrow':dateNice(calAddDays(day,1))}</div>
               {rows.map(([l,tx],i)=><div key={i} style={{fontSize:14,lineHeight:1.45,marginTop:i?6:0}}><b>{l}:</b> {tx}</div>)}
               <div className="x-sub" style={{fontSize:12,marginTop:6}}>Meal tips come {fmtLead(remOff('coach'))} and walks {fmtLead(remOff('walk'))} before your usual times. Change in Settings → Logging reminders.</div></div>;})()}
-        </div>}
-      </div>);
+        </>}
+      </div>
+    </div>);
   }
 
   function renderTimeline(day){
@@ -4225,7 +4360,8 @@ Reply ONLY with valid JSON (no markdown):
   }
   // ── In & out: calories eaten vs burned, by day, week, month, quarter, year ──
   // Paired bars on one scale; longer views show the average day, so they read against the daily target.
-  const [energyPage,setEnergyPage]=useState(null);   // {view:'day'|'week'|'month'|'quarter'|'year', date, sel}
+  const [energyPage,setEnergyPage_]=useState(null);   // {view:'day'|'week'|'month'|'quarter'|'year', date, sel}
+  const setEnergyPage=vtSet('energyPage',setEnergyPage_,(a,b)=>!a&&b?'open':a&&!b?'back':null);
   function renderEnergyPage(){
     const ep=energyPage,v=ep.view,set=f=>setEnergyPage(p=>({...p,...f})),lo=GOALS.calories.min,hi=GOALS.calories.max;
     const day=d=>{const b=burnDay(d),i=Math.round(macrosOf(d).cal);
@@ -4648,8 +4784,8 @@ Reply ONLY with valid JSON (no markdown):
               <div className="x-chips" style={{padding:'4px 16px 16px'}}>
                 <button className="x-chip pri" onClick={()=>openFood(dk,'Breakfast')}>+ Food</button>
                 <button className="x-chip" onClick={()=>openFeel(dk)}>+ Feeling</button>
-                {!showDayInsight[dk]&&<button className="x-chip" onClick={()=>dayInsight[dk]&&!dayInsight[dk].error?setShowDayInsight(p=>({...p,[dk]:true})):fetchDayInsight(dk)}>🧠 Coach</button>}
-                {pending&&<button className="x-chip amber" disabled={splittingDays[dk]} onClick={()=>splitDay(dk,es)}>{splittingDays[dk]?'Working…':'⚡ Break down macros'}</button>}
+                {!showDayInsight[dk]&&<button className="x-chip" onClick={()=>openCoach(dk)}>🧠 Coach</button>}
+                {pending&&<button className="x-chip amber" disabled={splittingDays[dk]} onClick={()=>splitDay(dk,es)}>{splittingDays[dk]?<><BtnSpinner size={16}/>Working…</>:'⚡ Break down macros'}</button>}
               </div>
             </article>);
         })}
@@ -4906,7 +5042,7 @@ Reply ONLY with valid JSON (no markdown):
               <div><div className="x-num" style={{fontSize:22,color:'var(--fg)'}}>Weekly review</div><div style={{fontSize:13,fontWeight:650}}>AI reads your last 7 days of food, workouts and walks</div></div>
             </div>
             {a?.error&&<div style={{color:'var(--err)',fontWeight:700}}>{a.error}</div>}
-            <button className="x-btn" disabled={aiAnalysisLoading} onClick={fetchAiAnalysis}>{aiAnalysisLoading?'Reading your week…':'Analyse my week'}</button>
+            <button className="x-btn" disabled={aiAnalysisLoading} onClick={fetchAiAnalysis}>{aiAnalysisLoading?<><BtnSpinner size={20}/>Reading your week…</>:'Analyse my week'}</button>
           </div>
         ):(
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
@@ -4924,7 +5060,7 @@ Reply ONLY with valid JSON (no markdown):
                 {sec.suggestion&&<div className="x-card pri" style={{borderRadius:18,padding:'10px 12px'}}><b>→ </b><span className="t-reading" style={{color:'var(--fg)'}}>{sec.suggestion}</span></div>}
               </div>))}
             {a.priority&&<div className="x-card violet sb"><div className="x-eyebrow" style={{color:'var(--on-violet-c)'}}>🎯 This week's priority</div><div className="t-reading" style={{color:'var(--fg)',marginTop:6,fontWeight:600}}>{a.priority}</div></div>}
-            <button className="x-btn outline" disabled={aiAnalysisLoading} onClick={fetchAiAnalysis}>{aiAnalysisLoading?'Reading…':'Run again'}</button>
+            <button className="x-btn outline" disabled={aiAnalysisLoading} onClick={fetchAiAnalysis}>{aiAnalysisLoading?<><BtnSpinner size={18}/>Reading…</>:'Run again'}</button>
           </div>)}
 
         <div className="x-sec"><h2 className="x-h2">Body</h2><button className="x-btn sm tonal" onClick={openBody}>Edit</button></div>
@@ -6360,10 +6496,11 @@ Reply ONLY with valid JSON (no markdown):
   const fitTodayInfo=getDayInfo(TODAY);
   const fitTodayDoneCount=fitTodayInfo&&!todayFitDone?(()=>{const sug=getWorkout(fitTodayInfo.type,getWeekNum(TODAY),TODAY,!hasCompletedBefore(TODAY));return sug.exercises.filter(ex=>fitLogs[TODAY]?.[ex.id]?.done).length+'/'+sug.exercises.length;})():null;
 
+  vtCur.current={tab,sheet,settingsPage,dietView,fitView,stepsPage,recOpen,actPage,energyPage,coachPage};
   // the page is rendered first: it can add its own prompts as pills (pagePill), shown pinned at the top
   const pagePills=[];
   pagePill=p=>{pagePills.push(p);return null;};
-  const overlayEl=!sheet&&!setupOpen&&(recOpen||actPage||stepsPage||energyPage)?(recOpen?renderRecPage():actPage?renderActPage():stepsPage?renderStepsPage():renderEnergyPage()):null;
+  const overlayEl=!sheet&&!setupOpen&&(recOpen||actPage||stepsPage||energyPage||coachPage)?(recOpen?renderRecPage():coachPage?renderCoachPage():actPage?renderActPage():stepsPage?renderStepsPage():renderEnergyPage()):null;
   const nOverlayPills=pagePills.length;
   const pageEl=overlayEl?null:<>
     {tab==='home'&&renderHomeX()}
@@ -6381,7 +6518,7 @@ Reply ONLY with valid JSON (no markdown):
       {toast&&<div className="x-snack" role="status" style={sheet?{top:'calc(12px + env(safe-area-inset-top,0px))',bottom:'auto'}:null}><i style={{background:toast.color}}/>{toast.msg}</div>}
       {setupOpen&&!sheet&&renderSetup()}
       {renderBigWater()}
-      {overlayEl&&<div className="page-pad" style={{flex:1,display:'flex',flexDirection:'column'}}>
+      {overlayEl&&<div className="page-pad" style={{flex:1,display:'flex',flexDirection:'column',viewTransitionName:'lm-hero'}}>
         {pillsNow.length>0&&<div style={{height:46,flexShrink:0}} aria-hidden="true"/>}
         {overlayEl}</div>}
       <div style={{display:sheet||setupOpen||overlayEl?'none':'flex',flexDirection:'column',flex:1}}>

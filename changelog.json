@@ -20,6 +20,13 @@
     {
       "text": "In & out now shows whether the gap is healthy, not just which side is bigger. Each burned bar is split into what you burn at rest (faded) and by moving. A dashed line marks your resting burn, and an eaten bar turns red when you ate less than it. A dot under each day shows green for a healthy deficit (about 250–750 kcal), amber for a big one, red for over 1,000, blue for about even and pink for a surplus (judged against your goal of losing, keeping or gaining). The summary says your pace in kg a week and what it means.",
       "img": "docs/whatsnew/in-out-healthy.png"
+    },
+    {
+      "text": "The coach now opens full screen from anywhere: the Ask the coach cards on Home, Food, Food history and Fitness, the “Get tomorrow's plan” pill and its notification. The page grows out of what you tapped and shrinks back into it when you go back. While the coach thinks you see a morphing Material 3 Expressive loading shape and what it's working on, and the review's sections rise in one after another. The cards on each page now show a peek of the last review.",
+      "img": "docs/whatsnew/coach-loading.png"
+    },
+    {
+      "text": "Motion across the app, Material 3 Expressive style: pages like Steps, a walk, In & out and the recording screen grow out of what you tapped and shrink back into it on Back (keeping your scroll position); switching tabs or Today/History fades through; sheets rise from the bottom and sink away; a pill grows into its card. Cards, rows and pills change shape when pressed, and the “working…” spinners are now the same morphing shape. Turn on Android's “Remove animations” to switch it all off."
     }
   ],
   "releases": [
