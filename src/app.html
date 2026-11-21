@@ -4228,15 +4228,36 @@ Reply ONLY with valid JSON (no markdown):
   const [energyPage,setEnergyPage]=useState(null);   // {view:'day'|'week'|'month'|'quarter'|'year', date, sel}
   function renderEnergyPage(){
     const ep=energyPage,v=ep.view,set=f=>setEnergyPage(p=>({...p,...f})),lo=GOALS.calories.min,hi=GOALS.calories.max;
-    const day=d=>{const b=burnDay(d),i=Math.round(macrosOf(d).cal);return{inK:i,outK:b.total,b,logged:i>0};};
+    const day=d=>{const b=burnDay(d),i=Math.round(macrosOf(d).cal);
+      return{inK:i,outK:b.total,restBurn:b.parts[0]?b.parts[0][3]:0,restK:Math.round(bmrOf(d)),b,logged:i>0,partial:d===TODAY};};
+    // Is the gap healthy? More burned than eaten isn't automatically good: too big a deficit, or eating less than your
+    // body burns at rest, costs muscle and energy. Judged against your goal (lose / maintain / gain).
+    const goal=profile.goal||'lose';
+    const pace=(inK,outK,restK,partial)=>{const net=inK-outK,d=-net;
+      if(partial)return{k:'partial',c:'var(--fg3)',l:'Day not over yet'};
+      if(restK&&inK<restK*0.95)return{k:'low',c:'var(--err)',l:'Ate less than resting burn'};
+      if(goal==='gain')return net>600?{k:'big',c:'var(--amber)',l:'Big surplus'}:net>=200?{k:'ok',c:'var(--mint)',l:'Healthy surplus'}:{k:'even',c:'var(--sky)',l:'Not enough to gain'};
+      if(goal==='maintain')return Math.abs(net)<=250?{k:'ok',c:'var(--mint)',l:'In balance'}:d>1000?{k:'toofast',c:'var(--err)',l:'Too big a deficit'}:{k:'big',c:'var(--amber)',l:net>0?'Surplus':'Deficit'};
+      return d>1000?{k:'toofast',c:'var(--err)',l:'Too big a deficit'}:d>750?{k:'big',c:'var(--amber)',l:'Big deficit'}:d>=250?{k:'ok',c:'var(--mint)',l:'Healthy deficit'}
+        :d>-250?{k:'even',c:'var(--sky)',l:'About even'}:{k:'surplus',c:'var(--pink)',l:'Surplus'};};
     const fmtD=d=>new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'});
     const navRow=(title,prev,next,canNext)=>(<div style={{display:'flex',alignItems:'center',gap:10}}>
       <button className="x-ibtn" aria-label="Earlier" onClick={prev}><Ico d={ICON.left} size={24}/></button>
       <div style={{flex:1,textAlign:'center',fontWeight:820,fontSize:16}}>{title}</div>
       <button className="x-ibtn" aria-label="Later" onClick={next} disabled={!canNext} style={{opacity:canNext?1:.35}}><Ico d={ICON.right} size={24}/></button></div>);
-    const legend=<div style={{display:'flex',gap:16,justifyContent:'center',fontSize:12.5,fontWeight:750,color:'var(--fg2)'}}>
-      {[['var(--pri)','Eaten'],['var(--amber)','Burned'],['color-mix(in srgb, var(--pri) 25%, transparent)','Eating target']].map(([c,l])=>
-        <span key={l} style={{display:'flex',alignItems:'center',gap:6}}><i style={{width:12,height:12,borderRadius:4,background:c,display:'inline-block'}}/>{l}</span>)}</div>;
+    const dot=(c,l)=><span key={l} style={{display:'flex',alignItems:'center',gap:5}}><i style={{width:9,height:9,borderRadius:5,background:c,display:'inline-block'}}/>{l}</span>;
+    const legend=<div style={{display:'flex',flexDirection:'column',gap:6,fontSize:12,fontWeight:750,color:'var(--fg2)'}}>
+      <div style={{display:'flex',gap:12,justifyContent:'center',flexWrap:'wrap'}}>
+        {[['var(--pri)','Eaten'],['color-mix(in srgb, var(--amber) 45%, transparent)','Burned at rest'],['var(--amber)','Burned moving'],['color-mix(in srgb, var(--pri) 25%, transparent)','Eating target']].map(([c,l])=>
+          <span key={l} style={{display:'flex',alignItems:'center',gap:5}}><i style={{width:11,height:11,borderRadius:3,background:c,display:'inline-block'}}/>{l}</span>)}
+        <span style={{display:'flex',alignItems:'center',gap:5}}><i style={{width:14,borderTop:'2px dashed var(--violet)',display:'inline-block'}}/>Resting burn</span>
+      </div>
+      <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
+        {goal==='gain'?[dot('var(--mint)','healthy surplus'),dot('var(--amber)','too much'),dot('var(--sky)','not enough')]
+          :goal==='maintain'?[dot('var(--mint)','in balance'),dot('var(--amber)','off balance'),dot('var(--err)','too big a deficit')]
+          :[dot('var(--mint)','healthy deficit'),dot('var(--amber)','big'),dot('var(--err)','too big'),dot('var(--sky)','even'),dot('var(--pink)','surplus')]}
+        {dot('var(--err)','red bar: ate less than resting')}
+      </div></div>;
     const balance=(inK,outK,days)=>{const net=inK-outK;return(
       <div className="x-card" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,textAlign:'center'}}>
         {[['Eaten',inK,'var(--pri)'],['Burned',outK,'var(--amber)'],[net>0?'Surplus':'Deficit',Math.abs(net),net>0?'var(--err)':'var(--mint)']].map(([l,x,c])=>
@@ -4262,7 +4283,9 @@ Reply ONLY with valid JSON (no markdown):
       const a=ep.date;let groups=[],title,prev,next,canNext;
       const mk=(key,label,days,show)=>{const past=days.filter(dd=>dd<=TODAY),xs=past.map(day).filter(q=>q.logged);
         const avg=f=>xs.length?xs.reduce((p,q)=>p+q[f],0)/xs.length:0;
-        return{key,label,show,days,n:xs.length,inK:avg('inK'),outK:avg('outK'),today:days.includes(TODAY),future:days[0]>TODAY};};
+        const g={key,label,show,days,n:xs.length,inK:avg('inK'),outK:avg('outK'),restBurn:avg('restBurn'),restK:avg('restK'),today:days.includes(TODAY),future:days[0]>TODAY,
+          partial:xs.length===1&&xs[0].partial&&days.length===1,lowDays:xs.filter(q=>!q.partial&&q.inK<q.restK*0.95).length};
+        g.pace=g.n?pace(g.inK,g.outK,g.restK,g.partial):null;return g;};
       if(v==='week'){const ws=calStartOfWeek(a),days=Array.from({length:7},(_,i)=>calAddDays(ws,i));title=`${fmtD(days[0])} – ${fmtD(days[6])}`;
         prev=()=>set({date:calAddDays(ws,-7),sel:null});next=()=>set({date:calAddDays(ws,7),sel:null});canNext=days[6]<TODAY;
         groups=days.map(dd=>mk(dd,new Date(dd+'T00:00:00').toLocaleDateString('en-IN',{weekday:'narrow'}),[dd],true));}
@@ -4287,19 +4310,28 @@ Reply ONLY with valid JSON (no markdown):
       body=<>
         {navRow(title,prev,next,canNext)}
         <div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
-          <EnergyBars key={v+title} items={groups} lo={lo} hi={hi} sel={ep.sel} onPick={g=>set({sel:ep.sel===g.key?null:g.key})}/>
+          <EnergyBars key={v+title} items={groups} lo={lo} hi={hi} sel={ep.sel} rest={withData.length?withData.reduce((p2,g)=>p2+g.restK*g.n,0)/tot:0} onPick={g=>set({sel:ep.sel===g.key?null:g.key})}/>
           {legend}
           <div className="x-sub" style={{fontSize:12.5,textAlign:'center',minHeight:18}}>{sel
-            ?(sel.n?<><b>{unit==='day'?dateLong(sel.key):unit==='week'?`Week of ${fmtD(sel.days[0])}`:new Date(sel.key+'T00:00:00').toLocaleDateString('en-IN',{month:'long'})}</b>{unit!=='day'?' · a day on average':''}: ate {fmtN(Math.round(sel.inK))}, burned {fmtN(Math.round(sel.outK))} kcal
+            ?(sel.n?<><b>{unit==='day'?dateLong(sel.key):unit==='week'?`Week of ${fmtD(sel.days[0])}`:new Date(sel.key+'T00:00:00').toLocaleDateString('en-IN',{month:'long'})}</b>{unit!=='day'?' · a day on average':''}: ate {fmtN(Math.round(sel.inK))}, burned {fmtN(Math.round(sel.outK))} kcal{sel.pace&&<> · <b style={{color:sel.pace.c}}>{sel.pace.l}</b></>}
               {unit==='day'&&<> · <button className="x-btn sm ghost" style={{display:'inline-flex',minHeight:28,padding:'0 8px'}} onClick={()=>set({view:'day',date:sel.key})}>Open day</button></>}</>:'Nothing logged here')
             :v==='week'||v==='month'?'Each pair is one day · tap one for its numbers':`Each pair is the average day in that ${unit} · tap one`}</div>
         </div>
         {tot>0?<>{balance(avgIn,avgOut,2)}
-          <div className="x-card" style={{display:'flex',gap:12,alignItems:'center'}}>
-            <Shape kind="cookie12" size={44} fill={netKg>0?'var(--amber-c)':'var(--mint-c)'} color={netKg>0?'var(--on-amber-c)':'var(--on-mint-c)'} font={20}>⚖️</Shape>
-            <span style={{flex:1,minWidth:0,lineHeight:1.45}}><b>{Math.abs(netKg)<0.05?'About even':`About ${Math.abs(netKg).toFixed(Math.abs(netKg)<1?2:1)} kg ${netKg>0?'gained':'lost'}`}</b>
-              <span className="x-sub" style={{display:'block',fontSize:12.5}}>from the gap between eating and burning over {tot} logged day{tot===1?'':'s'} (7,700 kcal ≈ 1 kg). Days with no food logged are left out.</span></span>
-          </div></>
+          {(()=>{const full=withData.flatMap(g=>g.days).filter(dd=>dd<TODAY).map(day).filter(q=>q.logged);
+            const fIn=full.reduce((p2,q)=>p2+q.inK,0)/(full.length||1),fOut=full.reduce((p2,q)=>p2+q.outK,0)/(full.length||1),fRest=full.reduce((p2,q)=>p2+q.restK,0)/(full.length||1);
+            const pc=full.length?pace(fIn,fOut,fRest,false):{k:'partial',c:'var(--fg3)',l:'Only today so far'},kgWk=(fOut-fIn)*7/7700,low=full.filter(q=>q.inK<q.restK*0.95).length;
+            const why={ok:goal==='gain'?'A steady surplus with strength work builds muscle without much fat.':goal==='maintain'?'Eating about what you burn keeps your weight steady.':'About 0.25–0.7 kg a week: mostly fat, if you keep protein up and keep walking.',
+              big:goal==='gain'?'A big surplus adds fat faster than muscle.':'Faster than ideal. Some of it will be muscle. Eat a little more, around your target.',
+              toofast:'Over 1,000 kcal a day under what you burn: you’ll lose muscle along with fat, and it’s hard to keep up. Eat closer to your target.',
+              low:'On average you ate less than your body burns at rest. That’s too little: muscle loss, tiredness and a slower metabolism. Eat at least your resting burn, ideally your target.',
+              even:goal==='gain'?'Eat a bit more to gain.':'Eating about what you burn: weight stays about the same.',surplus:'More eaten than burned: weight goes up.',partial:'Pace shows once a full day is logged.'}[pc.k];
+            return(<div className="x-card" style={{display:'flex',gap:12,alignItems:'flex-start'}}>
+              <Shape kind="cookie12" size={44} fill={pc.c} color="var(--bg)" font={20}>{pc.k==='ok'?'✅':pc.k==='partial'?'⏳':'⚖️'}</Shape>
+              <span style={{flex:1,minWidth:0,lineHeight:1.45}}><b style={{color:pc.c}}>{pc.l}</b>{full.length>0&&<b>{Math.abs(kgWk)<0.05?' · about even':` · ${Math.abs(kgWk).toFixed(2)} kg a week ${kgWk>0?'down':'up'}`}</b>}
+                <span className="x-sub" style={{display:'block',fontSize:12.5,marginTop:2}}>{why}{low>0&&pc.k!=='low'?` ${low} day${low>1?'s':''} under your resting burn (red bars).`:''}</span>
+                <span className="x-sub" style={{display:'block',fontSize:12,marginTop:4}}>Over {tot} logged day{tot===1?'':'s'}: about {Math.abs(netKg).toFixed(Math.abs(netKg)<1?2:1)} kg {netKg>0?'gained':'lost'} (7,700 kcal ≈ 1 kg). Today and days with no food logged don’t count toward the pace.</span></span>
+            </div>);})()}</>
           :<div className="x-card" style={{color:'var(--fg2)'}}>No food logged in this {v}. Days count once you log what you eat.</div>}
       </>;
     }
@@ -6642,21 +6674,28 @@ function HourChart({hours,walks,now,sel,onSel}){
   </svg>);
 }
 // Steps per day (or per month): pill bars with a dotted goal line; days at goal in mint
-// In vs out: for each day (or week, or month) a pair of bars side by side on one scale, food eaten (Fuel colour)
-// and calories burned (amber), with the intake target band. Tap a pair to pick it.
-function EnergyBars({items,lo,hi,sel,onPick}){
-  const W=336,H=190,top=22,bot=H-24,n=items.length,gap=n>14?3:n>8?6:12,gw=(W-gap*(n-1))/n,bw=Math.max(2,(gw-(n>14?1:3))/2);
+// In vs out: for each day (or week, or month) a pair of bars side by side on one scale: food eaten (Fuel colour,
+// red when it was less than the body burns at rest) and calories burned (amber, the lower part faded = burned at
+// rest, the top = burned by moving). The eating target is a band, the resting burn a dashed line, and a dot under
+// each pair says whether that gap is healthy for your goal. Tap a pair to pick it.
+function EnergyBars({items,lo,hi,sel,onPick,rest}){
+  const W=336,H=210,top=22,bot=H-38,n=items.length,gap=n>14?3:n>8?6:12,gw=(W-gap*(n-1))/n,bw=Math.max(2,(gw-(n>14?1:3))/2);
   const mx=Math.max(hi*1.25,...items.map(i=>Math.max(i.inK||0,i.outK||0)));const y=v=>bot-(bot-top)*v/mx;
   return(<svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Calories eaten and burned" style={{display:'block',overflow:'visible'}}>
     <rect x="0" width={W} y={y(hi)} height={Math.max(1,y(lo)-y(hi))} rx="4" style={{fill:'var(--pri)',opacity:.13}}/>
-    {items.map((it,i)=>{const x=i*(gw+gap),on=sel===it.key,f=it.future;
-      const bar=(v,bx,c)=>v>0?<rect x={bx} y={y(v)} width={bw} height={bot-y(v)} rx={Math.min(bw/2,6)} className="lm-grow" style={{fill:c,animationDelay:`${i*(n>14?8:25)}ms`}}/>:null;
+    {items.map((it,i)=>{const x=i*(gw+gap),on=sel===it.key,f=it.future,low=it.pace&&it.pace.k==='low';
+      const bar=(v,bx,c,op=1)=>v>0?<rect x={bx} y={y(v)} width={bw} height={bot-y(v)} rx={Math.min(bw/2,6)} className="lm-grow" style={{fill:c,opacity:op,animationDelay:`${i*(n>14?8:25)}ms`}}/>:null;
+      const bx=x+bw+(n>14?1:3),rb=Math.min(it.restBurn||0,it.outK||0);
       return(<g key={it.key} onClick={()=>!f&&onPick&&onPick(it)} style={{cursor:f?'default':'pointer',opacity:f?.3:sel&&!on?.55:1}}>
         <rect x={x-gap/2} y={0} width={gw+gap} height={H} fill="transparent"/>
-        {on&&<rect x={x-gap/2+1} y={top-14} width={gw+gap-2} height={bot-top+14} rx="10" style={{fill:'var(--s3)'}}/>}
-        {bar(it.inK,x,'var(--pri)')}{bar(it.outK,x+bw+(n>14?1:3),'var(--amber)')}
+        {on&&<rect x={x-gap/2+1} y={top-14} width={gw+gap-2} height={bot-top+26} rx="10" style={{fill:'var(--s3)'}}/>}
+        {bar(it.inK,x,low?'var(--err)':'var(--pri)')}
+        {bar(it.outK,bx,'var(--amber)')}{rb>0&&<rect x={bx} y={y(rb)} width={bw} height={bot-y(rb)} rx={Math.min(bw/2,6)} style={{fill:'var(--bg)',opacity:.45}}/>}
+        {it.pace&&<circle cx={x+gw/2} cy={bot+9} r={n>14?2.6:4} style={{fill:it.pace.c}}/>}
         {it.show&&<text x={x+gw/2} y={H-6} textAnchor="middle" fontSize="11" fontWeight={it.today||on?850:700} style={{fill:it.today?'var(--pri)':'var(--fg2)'}}>{it.label}</text>}
       </g>);})}
+    {rest>0&&<><line x1="0" x2={W} y1={y(rest)} y2={y(rest)} style={{stroke:'var(--violet)',strokeWidth:1.5,strokeDasharray:'5 4'}}/>
+      <text x={W} y={y(rest)-4} textAnchor="end" fontSize="10.5" fontWeight="800" style={{fill:'var(--violet)'}}>Resting {Math.round(rest)}</text></>}
   </svg>);
 }
 function PeriodBars({items,goal,onPick}){

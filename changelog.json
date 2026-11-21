@@ -16,6 +16,10 @@
     {
       "text": "In & out → Day now has an Eaten card next to Burned, showing the day's food as calories: how much came at each meal, how much came from protein, carbs and fat, and the foods that brought the most calories.",
       "img": "docs/whatsnew/eaten-card.png"
+    },
+    {
+      "text": "In & out now shows whether the gap is healthy, not just which side is bigger. Each burned bar is split into what you burn at rest (faded) and by moving. A dashed line marks your resting burn, and an eaten bar turns red when you ate less than it. A dot under each day shows green for a healthy deficit (about 250–750 kcal), amber for a big one, red for over 1,000, blue for about even and pink for a surplus (judged against your goal of losing, keeping or gaining). The summary says your pace in kg a week and what it means.",
+      "img": "docs/whatsnew/in-out-healthy.png"
     }
   ],
   "releases": [
