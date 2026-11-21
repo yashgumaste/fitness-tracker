@@ -12,6 +12,10 @@
     {
       "text": "Settings → Logging reminders: every reminder now has its own timing under its switch. Sleep check-in 15 min–1 h 30 after you wake; each meal 30 min–1 h 30 after its usual time; bedtime 15–60 min before lights-out; the coach's meal tips 30 min–2 h before; brisk walks 15 min–1 h 30 before. The page is split into “Logging reminders” (after the usual time) and “Coach's reminders” (before it).",
       "img": "docs/whatsnew/reminder-timing.png"
+    },
+    {
+      "text": "In & out → Day now has an Eaten card next to Burned, showing the day's food as calories: how much came at each meal, how much came from protein, carbs and fat, and the foods that brought the most calories.",
+      "img": "docs/whatsnew/eaten-card.png"
     }
   ],
   "releases": [

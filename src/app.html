@@ -3812,6 +3812,54 @@ Reply ONLY with valid JSON (no markdown):
       </Tag>);
   }
 
+  // Eaten, seen as calories (the In & out day view): when they came in (by meal), what they're made of
+  // (calories from protein, carbs, fat) and the foods that brought the most.
+  function renderEaten(day){
+    const es=dietGrouped[day]||[],tot=Math.round(macrosOf(day).cal);
+    if(!tot)return<div className="x-card" style={{color:'var(--fg2)'}}>Nothing eaten logged {day===TODAY?'yet today':'this day'}.</div>;
+    const by=t=>Math.round(es.filter(e=>t==='Other'?!MEAL_TYPES.includes(e.mealType):e.mealType===t).reduce((a,e)=>a+entryMacros(e).cal,0));
+    const MC={Breakfast:'var(--amber)',Lunch:'var(--mint)',Snack:'var(--pink)',Dinner:'var(--violet)',Other:'var(--sky)'};
+    const meals=[...MEAL_TYPES,'Other'].map(t=>[t,by(t)]).filter(x=>x[1]>0);
+    const m=macrosOf(day),mk=[['Protein',m.pro*4,'var(--violet)'],['Carbs',m.carbs*4,'var(--amber)'],['Fat',m.fat*9,'var(--pink)']],mkT=mk.reduce((a,x)=>a+x[1],0)||1;
+    const top=[...es].map(e=>[e.food,Math.round(entryMacros(e).cal),e.mealType]).sort((a,b)=>b[1]-a[1]).slice(0,3);
+    const pct=v=>Math.round(v*100/tot);
+    return(
+      <div className="x-card" style={{padding:'18px 18px 16px',background:'var(--pri-c)',color:'var(--on-pri-c)',display:'flex',flexDirection:'column',gap:14}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span className="x-eyebrow" style={{color:'var(--on-pri-c)'}}>Eaten</span>
+          <span className="x-tag" style={{marginLeft:'auto',background:'var(--bg)',color:tot>GOALS.calories.max?'var(--err)':tot>=GOALS.calories.min?'var(--pri)':'var(--fg2)'}}>
+            {tot>GOALS.calories.max?`${fmtN(tot-GOALS.calories.max)} over target`:tot>=GOALS.calories.min?'within target':`${fmtN(GOALS.calories.min-tot)} under target`}</span>
+        </div>
+        <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap',marginTop:-4}}>
+          <span className="x-num" style={{fontSize:48,color:'var(--fg)'}}>{fmtN(tot)}</span><span style={{fontWeight:750}}>kcal{day===TODAY?' so far today':''}</span>
+        </div>
+        <div>
+          <div className="x-eyebrow" style={{color:'var(--on-pri-c)',fontSize:11.5,marginBottom:6}}>When</div>
+          <div style={{display:'flex',height:16,borderRadius:8,overflow:'hidden',gap:3}} aria-hidden="true">
+            {meals.map(([t,v])=><i key={t} style={{flex:v,background:MC[t],borderRadius:5}}/>)}</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'8px 10px',marginTop:10}}>
+            {meals.map(([t,v])=><div key={t} style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+              <i style={{width:9,height:9,borderRadius:5,background:MC[t],flexShrink:0}}/>
+              <span style={{fontWeight:750,fontSize:13.5,flex:1,minWidth:0,whiteSpace:'nowrap'}}>{t}</span>
+              <span style={{whiteSpace:'nowrap'}}><b className="x-num" style={{fontSize:17,color:'var(--fg)'}}>{fmtN(v)}</b><span style={{fontSize:12,fontWeight:700}}> · {pct(v)}%</span></span></div>)}</div>
+        </div>
+        <div>
+          <div className="x-eyebrow" style={{color:'var(--on-pri-c)',fontSize:11.5,marginBottom:6}}>From</div>
+          <div style={{display:'flex',height:10,borderRadius:5,overflow:'hidden',gap:3}} aria-hidden="true">
+            {mk.map(([l,v,c])=><i key={l} style={{flex:v||0.001,background:c,borderRadius:4}}/>)}</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginTop:8}}>
+            {mk.map(([l,v,c])=><div key={l}><div style={{fontSize:12,fontWeight:750,display:'flex',alignItems:'center',gap:5}}><i style={{width:9,height:9,borderRadius:5,background:c,display:'inline-block'}}/>{l}</div>
+              <div><b className="x-num" style={{fontSize:17,color:'var(--fg)'}}>{fmtN(Math.round(v))}</b><span style={{fontSize:12,fontWeight:700}}> kcal · {Math.round(v*100/mkT)}%</span></div></div>)}</div>
+        </div>
+        <div>
+          <div className="x-eyebrow" style={{color:'var(--on-pri-c)',fontSize:11.5,marginBottom:6}}>Most calories</div>
+          {top.map(([f,v,t],i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,marginTop:i?8:0}}>
+            <span style={{flex:1,minWidth:0,fontWeight:700,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f}</span>
+            <div style={{width:70,height:8,borderRadius:4,background:'rgba(0,0,0,.25)',overflow:'hidden',flexShrink:0}}><i style={{display:'block',height:'100%',width:pct(v)+'%',background:MC[MEAL_TYPES.includes(t)?t:'Other']}}/></div>
+            <span style={{whiteSpace:'nowrap',fontSize:13,fontWeight:750,width:84,textAlign:'right'}}><b style={{color:'var(--fg)'}}>{fmtN(v)}</b> · {pct(v)}%</span></div>)}
+        </div>
+      </div>);
+  }
   // Burned, like Fuel: the total and where it came from. Tag: in minus out so far.
   function renderBurn(day,onClick){
     const b=burnDay(day),inK=Math.round(macrosOf(day).cal),net=inK-b.total;
@@ -4201,6 +4249,7 @@ Reply ONLY with valid JSON (no markdown):
       body=<>
         {navRow(isT?'Today':dateLong(d),()=>set({date:calAddDays(d,-1)}),()=>set({date:calAddDays(d,1)}),d<TODAY)}
         {balance(x.inK,x.outK,1)}
+        {renderEaten(d)}
         {renderBurn(d,null)}
         <div className="x-sub" style={{fontSize:12.5,lineHeight:1.5,padding:'0 4px'}}>
           {(()=>{const r=bmrInfo(d);return(<>
