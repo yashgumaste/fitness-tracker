@@ -199,6 +199,9 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     for(const t of ['2026-11-10-Breakfast','2026-11-10-Dinner','2026-11-10-keep0','2026-11-10-walkPM'])if(!tags.includes(t))throw new Error('missing reminder '+t+'; got '+tags.join(', '));
     const b=items.find(x=>x.tag==='2026-11-10-Breakfast');if(!/boiled eggs/.test(b.body)||b.open!=='home'||b.icon!=='meal')throw new Error('breakfast tip is wrong: '+JSON.stringify(b));
     const bt=await p.evaluate(at=>{const d=new Date(at);return{h:d.getHours(),m:d.getMinutes(),s:d.toTimeString()};},b.at);if(!(bt.h===8&&bt.m===10))throw new Error('breakfast tip should be 1 h before the usual 9:10, at 8:10; got '+bt.s);
+    const wp=items.find(x=>x.tag==='2026-11-10-walkPM');
+    if(!/after lunch/.test(wp.title))throw new Error('second walk should be the after-lunch walk: '+wp.title);
+    const wt=await p.evaluate(at=>new Date(at).getHours(),wp.at);if(wt<11||wt>=15)throw new Error('after-lunch walk nudge should come around lunch, got hour '+wt);
     await p.click('[aria-label="Close"]');await W();
   });
   await step('Due reminders show as pills',async()=>{try{

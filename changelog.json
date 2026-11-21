@@ -5,6 +5,9 @@
     },
     {
       "text": "The coach's meal tips, walk nudges and habit cheers now come 1 hour before your usual time (instead of 15 minutes), so there's time to plan lunch or get ready to walk. Never before you usually wake up. Choose 30 min, 1 h, 1 h 30 or 2 h in Settings → Logging reminders."
+    },
+    {
+      "text": "The second brisk walk is now “Walk after lunch”: the app learns how long after lunch you usually set off and times the nudge from lunch (from today's lunch if it's logged, so a late lunch moves it too). If you usually walk later in the day instead, it follows that. The coach also knows your usual walk times when it plans."
     }
   ],
   "releases": [

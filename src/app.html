@@ -2740,7 +2740,8 @@ EXTRA ACTIVITIES: ${customStr}
 
 PACED WALKS (these count as the day's walking cardio; treadmill/incline/easy-walk items above are marked done when a walk was logged) (plan: 2 walks a day, each ~${fmtN(WALK_GOAL.steps)} steps / ${WALK_GOAL.km} km / ${WALK_GOAL.min} min; ${fmtN(WALK_GOAL.day)} steps a day):
 ${walksStr}
-Walking reference: brisk = ~100+ steps/min and 5-6 km/h (pace 10-12 min/km); ~4 km/h is easy strolling.
+Walking reference: brisk = ~100+ steps/min and 5-6 km/h (pace 10-12 min/km); ~4 km/h is easy strolling.${(()=>{const W=usualWalks();const t=[W.am!=null&&`a morning walk around ${fmt12(m2hm(W.am))}`,W.lunchOff!=null&&`a walk about ${W.lunchOff} min after lunch`,W.pm!=null&&`a walk around ${fmt12(m2hm(W.pm))}`].filter(Boolean);
+  return t.length?`\nUsually takes ${t.join(' and ')} (last 3 weeks).`:'';})()}
 
 RULES:
 ${foodRule}
@@ -2763,7 +2764,7 @@ Give a JSON response ONLY (no markdown):
     "Breakfast": "<what to eat at breakfast, from what this day lacked or overdid, e.g. 'Protein first: 2 boiled eggs or 150 g dahi with 1 chapati'>",
     "Lunch": "<same for lunch>", "Snack": "<same for the snack, or null>", "Dinner": "<same for dinner, e.g. timing or a lighter plate>",
     "walk_morning": "<the morning brisk walk: a target pace in m:ss min/km, steps/min or minutes, from this day's walks>",
-    "walk_second": "<a second brisk walk later in the day, only if the plan or this day's steps call for one; else null>",
+    "walk_second": "<a second brisk walk ${(()=>{const W=usualWalks();return W.lunchOff!=null||W.pm==null?'right after lunch (that is when this person takes it)':'later in the day';})()}, only if the plan or this day's steps call for one; else null>",
     "keep": [{"at":"morning"|"Breakfast"|"Lunch"|"Snack"|"Dinner"|"evening"|"bedtime","text":"<cheer on one good habit from this day so it happens again, naming it, e.g. 'Yesterday's 60-min walk at 5.1 km/h was your best yet. Same again?'>"}],
     "water": "<one fun line for the water reminders, from this day's water pattern>",
     "move": "<one fun line for the move reminders, from this day's movement>"
@@ -3250,7 +3251,7 @@ Reply ONLY with valid JSON (no markdown):
       else if(it.kind==='bedtime')out.push({id,tone:'night',icon:'🌙',text:now>it.bedMs?'Bedtime passed':`Lights out ${fmtTime(it.bedMs)}`,detail:d,snooze:true});
       else if(it.kind==='nudge'){
         if(it.open==='coach')out.push({id,tone:'sky',icon:'🧠',text:'Get tomorrow’s plan',tap:()=>logOpenRef.current('coach'),snooze:true});
-        else if(it.open==='walk')out.push({id,tone:'mint',icon:'🚶',text:/PM$/.test(it.tag)?'Second walk time':'Walk time',detail:d,snooze:true,
+        else if(it.open==='walk')out.push({id,tone:'mint',icon:'🚶',text:/PM$/.test(it.tag)?(/after lunch/.test(it.title)?'Walk after lunch':'Second walk time'):'Walk time',detail:d,snooze:true,
           act:['🚶 Start walk',()=>{hidePill(id,20*3600000);startRecording('walk');}]});
         else if(it.icon==='star')out.push({id,tone:'pink',icon:'⭐',text:'Keep it going',detail:d,snooze:true});
         else{const mt=MEAL_TYPES.find(m=>it.tag.endsWith('-'+m));out.push({id,tone:'sky',icon:mt?EM[mt]:'🧠',text:`Coach’s ${mt?mt.toLowerCase()+' ':''}tip`,detail:d,snooze:true});}
@@ -3512,13 +3513,20 @@ Reply ONLY with valid JSON (no markdown):
   const logCfg={on:true,sleep:true,Breakfast:true,Lunch:true,Snack:true,Dinner:true,bedtime:true,coach:true,walk:true,after:45,lead:60,...(prefs.logrem||{})};
   // when you usually start a morning walk (before 11 AM) and an evening one (after 3 PM), from the last 3 weeks
   const walkTimesRef=useRef({k:'',v:null});
+  // when lunch was eaten that day (minutes after midnight), from the earliest lunch logged
+  function lunchMin(d){const l=(dietGrouped[d]||[]).filter(e=>e.mealType==='Lunch').map(e=>{const t=new Date(mealTime(e).ts);return t.getHours()*60+t.getMinutes();});
+    return l.length?Math.min(...l):null;}
   function usualWalks(){
     const k=TODAY+'|'+Object.keys(tracks).length+'|'+Object.keys(walkLog).length+'|'+Object.keys(stepsLog||{}).length;
     if(walkTimesRef.current.k===k)return walkTimesRef.current.v;
-    const am=[],pm=[],med=a=>{const x=[...a].sort((p,q)=>p-q);return x[Math.floor(x.length/2)];};
-    for(let i=1;i<=21;i++)moveDay(calAddDays(TODAY,-i)).walks.forEach(w=>{if(w.start==null||!(w.src==='gps'||(w.min||0)>=15))return;
-      if(w.start<11*60)am.push(w.start);else if(w.start>=15*60)pm.push(w.start);});
-    const v={am:am.length>=3?med(am):null,pm:pm.length>=3?med(pm):null,nAm:am.length,nPm:pm.length};
+    // a walk that starts from 15 min before to 3 h after that day's lunch counts as the after-lunch walk,
+    // remembered as minutes after lunch (so it follows lunch on days lunch is late)
+    const am=[],pm=[],afterL=[],med=a=>{const x=[...a].sort((p,q)=>p-q);return x[Math.floor(x.length/2)];};
+    for(let i=1;i<=21;i++){const d=calAddDays(TODAY,-i),L=lunchMin(d);
+      moveDay(d).walks.forEach(w=>{if(w.start==null||!(w.src==='gps'||(w.min||0)>=15))return;
+        if(w.start<11*60)am.push(w.start);else if(L!=null&&w.start>=L-15&&w.start<=L+180)afterL.push(w.start-L);else pm.push(w.start);});}
+    const v={am:am.length>=3?med(am):null,pm:pm.length>=3?med(pm):null,lunchOff:afterL.length>=3?Math.max(0,med(afterL)):null,
+      nAm:am.length,nPm:pm.length,nLunch:afterL.length};
     walkTimesRef.current={k,v};return v;
   }
   const [logPlan,setLogPlan]=useState(null);
@@ -3676,7 +3684,7 @@ Reply ONLY with valid JSON (no markdown):
     const lead=logCfg.lead||60,wake=we?U.sleep.we:U.sleep.wd,early=m=>Math.max(wake,m-lead);
     const mealAt=mt=>early(we?U[mt].we:U[mt].wd);
     const mv=day===TODAY?moveDay(day):null;
-    const walked=when=>mv?mv.walks.some(w=>w.start!=null&&(when==='am'?w.start<12*60:w.start>=15*60)):false;
+    const walked=when=>mv?mv.walks.some(w=>w.start!=null&&(when==='am'?w.start<11*60:w.start>=11*60)):false;
     const W=usualWalks();
     const EM={Breakfast:'🍳',Lunch:'🍛',Snack:'🍎',Dinner:'🍽️'};
     if(logCfg.coach&&plan){
@@ -3693,7 +3701,10 @@ Reply ONLY with valid JSON (no markdown):
       if(amAt!=null&&!walked('am'))add(amAt,'walkAM','walk','walk',pickBy(day+'am',[`Brisk walk o’clock${n?', '+n:''} 🚶`,'Shoes on, morning walk time 👟','Your morning walk is waiting 🚶']),
         plan&&plan.walk_morning||`Your usual ${fmt12(m2hm(W.am))} walk. Aim for 100+ steps a minute to make it brisk.`);
       // a second brisk walk, when the coach asked for one
-      if(logCfg.coach&&plan&&plan.walk_second&&!walked('pm'))add(W.pm!=null?early(W.pm):18*60+30-lead,'walkPM','walk','walk','Second brisk walk 🚶',plan.walk_second);
+      // the second walk: after lunch if that's when you take it (or nothing's known yet), else your usual later walk
+      if(logCfg.coach&&plan&&plan.walk_second&&!walked('pm')){
+        const L=(day===TODAY?lunchMin(day):null)??(we?U.Lunch.we:U.Lunch.wd),afterLunch=W.lunchOff!=null||W.pm==null;
+        add(early(afterLunch?L+(W.lunchOff??20):W.pm),'walkPM','walk','walk',afterLunch?'Walk after lunch 🚶':'Second brisk walk 🚶',plan.walk_second);}
     }
     // dinner is logged but the day hasn't been reviewed: ask for the review so tomorrow can be planned
     if(logCfg.coach&&day===TODAY&&logged.has('Dinner')&&!(prefs.coach||{})[TODAY]){
@@ -4988,7 +4999,8 @@ Reply ONLY with valid JSON (no markdown):
           <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>From the coach</div>
           <div className="x-list">
             {[['coach','🧠','Coach’s plan','After you ask the coach to review a day: a food tip before each usual meal, a cheer for a habit worth repeating, and after dinner a nudge to get the review if you haven’t'],
-              ['walk','🚶','Brisk walk',(()=>{const W=usualWalks();return W.am!=null?`Before your usual ${fmt12(m2hm(W.am))} morning walk, plus a second walk when the coach asks for one`:'Once you’ve walked in the morning a few times, before your usual time. Plus a second walk when the coach asks for one';})()]]
+              ['walk','🚶','Brisk walk',(()=>{const W=usualWalks();const second=W.lunchOff!=null?`a walk ${W.lunchOff<10?'right':`about ${W.lunchOff} min`} after lunch`:W.pm!=null?`your usual ${fmt12(m2hm(W.pm))} walk`:'a walk after lunch';
+                return W.am!=null?`Before your usual ${fmt12(m2hm(W.am))} morning walk, plus ${second} when the coach asks for one`:`Once you’ve walked in the morning a few times, before your usual time. Plus ${second} when the coach asks for one`;})()]]
               .map(([k,em,l,sub])=>{const nextK=items.find(x=>x.kind==='nudge'&&(k==='walk'?x.open==='walk':x.open!=='walk'));
               return(<button key={k} className="x-item" onClick={()=>setL({[k]:!c[k]})} style={{minHeight:64}}>
                 <span style={{fontSize:24,width:34,textAlign:'center'}}>{em}</span>
