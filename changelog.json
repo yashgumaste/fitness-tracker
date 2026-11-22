@@ -6,6 +6,13 @@
     },
     {
       "text": "Fixed: tapping a tab while In & out (or Steps, a walk or the coach) was open switched the tab hidden behind it. A tab tap now always takes you to that tab, and tapping the tab you're on takes you to its top."
+    },
+    {
+      "text": "Home-screen widgets: Steps, Calories burned, Calories eaten and In & out. Long-press your home screen → Widgets → Fitness Tracker. Each one changes what it shows as you resize it: Steps grows from a count in a scalloped shape to a wavy progress ring, your day hour by hour, today's walks and the week; Calories burned adds resting and moving, burn through the day and where it came from; Calories eaten goes from the Fuel ring to protein, carbs and fat and today's meals; In & out shows this week's eaten-versus-burned bars, the daily averages and the verdict, like the In & out page (from 2×2 up, so nothing gets left out). Small sizes shorten numbers to thousands, like 6.2k. Tapping a widget opens its page.",
+      "img": "docs/whatsnew/widgets.png"
+    },
+    {
+      "text": "So the steps and calories burned widgets stay current while the app is closed, the app explains and then asks Health Connect for one more permission: reading your steps in the background (every 15 minutes, steps only, nothing leaves your phone). You can allow it later from Settings → Health Connect → Widgets."
     }
   ],
   "releases": [

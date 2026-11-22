@@ -3929,12 +3929,78 @@ Reply ONLY with valid JSON (no markdown):
     if(k==='bedtime'||k==='home')return;
     if(k==='coach'){openCoach(TODAY,!(prefs.coach||{})[TODAY]);return;}
     if(k==='walk'){startRecording('walk');return;}
+    // home-screen widgets: open their page
+    if(k==='w-steps'){openStepsPage(TODAY);widgetBgCheck(1);return;}
+    if(k==='w-burn'){setEnergyPage({view:'day',date:TODAY,sel:null});widgetBgCheck(1);return;}
+    if(k==='w-io'){setEnergyPage({view:'week',date:TODAY,sel:null});return;}
+    if(k==='w-food'){setTab('diet');setDietView('today');return;}
     if(k==='sleep'){const U=usualTimes(),w=isWeekend(TODAY)?U.sleep.we:U.sleep.wd;const sl=sleepLog[TODAY]||{};
       openSheet('sleep',{date:TODAY},{bed:sl.bed||'23:00',wake:sl.wake||m2hm(w),q:sl.q||0,wakes:sl.wakes||0,open:null});}
     else openFood(TODAY,k);};
   useEffect(()=>{if(!storageReady)return;window.__lmLogOpen=k=>logOpenRef.current(k);
     if(window.__lmLogOpenQueued){const k=window.__lmLogOpenQueued;window.__lmLogOpenQueued=null;setTimeout(()=>logOpenRef.current(k),500);}
     return()=>{window.__lmLogOpen=null;};},[storageReady]);
+  /* ── Home-screen widgets: the app does the sums and hands the widgets a snapshot whenever something changes ── */
+  function widgetSnap(){
+    const days={};
+    for(let i=0;i<14;i++){const d=calAddDays(TODAY,-i),b=burnDay(d);days[d]={s:moveDay(d).steps,e:Math.round(macrosOf(d).cal),o:b.total,r:Math.round(bmrOf(d))};}
+    const mv=moveDay(TODAY),m=macrosOf(TODAY),ents=dietGrouped[TODAY]||[];
+    const walkHours=[...new Set(mv.walks.flatMap(w=>{if(!w.start)return[];const a=new Date(w.start).getHours(),b=new Date(w.end||w.start).getHours(),o=[];for(let h=a;h<=b&&h<24;h++)o.push(h);return o;}))];
+    const meals=MEAL_TYPES.map(t=>{const es=ents.filter(e=>e.mealType===t);
+      return[t,es.length?es.map(e=>e.food).join(', '):'Not logged yet',es.length?Math.round(es.reduce((a,e)=>a+entryMacros(e).cal,0)):-1];});
+    return{at:Date.now(),accent:/^#[0-9a-f]{6}$/i.test(prefs.accent||'')?prefs.accent:'#00FFFF',goal:profile.goal||'lose',stepGoal:WALK_GOAL.day,
+      lo:GOALS.calories.min,hi:GOALS.calories.max,kmStep:bodySaved&&+bodyMeasure.heightCm?bodyMeasure.heightCm*0.415/100000:KM_PER_STEP,
+      kps:(mv.kg||75)*KCAL_PER_STEP_KG,restDay:Math.round(bmrOf(TODAY)),tPro:GOALS.protein.target,tCarbs:MACRO_T.carbs,tFat:MACRO_T.fat,days,
+      today:{date:TODAY,steps:mv.steps,hours:mv.hours||Array(24).fill(0),walkHours,walks:mv.walks.map(w=>[w.name,+(+w.km||0).toFixed(2)]),
+        walkSteps:mv.walkSteps,walkKcal:mv.walkKcal,workout:workoutKcal(TODAY),eat:Math.round(m.cal),pro:Math.round(m.pro),carbs:Math.round(m.carbs),fat:Math.round(m.fat),meals}};
+  }
+  const wgRef=useRef({t:0,last:''});
+  window.__lmWidgetSnap=()=>widgetSnap();
+  useEffect(()=>{
+    const W=window.LMNative&&window.LMNative.widgets;if(!storageReady||!W||!W.available()||wgRef.current.t)return;
+    // at most every 1.5 s, and only when something the widgets show has changed
+    wgRef.current.t=setTimeout(()=>{wgRef.current.t=0;
+      try{const snap=widgetSnap(),k=JSON.stringify({...snap,at:0});if(k===wgRef.current.last)return;wgRef.current.last=k;W.update(snap);}catch(e){console.warn('widgets',e);}},1500);
+  });
+  // Steps and burned widgets read steps while the app is closed only if Health Connect allows it in the background:
+  // explain why first, then Health Connect asks. Asked again at most once a week (once a day when opened from a widget).
+  const [bgAsk,setBgAsk]=useState(false);
+  async function widgetBgCheck(fromWidget){
+    const W=window.LMNative&&window.LMNative.widgets;if(!W||!W.available())return;
+    try{const st=await W.status(),c=st.count||{};
+      if(!(c.steps>0||c.burn>0)||!st.hc||st.background)return;
+      if(Date.now()-((prefs.widgets||{}).askedAt||0)<(fromWidget?86400000:7*86400000))return;
+      setBgAsk(true);}catch(_){}
+  }
+  useEffect(()=>{if(!storageReady)return;const t=setTimeout(()=>widgetBgCheck(0),2500);return()=>clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[storageReady]);
+  async function widgetBgOk(){
+    setBgAsk(false);setPrefs(p=>({...p,widgets:{...(p.widgets||{}),askedAt:Date.now()}}));
+    try{const r=await window.LMNative.widgets.requestBackground();
+      showToast(r&&r.background?'Widgets will keep your steps up to date':'Widgets will update when you open the app',r&&r.background?'var(--ok)':'var(--warn)');}
+    catch(_){showToast('Couldn’t open Health Connect','var(--warn)');}
+  }
+  function renderBgAsk(){
+    const row=(r,icon,title,body)=><div style={{display:'flex',gap:14,alignItems:'flex-start',background:'var(--s2)',borderRadius:r,padding:'14px 16px'}}>
+      <span style={{fontSize:20,lineHeight:1.1,flexShrink:0}} aria-hidden="true">{icon}</span>
+      <div style={{display:'flex',flexDirection:'column',gap:3}}><b style={{fontSize:15}}>{title}</b><span className="x-sub" style={{fontSize:13.5,lineHeight:1.45}}>{body}</span></div></div>;
+    return(<div role="dialog" aria-label="Keep your widgets up to date" style={{position:'fixed',inset:0,zIndex:260,background:'var(--bg)',display:'flex',flexDirection:'column',gap:22,overflowY:'auto',
+        padding:'calc(56px + env(safe-area-inset-top,0px)) 20px calc(28px + env(safe-area-inset-bottom,0px))'}}>
+      <Shape kind="flower" size={96} fill="var(--pri-c)" color="var(--pri)" font={42}>📲</Shape>
+      <div style={{display:'flex',flexDirection:'column',gap:10}}>
+        <h1 style={{margin:0,fontSize:32,lineHeight:1.05,fontWeight:850,fontStretch:'125%'}}>Keep your widgets up to date</h1>
+        <p className="x-sub" style={{margin:0,fontSize:16,lineHeight:1.5}}>Your steps and calories burned widgets read today’s steps from Health Connect every 15 minutes, so they stay current even when the app is closed.</p>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {row('24px 24px 8px 8px','👟','Only your step count','Nothing else is read in the background, and nothing leaves your phone.')}
+        {row(8,'🛡️','Why Android asks separately','Reading health data while an app isn’t open is its own permission on Android. Next you’ll see Health Connect’s screen for it: choose Allow.')}
+        {row('8px 8px 24px 24px','🔁','If you don’t allow it','Widgets still work, but steps update only when you open the app. You can allow it later in Settings → Health Connect.')}
+      </div>
+      <div style={{flex:1}}/>
+      <button className="x-btn" style={{height:60,fontSize:17}} onClick={widgetBgOk}>OK</button>
+    </div>);
+  }
   const openFood=(date,meal)=>{setMealType(meal||defaultMeal());openSheet('food',{date},{text:'',date:date||calAddDays(TODAY,-1)});};
   const openMeal=id=>openSheet('meal',{id},{edit:false});
   const openWalk=(date,slot)=>{const sl=slot||(new Date().getHours()<15?'morning':'night');const w=walkLog[date]?.[sl]||{};
@@ -6513,6 +6579,11 @@ Reply ONLY with valid JSON (no markdown):
           <span style={{flex:1,minWidth:0}}><span className="t" style={{display:'block'}}>{t}</span><span className="s">{s}{connected&&hcT[k]&&!ok?' · not allowed yet':''}</span></span>
           <Seg items={[['off','Off'],['on','On']]} value={hcT[k]?'on':'off'} onChange={v=>setPrefs(p=>({...p,hc:{...hcT,[k]:v==='on'}}))} style={{width:120}}/>
         </div>);})}</div>
+      {native&&window.LMNative.widgets&&window.LMNative.widgets.available()&&<button className="x-item" onClick={async()=>{
+          try{const st=await window.LMNative.widgets.status();if(st.background)showToast('Already allowed: widgets keep your steps up to date','var(--ok)');else setBgAsk(true);}catch(_){setBgAsk(true);}}}>
+        <span style={{fontSize:22,width:30,textAlign:'center'}}>📲</span>
+        <span style={{flex:1,minWidth:0}}><span className="t" style={{display:'block'}}>Widgets: steps while the app is closed</span><span className="s">Lets the steps and calories burned widgets stay up to date</span></span>
+        <Ico d={ICON.right} size={22}/></button>}
       <div className="x-sub">Google Health shows your meals with the calories, protein, carbs and fat worked out here. Turning something off stops new syncing; what’s already shared stays in Health Connect.</div>
     </div>);
   }
@@ -6631,6 +6702,7 @@ Reply ONLY with valid JSON (no markdown):
       {dockOn&&renderDock(dockSpec)}
       {renderTopPills(pillsNow)}
       {sheet&&renderSheetX()}
+      {bgAsk&&!sheet&&renderBgAsk()}
     </div>
   );
 }

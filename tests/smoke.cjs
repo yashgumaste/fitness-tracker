@@ -200,6 +200,13 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await expect('a day');await expect('Resting burn');await expect('healthy deficit');
     const pairs=await p.evaluate(()=>document.querySelectorAll('svg[aria-label="Calories eaten and burned"] g').length);if(pairs!==7)throw new Error('week should have 7 pairs, got '+pairs);
     await p.click('[aria-label="Back"]');await W();await expect('Fuel');});
+  await step('Widget snapshot',async()=>{
+    const s=await p.evaluate(()=>window.__lmWidgetSnap());
+    if(!s||s.today.date!=='2026-11-09')throw new Error('snapshot is not for today: '+(s&&s.today&&s.today.date));
+    if(Object.keys(s.days).length!==14)throw new Error('want 14 days, got '+Object.keys(s.days).length);
+    if(s.today.meals.length!==4||s.today.meals[0][0]!=='Breakfast')throw new Error('meals: '+JSON.stringify(s.today.meals));
+    if(!(s.today.eat>0)||!(s.today.steps>0)||!(s.restDay>1000)||s.today.hours.length!==24)throw new Error('numbers missing: '+JSON.stringify({eat:s.today.eat,steps:s.today.steps,rest:s.restDay}));
+    const d=s.days['2026-11-08'];if(!(d.e>0&&d.o>d.r&&d.r>1000))throw new Error('past day incomplete: '+JSON.stringify(d));});
   await step('Island changes with the screen',async()=>{
     const fab=()=>p.evaluate(()=>{const b=document.querySelector('.dock-add');return b?b.getAttribute('aria-label'):null;});
     await tab(0);if(await fab()!=='Log something')throw new Error('home + should open the Log menu, got '+await fab());

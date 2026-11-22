@@ -379,7 +379,16 @@
     async remove(type,ids){if(!HCP||!ids.length)return;return HCP.remove({type,ids});}
   };
 
-  window.LMNative={hc,provider,setProvider:p=>{try{localStorage.setItem('lm-ai-provider',p);}catch(_){}},hasFreeKey,
+  /* ── Home-screen widgets (Steps, Calories burned, Calories eaten, In & out): native, fed by snapshots ── */
+  const WG=plug('Widgets');
+  const widgets={
+    available:()=>!!WG,
+    update:data=>WG?WG.update({data}).catch(e=>console.warn('widgets',e)):Promise.resolve(),
+    status:()=>WG?WG.status():Promise.resolve({count:{}}),
+    requestBackground:()=>WG.requestBackground()
+  };
+
+  window.LMNative={hc,widgets,provider,setProvider:p=>{try{localStorage.setItem('lm-ai-provider',p);}catch(_){}},hasFreeKey,
     setGeminiKey:async k=>{gemKeyCache=k||null;await kv.set('gemini_key',k||null);},hasGeminiKey:async()=>!!(await kv.get('gemini_key')),
 isNative,kv,ask,usage,MODELS,setKey:async k=>{keyCache=k||null;await kv.set('anthropic_key',k||null);},hasKey:async()=>!!(await apiKey()),
     walk,drive,planLogs,testLog,clearLog,planWater,reminderExtras,testNotification,takeLoggedWater,planMove,testMove,shareBackup,openUrl,bars,setIcon,iconFor,logo:LOGO,checkUpdate,downloadUpdate,updateStatus,installUpdate,installSource,rawBase:RAW,version:'__APP_VERSION__',

@@ -20,7 +20,7 @@ const icons=require('./app-icons.cjs');
 m=icons.manifest(m,'com.yashgumaste.fitnesstracker');
 if(/<activity[^>]*MainActivity[\s\S]*?category\.LAUNCHER[\s\S]*?<\/activity>/.test(m))throw new Error('MainActivity still has the launcher filter — icon aliases would duplicate the app icon');
 // Health Connect: permissions, the screens Health Connect opens to explain them, and package visibility
-const HC=['READ_STEPS','WRITE_NUTRITION','WRITE_HYDRATION','WRITE_EXERCISE','WRITE_WEIGHT','WRITE_SLEEP','WRITE_STEPS','WRITE_DISTANCE','WRITE_EXERCISE_ROUTE'];
+const HC=['READ_STEPS','READ_HEALTH_DATA_IN_BACKGROUND','WRITE_NUTRITION','WRITE_HYDRATION','WRITE_EXERCISE','WRITE_WEIGHT','WRITE_SLEEP','WRITE_STEPS','WRITE_DISTANCE','WRITE_EXERCISE_ROUTE'];
 for(const h of HC){const perm='android.permission.health.'+h;
   if(!m.includes(perm))m=m.replace('</manifest>',`    <uses-permission android:name="${perm}" />\n</manifest>`);}
 if(!m.includes('com.google.android.apps.healthdata'))
@@ -96,6 +96,7 @@ fs.copyFileSync(path.join(__dirname,'..','native','WaterReminderPlugin.kt'),path
 fs.copyFileSync(path.join(__dirname,'..','native','WalkTrackerPlugin.kt'),path.join(javaDir,'WalkTrackerPlugin.kt'));
 fs.copyFileSync(path.join(__dirname,'..','native','DriveBackupPlugin.kt'),path.join(javaDir,'DriveBackupPlugin.kt'));
 fs.copyFileSync(path.join(__dirname,'..','native','LogReminderPlugin.kt'),path.join(javaDir,'LogReminderPlugin.kt'));
+fs.copyFileSync(path.join(__dirname,'..','native','WidgetPlugin.kt'),path.join(javaDir,'WidgetPlugin.kt'));
 const ma=path.join(javaDir,'MainActivity.java');
 let j=fs.readFileSync(ma,'utf8');
 if(!j.includes('AppIconPlugin')){
@@ -111,6 +112,7 @@ if(!j.includes('AppIconPlugin')){
         registerPlugin(WalkTrackerPlugin.class);
         registerPlugin(DriveBackupPlugin.class);
         registerPlugin(LogReminderPlugin.class);
+        registerPlugin(WidgetPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }`);
@@ -190,5 +192,39 @@ if(!m.includes('LogAlarmReceiver')){
         </receiver>
     </application>`);
   fs.writeFileSync(mf,m);
+}
+// Home-screen widgets (native/WidgetPlugin.kt): one picture per widget, drawn at its size, so the layout is one ImageView.
+// Each kind: [class, name in the widget list, default cells w×h, smallest it can be resized to (dp), preview]
+const WIDGETS=[['StepsWidget','Steps',2,2,40,40,'steps'],['BurnWidget','Calories burned',2,2,40,40,'burn'],
+  ['FoodWidget','Calories eaten',2,2,40,40,'food'],['InOutWidget','In & out',4,2,110,110,'io']];
+{const res=path.join(app,'src/main/res');
+  for(const d of ['layout','xml','drawable-nodpi'])fs.mkdirSync(path.join(res,d),{recursive:true});
+  fs.writeFileSync(path.join(res,'layout','lm_widget.xml'),`<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/lm_root"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+    <ImageView android:id="@+id/lm_img" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:scaleType="fitCenter" android:importantForAccessibility="yes" />
+</FrameLayout>
+`);
+  for(const [cls,label,cw,ch,rw,rh,key] of WIDGETS){
+    const pv=path.join(__dirname,'..','native','widgets',key+'.png'),has=fs.existsSync(pv);
+    if(has)fs.copyFileSync(pv,path.join(res,'drawable-nodpi','lm_preview_'+key+'.png'));
+    fs.writeFileSync(path.join(res,'xml','lm_widget_'+key+'.xml'),`<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="${cw*70-30}dp" android:minHeight="${ch*70-30}dp"
+    android:minResizeWidth="${rw}dp" android:minResizeHeight="${rh}dp"
+    android:targetCellWidth="${cw}" android:targetCellHeight="${ch}"
+    android:resizeMode="horizontal|vertical" android:widgetCategory="home_screen"
+    android:updatePeriodMillis="0" android:initialLayout="@layout/lm_widget"${has?`
+    android:previewImage="@drawable/lm_preview_${key}"`:''} />
+`);}
+  m=fs.readFileSync(mf,'utf8');
+  if(!m.includes('StepsWidget')){
+    m=m.replace('</application>',WIDGETS.map(([cls,label,,,,,key])=>`        <receiver android:name=".${cls}" android:exported="false" android:label="${label.replace('&','&amp;')}">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/lm_widget_${key}" />
+        </receiver>
+`).join('')+'    </application>');
+    fs.writeFileSync(mf,m);}
 }
 console.log('android patched · versionCode',run);
