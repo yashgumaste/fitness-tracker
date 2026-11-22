@@ -13,6 +13,9 @@
     },
     {
       "text": "So the steps and calories burned widgets stay current while the app is closed, the app explains and then asks Health Connect for one more permission: reading your steps in the background (every 15 minutes, steps only, nothing leaves your phone). You can allow it later from Settings → Health Connect → Widgets."
+    },
+    {
+      "text": "Fixed: opening or closing a pill's card (like the coach's tips) flashed a big square for a moment. The card now unfolds down from the pills and folds back up into them."
     }
   ],
   "releases": [

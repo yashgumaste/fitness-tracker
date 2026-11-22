@@ -677,9 +677,12 @@ input.m3-input{border-radius:999px;}
 ::view-transition-old(lm-island),::view-transition-new(lm-island),::view-transition-old(lm-fab),::view-transition-new(lm-fab){height:100%;width:auto;object-fit:none;left:50%;translate:-50% 0}
 ::view-transition-old(lm-island),::view-transition-old(lm-fab){animation:lm-vt-fade-out .12s linear both}
 ::view-transition-new(lm-island),::view-transition-new(lm-fab){animation:lm-vt-in .22s var(--m-effects) .06s both}
-::view-transition-group(lm-pop){animation-duration:.45s;border-radius:28px;overflow:hidden}
-::view-transition-old(lm-pop){height:100%;object-fit:cover;animation:lm-vt-fade-out .1s linear both}
-::view-transition-new(lm-pop){height:100%;object-fit:cover;animation:lm-vt-in .22s var(--m-effects) .05s both}
+/* a pill's card unfolds downward from the pills row and folds back up into it. The pill itself isn't morphed:
+   Android's WebView doesn't clip a stretched pill snapshot, which showed as a big square for a moment */
+::view-transition-new(lm-pop){transform-origin:50% 0;animation:lm-pop-in .42s var(--m-spatial) both}
+::view-transition-old(lm-pop){transform-origin:50% 0;animation:lm-pop-out .2s var(--m-emph) both}
+@keyframes lm-pop-in{from{opacity:0;transform:translateY(-22px) scale(.72,.3)}35%{opacity:1}to{opacity:1;transform:none}}
+@keyframes lm-pop-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-18px) scale(.8,.35)}}
 :root[data-vt=pop]::view-transition-old(root),:root[data-vt=pop]::view-transition-new(root){animation:none}
 @keyframes lm-vt-recede{to{opacity:.4;transform:scale(.94)}}
 @keyframes lm-vt-in{from{opacity:0}}
@@ -1951,10 +1954,10 @@ function App(){
   // a small thing growing into a bigger one in place (a pill into its card), named lm-pop
   function vtPop(el,update){
     if(!document.startViewTransition||!(window.ReactDOM&&ReactDOM.flushSync)||(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)){update();return;}
-    if(el)el.style.viewTransitionName='lm-pop';document.documentElement.dataset.vt='pop';
-    try{const t=document.startViewTransition(()=>{if(el)el.style.viewTransitionName='';ReactDOM.flushSync(update);});
+    document.documentElement.dataset.vt='pop';
+    try{const t=document.startViewTransition(()=>{ReactDOM.flushSync(update);});
       t.ready.catch(()=>{});t.updateCallbackDone.catch(()=>{});t.finished.catch(()=>{}).finally(()=>{if(document.documentElement.dataset.vt==='pop')delete document.documentElement.dataset.vt;});}
-    catch(e){if(el)el.style.viewTransitionName='';update();}
+    catch(e){update();}
   }
   function vtSet(name,raw,kindOf){return v=>{const prev=vtCur.current[name],next=typeof v==='function'?v(prev):v;
     const k=kindOf(prev,next);if(!k){raw(v);return;}vtCur.current={...vtCur.current,[name]:next};vtRun(k,()=>raw(next));};}
