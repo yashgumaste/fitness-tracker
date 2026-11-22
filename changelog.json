@@ -1,5 +1,13 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "The island at the bottom now changes with the screen. On a tab, the + does that page's main thing: Log food on Food, Start a walk on Fitness (or Back to the recording while one is running), Log weight on Progress; Home still opens the Log menu, and holding the + anywhere opens it too. Settings has no +. On a full-screen page the tabs make way for that page's own buttons, within thumb reach: In & out and Steps get Back, Earlier, Now and Later; a walk gets the previous and next walk (and Edit); the coach gets the day before and after, and the + becomes Get a fresh review, showing the loading shape while the coach thinks. The island morphs between the two on a spring.",
+      "img": "docs/whatsnew/island.png"
+    },
+    {
+      "text": "Fixed: tapping a tab while In & out (or Steps, a walk or the coach) was open switched the tab hidden behind it. A tab tap now always takes you to that tab, and tapping the tab you're on takes you to its top."
+    }
+  ],
   "releases": [
     {
       "version": "1.35",

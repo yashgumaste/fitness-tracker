@@ -200,6 +200,22 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await expect('a day');await expect('Resting burn');await expect('healthy deficit');
     const pairs=await p.evaluate(()=>document.querySelectorAll('svg[aria-label="Calories eaten and burned"] g').length);if(pairs!==7)throw new Error('week should have 7 pairs, got '+pairs);
     await p.click('[aria-label="Back"]');await W();await expect('Fuel');});
+  await step('Island changes with the screen',async()=>{
+    const fab=()=>p.evaluate(()=>{const b=document.querySelector('.dock-add');return b?b.getAttribute('aria-label'):null;});
+    await tab(0);if(await fab()!=='Log something')throw new Error('home + should open the Log menu, got '+await fab());
+    await tab(1);if(await fab()!=='Log food')throw new Error('Food + should log food, got '+await fab());
+    await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await expect('Log food');if(!(await p.$('.x-sheet textarea')))throw new Error('+ on Food should open the food sheet');await close();
+    await tab(3);if(await fab()!=='Log weight')throw new Error('Progress + should log weight, got '+await fab());
+    await tab(4);if(await fab()!==null)throw new Error('Settings should have no +');
+    await tab(0);await p.click('[aria-label^="Calories burned"]');await W(600);
+    if(await p.$('nav.dock-pill'))throw new Error('tabs should give way to the page’s own buttons');
+    const acts=await p.evaluate(()=>[...document.querySelectorAll('.dock-pill.bar button')].map(b=>b.getAttribute('aria-label')).join('|'));
+    if(acts!=='Back|Earlier|This week|Later')throw new Error('In & out island: '+acts);
+    if(!(await p.evaluate(()=>document.querySelector('.dock-pill.bar [aria-label=Later]').disabled)))throw new Error('Later should be off on this week');
+    await p.click('.dock-pill.bar [aria-label=Earlier]');await W();await expect('2 Nov');
+    await p.click('.dock-pill.bar [aria-label="This week"]');await W();await expect('9 Nov');
+    await p.click('.dock-pill.bar [aria-label=Back]');await W();await expect('Fuel');
+    if(!(await p.$('nav.dock-pill')))throw new Error('tabs should be back on Home');});
   await step('Coach plans tomorrow’s reminders',async()=>{
     await p.evaluate(()=>{window.__planned=null;window.LMNative.planLogs=async items=>{window.__planned=items;return{ok:true,count:items.length,next:items[0]||null};};});
     await tab(0);await p.evaluate(()=>window.__lmLogOpen('coach'));await W(2500);await expect('Reminders for');await expect('2 boiled eggs');
@@ -238,7 +254,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await click('.x-sheet button','Food');await p.fill('.x-sheet textarea','2 bowls cabbage rice');await click('.x-sheet-foot button','Log it');await W(1200);
     await p.evaluate(()=>localStorage.setItem('lm-ai-provider','gemini'));await tab(1);await expect('2 bowls cabbage rice');
     if(!(await p.evaluate(()=>window.__jsonMode)))throw new Error('Claude was not told to reply in JSON');});
-  await step('Water',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Water');
+  await step('Water',async()=>{await tab(0);await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Water');
     await click('.x-sheet button','Glass');await expect('250 ml');
     // edit it: one step more and an hour earlier
     await p.click('.x-sheet [aria-label^="Edit 250 ml"]');await W();await expect('Edit this drink');
@@ -246,14 +262,14 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const row=await p.evaluate(()=>[...document.querySelectorAll('.x-sheet .x-item')].map(e=>e.innerText).find(t=>/300 ml/.test(t)&&/✎/.test(t))||'');
     if(!/7:30\s*PM/i.test(row))throw new Error('edited drink should be 300 ml at 7:30 PM, got: '+row.replace(/\n/g,' '));
     await close();});
-  await step('Walk',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Add a walk');
+  await step('Walk',async()=>{await tab(0);await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Add a walk');
     await expect('Start + duration');await p.fill('.x-sheet input[inputmode=numeric]','3500');await click('.x-sheet-foot button','Save walk');
     if(await p.$('.x-sheet'))throw new Error('walk panel did not close after saving');});
-  await step('Sleep',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Sleep');
+  await step('Sleep',async()=>{await tab(0);await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Sleep');
     await click('.x-sheet button','Good');await click('.x-sheet-foot button','Save sleep');});
-  await step('Weight',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Weight');
+  await step('Weight',async()=>{await tab(0);await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Weight');
     await p.fill('.x-sheet input','78.4');await click('.x-sheet-foot button','Save');});
-  await step('Feeling',async()=>{await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Feeling');
+  await step('Feeling',async()=>{await tab(0);await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Feeling');
     await click('.x-sheet .x-chip','Gas');await close();});
   await step('Coach',async()=>{await tab(1);
     // the coach opens full screen from anywhere; it shows the loading indicator while it thinks

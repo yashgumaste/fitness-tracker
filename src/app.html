@@ -670,7 +670,13 @@ input.m3-input{border-radius:999px;}
 :root[data-vt=sheet]::view-transition-old(root){animation:lm-vt-fade-out .2s linear both}
 :root[data-vt=unsheet]::view-transition-old(root){animation:lm-vt-sink .3s var(--m-emph) both;z-index:2}
 :root[data-vt=unsheet]::view-transition-new(root){animation:none}
-::view-transition-group(lm-dock),::view-transition-group(lm-pills){animation-duration:.3s}
+::view-transition-group(lm-pills){animation-duration:.3s}
+/* the island morphs between tabs and a page's toolbar: the pill resizes on the spring, its contents cross-fade unstretched */
+::view-transition-group(lm-island),::view-transition-group(lm-fab){animation-duration:.5s;animation-timing-function:var(--m-spatial);overflow:clip}
+::view-transition-group(lm-island){border-radius:999px;background:var(--pri)}
+::view-transition-old(lm-island),::view-transition-new(lm-island),::view-transition-old(lm-fab),::view-transition-new(lm-fab){height:100%;width:auto;object-fit:none;left:50%;translate:-50% 0}
+::view-transition-old(lm-island),::view-transition-old(lm-fab){animation:lm-vt-fade-out .12s linear both}
+::view-transition-new(lm-island),::view-transition-new(lm-fab){animation:lm-vt-in .22s var(--m-effects) .06s both}
 ::view-transition-group(lm-pop){animation-duration:.45s;border-radius:28px;overflow:hidden}
 ::view-transition-old(lm-pop){height:100%;object-fit:cover;animation:lm-vt-fade-out .1s linear both}
 ::view-transition-new(lm-pop){height:100%;object-fit:cover;animation:lm-vt-in .22s var(--m-effects) .05s both}
@@ -708,18 +714,30 @@ button.x-item:active{border-radius:14px}
 .rec-dot{width:10px;height:10px;border-radius:5px;background:currentColor;animation:lm-blink 1.2s ease-in-out infinite}
 .rec-dot.paused{animation:none;opacity:.6}
 @keyframes lm-blink{0%,100%{opacity:1}50%{opacity:.25}}
-.dock{view-transition-name:lm-dock;position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:120;pointer-events:none;height:64px;
+.dock{position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:120;pointer-events:none;height:64px;
   display:flex;justify-content:center;align-items:center;gap:10px;}
 .dock>*{pointer-events:auto;}
-.dock-pill{display:flex;align-items:center;gap:2px;padding:6px;border-radius:999px;background:var(--pri);
+.dock-pill{view-transition-name:lm-island;display:flex;align-items:center;gap:2px;padding:6px;border-radius:999px;background:var(--pri);
 }
+.dock-act{min-width:52px;height:52px;border-radius:26px;display:grid;place-items:center;color:var(--dock-ic);border:none;background:transparent;padding:0 6px;
+  transition:border-radius .3s var(--spring)!important;}
+.dock-act svg{width:24px;height:24px;fill:currentColor;}
+.dock-act.back{background:var(--s0);color:var(--pri);}
+.dock-act:active:not(:disabled){box-shadow:inset 0 0 0 30px rgba(0,0,0,.14);border-radius:16px;}
+.dock-act:disabled{color:color-mix(in srgb,var(--dock-ic) 38%,transparent);}
+.dock-txt{font-weight:850;font-size:15px;padding:0 8px;white-space:nowrap}
+.fab-wrap{position:relative;display:grid}
+.fab-tip{position:absolute;right:0;bottom:74px;white-space:nowrap;background:var(--fg);color:var(--bg);font-weight:800;font-size:14px;padding:8px 14px;border-radius:14px;
+  pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.35);transform-origin:100% 100%;animation:lm-tip 2.8s var(--m-emph) both}
+.fab-tip small{font-weight:650;opacity:.7;font-size:12.5px}
+@keyframes lm-tip{0%{opacity:0;transform:translateY(8px) scale(.85)}9%{opacity:1;transform:none}86%{opacity:1;transform:none}100%{opacity:0;transform:translateY(4px)}}
 .dock-tab{width:52px;height:52px;border-radius:26px;display:grid;place-items:center;color:var(--dock-ic);border:none;background:transparent;
   transition:border-radius .3s var(--spring)!important;}
 .dock-tab svg{width:26px;height:26px;fill:currentColor;}
 .dock-tab.on{background:var(--s0);color:var(--pri);}
 .dock-tab:active:not(:disabled){box-shadow:inset 0 0 0 30px rgba(0,0,0,.14);}
 .dock-tab.on:active{box-shadow:none;border-radius:16px;}
-.dock-add{width:64px;height:64px;border-radius:24px;border:none;display:grid;place-items:center;
+.dock-add{view-transition-name:lm-fab;width:64px;height:64px;border-radius:24px;border:none;display:grid;place-items:center;
   background:var(--pri-c);color:var(--pri);
   transition:border-radius .3s var(--spring)!important;}
 .dock-add svg{width:30px;height:30px;fill:currentColor;}
@@ -1905,6 +1923,12 @@ function App(){
   const heroKey=e=>(e.getAttribute('aria-label')||'')+'|'+(e.textContent||'').slice(0,40);
   useEffect(()=>{const h=e=>{lastTap.current={el:e.target.closest&&e.target.closest('button,[role=button],.top-pill'),t:Date.now()};};
     document.addEventListener('pointerdown',h,true);return()=>document.removeEventListener('pointerdown',h,true);},[]);
+  // The island's main button: hold timer, and a short label the first time each new action shows up
+  const fabHold=useRef({t:0,held:false}),fabNow=useRef(null),fabLast=useRef(null),fabSeen=useRef({});
+  const [fabTip,setFabTip]=useState(null);
+  useEffect(()=>{const id=fabNow.current;if(id===fabLast.current)return;fabLast.current=id;
+    if(!id||id==='log'||fabSeen.current[id])return;fabSeen.current[id]=1;
+    setFabTip({id,n:Date.now()});clearTimeout(fabHold.current.tip);fabHold.current.tip=setTimeout(()=>setFabTip(f=>f&&f.id===id?null:f),2800);});
   function vtRun(kind,update){
     const d=document,root=d.documentElement;
     if(!d.startViewTransition||!(window.ReactDOM&&ReactDOM.flushSync)||d.hidden||(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)){update();return;}
@@ -2392,7 +2416,17 @@ function App(){
   },[]);
 
   /* ─── TAB SWITCH ─── */
-  function switchTab(t){setTab(t);setAnimKey(k=>k+1);setStepsPage(null);setActPage(null);setRecOpen(false);}
+  // A tab tap always lands on that tab's own page: it closes any full-screen page (In & out, Steps, a walk, the coach)
+  // in the same fade-through, and tapping the tab you're on takes you to its top.
+  function switchTab(t,also){
+    const c=vtCur.current,over=!!(c.stepsPage||c.actPage||c.energyPage||c.coachPage||c.recOpen),same=t===c.tab&&!over;
+    const go=()=>{setTab_(t);setAnimKey(k=>k+1);setStepsPage_(null);setActPage_(null);setRecOpen_(false);setEnergyPage_(null);setCoachPage_(null);
+      if(t==='settings'&&c.tab==='settings')setSettingsPage_(null);if(also)also();};
+    if(same&&!(t==='settings'&&c.settingsPage)){if(also)also();window.scrollTo({top:0,behavior:'smooth'});return;}
+    if(over)vtBack.current=[];
+    vtCur.current={...c,tab:t,stepsPage:null,actPage:null,energyPage:null,coachPage:null,recOpen:false};
+    vtRun('tab',go);
+  }
   // New page → start at the top (the page itself scrolls now)
   useEffect(()=>{window.scrollTo(0,0);},[tab,dietView,fitView]);
 
@@ -3348,6 +3382,7 @@ Reply ONLY with valid JSON (no markdown):
   // its notification is still there), an update that's out, and the current page's setup prompts.
   // Colour and icon tell them apart; reminders and tips open into a card; ✕ puts one away for a while.
   let pagePill=()=>null;   // set just before the page renders
+  let pageDock=()=>null;   // a full-screen page's own island buttons: pageDock({acts:[{id,icon,label,act,off}],fab})
   const [pillOpen,setPillOpen]=useState(null);
   const [pillHide,setPillHide]=useState(()=>{try{return JSON.parse(localStorage.getItem('lm-pill-hide')||'{}')||{};}catch(_){return{};}});
   const hidePill=(id,ms)=>setPillHide(p=>{const n={...p,[id]:Date.now()+ms};Object.keys(n).forEach(k=>{if(n[k]<Date.now())delete n[k];});
@@ -3408,18 +3443,46 @@ Reply ONLY with valid JSON (no markdown):
         </div>);})()}
     </>);
   }
-  function renderDock(){
+  /* The island changes with the screen (Material 3 Expressive floating toolbar + FAB):
+     - on a tab: the five tabs, and the + becomes that page's main action (Food → log food, Fitness → start a walk,
+       Progress → log weight; Settings has none). Hold it for the full Log menu.
+     - on a full-screen page (In & out, Steps, a walk, the coach): Back and that page's own buttons, no tabs. */
+  function tabFab(){
+    if(tab==='settings')return null;
+    if(tab==='diet'&&dietView==='today')return{id:'food',icon:ICON.food,label:'Log food',act:()=>openFood(TODAY,null)};
+    if(tab==='fitness'&&fitView==='day'){
+      if(rec)return{id:'rec',icon:ICON.rec,label:'Back to the recording',act:()=>setRecOpen(true)};
+      if(selectedDate===TODAY)return{id:'walk',icon:ICON.play,label:'Start a walk',act:()=>startRecording('walk')};}
+    if(tab==='progress')return{id:'weight',icon:ICON.scale,label:'Log weight',act:()=>openWeight(TODAY)};
+    return{id:'log',icon:ICON.add,label:'Log something',act:()=>openSheet('log')};
+  }
+  function closeOverlay(){
+    if(coachPage)setCoachPage(null);else if(actPage)setActPage(null);else if(stepsPage)setStepsPage(null);else if(energyPage)setEnergyPage(null);
+  }
+  function renderDock(spec){
+    const fab=spec.fab;
     const tabs=[['home',ICON.home,'Home'],['diet',ICON.food,'Food'],['fitness',ICON.fit,'Fitness'],['progress',ICON.chart,'Progress'],['settings',ICON.gear,'Settings']];
-    const active=pillPreview?pillPreview.tab:tab;
+    const active=pillPreview?pillPreview.tab:tab,canHold=fab&&!spec.acts&&fab.id!=='log';
+    const endHold=()=>clearTimeout(fabHold.current.t);
     return(
       <div className="dock">
-        <nav className="dock-pill" aria-label="Sections">
+        {spec.acts?<div className="dock-pill bar" role="toolbar" aria-label="Page actions">
+            {spec.acts.map(a=><button key={a.id} className={`dock-act${a.id==='back'?' back':''}`} aria-label={a.label} disabled={!!a.off} onClick={a.act}>
+              {a.text?<span className="dock-txt">{a.text}</span>:<Ico d={a.icon} size={24}/>}</button>)}
+          </div>
+        :<nav className="dock-pill" aria-label="Sections">
           {tabs.map(([t,d,l])=>(
             <button key={t} className={`dock-tab${active===t?' on':''}`} aria-label={l} aria-current={active===t?'page':undefined}
-              onClick={()=>{if(t==='fitness'&&tab!=='fitness')setSelectedDate(TODAY);switchTab(t);}}><Ico d={d} size={26}/></button>))}
-        </nav>
-        <button className="dock-add" aria-label="Log something" onClick={()=>openSheet('log')}>
-          <Ico d={ICON.add} size={30}/></button>
+              onClick={()=>switchTab(t,t==='fitness'&&tab!=='fitness'?()=>setSelectedDate(TODAY):null)}><Ico d={d} size={26}/></button>))}
+        </nav>}
+        {fab&&<span className="fab-wrap">
+          {fabTip&&fabTip.id===fab.id&&<span key={fabTip.n} className="fab-tip" aria-hidden="true">{fab.label}{canHold?<small> · hold for more</small>:null}</span>}
+          <button className={`dock-add${fab.id!=='log'?' ctx':''}`} aria-label={fab.label} disabled={!!fab.busy}
+            onPointerDown={()=>{fabHold.current.held=false;endHold();if(canHold)fabHold.current.t=setTimeout(()=>{fabHold.current.held=true;
+              try{navigator.vibrate&&navigator.vibrate(12);}catch(e){}openSheet('log');},480);}}
+            onPointerUp={endHold} onPointerLeave={endHold} onPointerCancel={endHold} onContextMenu={e=>{if(canHold)e.preventDefault();}}
+            onClick={()=>{if(fabHold.current.held){fabHold.current.held=false;return;}fab.act();}}>
+            {fab.busy?<LoadingIndicator size={30} bare color="currentColor"/>:<Ico d={fab.icon} size={fab.id==='log'?30:28}/>}</button></span>}
       </div>);
   }
 
@@ -4041,8 +4104,10 @@ Reply ONLY with valid JSON (no markdown):
         <Shape kind="flower" size={44} fill="var(--pri-c)" color="var(--pri)" font={20}>🧠</Shape>
         <div style={{flex:1,minWidth:0}}><h1 style={{fontSize:28,margin:0}}>Coach</h1>
           <div className="x-sub" style={{fontSize:13}}>{isT?'Today':dateLong(day)}{ins&&ins._at&&!loading?` · as of ${fmtTime(ins._at)}`:''}</div></div>
-        <button className="x-ibtn" aria-label="Get a fresh review" onClick={()=>fetchDayInsight(day)} disabled={loading} style={{opacity:loading?.4:1,fontSize:20}}>↻</button>
       </div>
+      {pageDock({acts:[{id:'prev',icon:ICON.left,label:'Day before',act:()=>vtRun('tab',()=>setCoachPage_({date:calAddDays(day,-1)}))},
+          {id:'next',icon:ICON.right,label:'Day after',act:()=>vtRun('tab',()=>setCoachPage_({date:calAddDays(day,1)})),off:isT}],
+        fab:{id:'coach',icon:ICON.refresh,label:ins&&!ins.error?'Get a fresh review':'Ask the coach',act:()=>fetchDayInsight(day),busy:loading}})}
       <div className="x-wrap" style={{paddingTop:0}}>
         {loading?<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:18,padding:'56px 12px 24px',textAlign:'center'}}>
             <LoadingIndicator size={96} label="The coach is thinking"/>
@@ -4252,6 +4317,16 @@ Reply ONLY with valid JSON (no markdown):
     </div>);
   }
   /* ═══ ONE WALK ═══ */
+  // the walk before / after this one (same day first, then up to 60 days back)
+  function walkNav(date,id){
+    const list=d=>moveDay(d).walks,cur=list(date),i=cur.findIndex(x=>x.id===id);
+    let prev=i>0?[date,cur[i-1].id]:null,next=i>=0&&i<cur.length-1?[date,cur[i+1].id]:null;
+    for(let k=1;!prev&&k<=60;k++){const d=calAddDays(date,-k),l=list(d);if(l.length)prev=[d,l[l.length-1].id];}
+    for(let k=1;!next&&calAddDays(date,k)<=TODAY;k++){const d=calAddDays(date,k),l=list(d);if(l.length)next=[d,l[0].id];}
+    return{prev,next};
+  }
+  const walkFab=()=>rec?{id:'rec',icon:ICON.rec,label:'Back to the recording',act:()=>setRecOpen(true)}
+    :{id:'walk',icon:ICON.play,label:'Start a walk',act:()=>startRecording('walk')};
   function renderActPage(){
     const {date,id,del}=actPage;const mv=moveDay(date);const w=mv.walks.find(x=>x.id===id);
     const head=(title,sub,emoji)=>(<div className="x-head" style={{alignItems:'center',justifyContent:'flex-start'}}>
@@ -4280,6 +4355,10 @@ Reply ONLY with valid JSON (no markdown):
       ...(gps&&st.maxKmh?[['💨','Top speed',st.maxKmh.toFixed(1),'km/h']]:[])];
     const sp=st.splits||[],full=sp.filter(x=>!x.part),fast=full.length?Math.min(...full.map(x=>x.sec)):0,slow=sp.length?Math.max(...sp.map(x=>x.part?x.sec*1000/x.part:x.sec)):1;
     const routeShared=(hcState.write||[]).includes('ExerciseRoute');
+    const nav=walkNav(date,id),goWalk=t=>t&&vtRun('tab',()=>{setActPage_({date:t[0],id:t[1]});window.scrollTo(0,0);});
+    pageDock({acts:[{id:'prev',icon:ICON.left,label:'Previous walk',act:()=>goWalk(nav.prev),off:!nav.prev},
+        {id:'next',icon:ICON.right,label:'Next walk',act:()=>goWalk(nav.next),off:!nav.next},
+        w.src==='manual'&&{id:'edit',icon:ICON.edit,label:'Edit this walk',act:()=>openWalk(date,w.slot)}],fab:walkFab()});
     return(<div>
       {head(w.name,`${dateLong(date)} · ${w.end?fmtSpan(w.start,w.end):'time not set'}`,w.kind==='run'?'🏃':w.emoji)}
       <div className="x-wrap" style={{paddingTop:0}}>
@@ -4377,7 +4456,11 @@ Reply ONLY with valid JSON (no markdown):
       return d>1000?{k:'toofast',c:'var(--err)',l:'Too big a deficit'}:d>750?{k:'big',c:'var(--amber)',l:'Big deficit'}:d>=250?{k:'ok',c:'var(--mint)',l:'Healthy deficit'}
         :d>-250?{k:'even',c:'var(--sky)',l:'About even'}:{k:'surplus',c:'var(--pink)',l:'Surplus'};};
     const fmtD=d=>new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'});
-    const navRow=(title,prev,next,canNext)=>(<div style={{display:'flex',alignItems:'center',gap:10}}>
+    const navRow=(title,prev,next,canNext)=>(pageDock({acts:[{id:'prev',icon:ICON.left,label:'Earlier',act:prev},
+        {id:'now',icon:ICON.today,label:v==='day'?'Today':`This ${v}`,act:()=>set({date:TODAY,sel:null}),off:!canNext},
+        {id:'next',icon:ICON.right,label:'Later',act:next,off:!canNext}],
+      fab:{id:'food',icon:ICON.food,label:'Log food',act:()=>openFood(TODAY,null)}}),
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
       <button className="x-ibtn" aria-label="Earlier" onClick={prev}><Ico d={ICON.left} size={24}/></button>
       <div style={{flex:1,textAlign:'center',fontWeight:820,fontSize:16}}>{title}</div>
       <button className="x-ibtn" aria-label="Later" onClick={next} disabled={!canNext} style={{opacity:canNext?1:.35}}><Ico d={ICON.right} size={24}/></button></div>);
@@ -4488,7 +4571,9 @@ Reply ONLY with valid JSON (no markdown):
     const sp=stepsPage,v=sp.view,set=f=>setStepsPage(p=>({...p,...f}));
     const goal=WALK_GOAL.day,k=kfmt;
     const hcOn=!!hcState?.read?.includes('Steps'),native=!!window.LMNative?.isNative;
-    const navRow=(title,sub,prev,next,canNext,back)=>(<>
+    const navRow=(title,sub,prev,next,canNext,back)=>(pageDock({acts:[{id:'prev',icon:ICON.left,label:'Earlier',act:prev},
+        {id:'now',icon:ICON.today,label:v==='day'?'Today':`This ${v}`,act:()=>set({date:TODAY,sel:null}),off:!canNext},
+        {id:'next',icon:ICON.right,label:'Later',act:next,off:!canNext}],fab:walkFab()}),<>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
         <button className="x-ibtn" aria-label="Earlier" onClick={prev}><Ico d={ICON.left} size={24}/></button>
         <div style={{flex:1,textAlign:'center',minWidth:0}}><div style={{fontWeight:820,fontSize:16}}>{title}</div>{sub&&<div className="x-sub" style={{fontSize:12}}>{sub}</div>}</div>
@@ -6500,6 +6585,7 @@ Reply ONLY with valid JSON (no markdown):
   // the page is rendered first: it can add its own prompts as pills (pagePill), shown pinned at the top
   const pagePills=[];
   pagePill=p=>{pagePills.push(p);return null;};
+  let pageDockSpec=null;pageDock=d=>{pageDockSpec={...pageDockSpec,...d};return null;};
   const overlayEl=!sheet&&!setupOpen&&(recOpen||actPage||stepsPage||energyPage||coachPage)?(recOpen?renderRecPage():coachPage?renderCoachPage():actPage?renderActPage():stepsPage?renderStepsPage():renderEnergyPage()):null;
   const nOverlayPills=pagePills.length;
   const pageEl=overlayEl?null:<>
@@ -6513,6 +6599,10 @@ Reply ONLY with valid JSON (no markdown):
   </>;
   if(overlayEl)pagePills.length=nOverlayPills;   // a full-screen page is up: only its own prompts
   const pillsNow=sheet||setupOpen?[]:allPills(pagePills);
+  const dockSpec=overlayEl?{acts:[{id:'back',icon:ICON.back,label:'Back',act:closeOverlay},...((pageDockSpec&&pageDockSpec.acts)||[]).filter(Boolean)],fab:(pageDockSpec&&pageDockSpec.fab)||null}
+    :{fab:tabFab()};
+  const dockOn=!kbOpen&&!sheet&&!setupOpen&&!recOpen;
+  fabNow.current=dockOn&&dockSpec.fab?dockSpec.fab.id:null;
   return(
     <div style={{minHeight:'100dvh',background:'var(--bg)',color:'var(--text-primary)',display:'flex',flexDirection:'column',position:'relative'}}>
       {toast&&<div className="x-snack" role="status" style={sheet?{top:'calc(12px + env(safe-area-inset-top,0px))',bottom:'auto'}:null}><i style={{background:toast.color}}/>{toast.msg}</div>}
@@ -6538,7 +6628,7 @@ Reply ONLY with valid JSON (no markdown):
       </div>
       </div>
 
-      {!kbOpen&&!sheet&&!setupOpen&&!recOpen&&renderDock()}
+      {dockOn&&renderDock(dockSpec)}
       {renderTopPills(pillsNow)}
       {sheet&&renderSheetX()}
     </div>
@@ -7110,6 +7200,13 @@ const ICON={
   add:'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
   left:'M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z',
   right:'M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z',
+  back:'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
+  play:'M8 5.14v13.72a1 1 0 0 0 1.52.85l10.6-6.86a1 1 0 0 0 0-1.7L9.52 4.29A1 1 0 0 0 8 5.14z',
+  refresh:'M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z',
+  today:'M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H5V8h14v11zM7 10h5v5H7z',
+  scale:'M6 3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3zm0 2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1zm6 2a5 5 0 0 1 5 5h-3.1l-1.1-3.6h-1.6L10.1 12H7a5 5 0 0 1 5-5z',
+  edit:'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
+  rec:'M12 6.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11z',
 };
 const Ico=({d,size=24,style})=><svg viewBox="0 0 24 24" width={size} height={size} style={style} aria-hidden="true"><path d={d} fill="currentColor"/></svg>;
 
