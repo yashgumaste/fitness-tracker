@@ -3407,7 +3407,9 @@ Reply ONLY with valid JSON (no markdown):
         extra:it.kind==='Snack'?[['No snack',()=>hidePill(id,20*3600000)]]:null});
       else if(it.kind==='bedtime')out.push({id,tone:'night',icon:'🌙',text:now>it.bedMs?'Bedtime passed':`Lights out ${fmtTime(it.bedMs)}`,detail:d,snooze:true});
       else if(it.kind==='nudge'){
-        if(it.open==='coach')out.push({id,tone:'sky',icon:'🧠',text:'Get tomorrow’s plan',tap:()=>logOpenRef.current('coach'),snooze:true});
+        // gone as soon as you tap it: while the coach is reviewing today, once it has, and while its page is open
+        if(it.open==='coach'){const ti=dayInsight[TODAY];if(!(dayInsightLoading===TODAY||(ti&&!ti.error)||coachPage))
+          out.push({id,tone:'sky',icon:'🧠',text:'Get tomorrow’s plan',tap:()=>logOpenRef.current('coach'),snooze:true});}
         else if(it.open==='walk')out.push({id,tone:'mint',icon:'🚶',text:/PM$/.test(it.tag)?(/after lunch/.test(it.title)?'Walk after lunch':'Second walk time'):'Walk time',detail:d,snooze:true,
           act:['🚶 Start walk',()=>{hidePill(id,20*3600000);startRecording('walk');}]});
         else if(it.icon==='star')out.push({id,tone:'pink',icon:'⭐',text:'Keep it going',detail:d,snooze:true});

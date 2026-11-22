@@ -16,6 +16,9 @@
     },
     {
       "text": "Fixed: opening or closing a pill's card (like the coach's tips) flashed a big square for a moment. The card now unfolds down from the pills and folds back up into them."
+    },
+    {
+      "text": "Fixed: the “Get tomorrow’s plan” pill stayed up after you tapped it. It now goes away as soon as the coach starts reviewing your day, and doesn’t come back once the review is in."
     }
   ],
   "releases": [
