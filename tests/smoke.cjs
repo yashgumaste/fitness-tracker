@@ -47,6 +47,9 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
       while(window.__slowAI)await new Promise(r=>setTimeout(r,50));   // lets a test see the loading state
       if(/api\.github\.com/.test(String(u)))return{ok:true,status:200,json:async()=>({tag_name:'v99.1',html_url:'https://github.com/x/releases/v99.1',body:'**What\'s new**\n- Faster logging\n- Brighter charts',assets:[{name:'FitnessTracker-99.1.apk',browser_download_url:'https://github.com/x/FitnessTracker-99.1.apk'}]})};
       const body=o&&o.body?String(o.body):'';gem=/generativelanguage/.test(String(u));window.__aiCalls.push(String(u));
+      // Google's "high demand" answer, for one model
+      if(window.__busyModel&&String(u).includes('/models/'+window.__busyModel+':'))return{ok:false,status:503,
+        text:async()=>JSON.stringify({error:{message:'This model is currently experiencing high demand.'}}),json:async()=>({}),clone(){return this;}};
       if(/Split each meal/.test(body))return reply('[]');
       if(/reviewing one whole day/.test(body))return reply(JSON.stringify({rating:'✅ Solid',summary:'A steady day.',food_insight:'Protein was low at lunch.',walk_insight:null,workout_insight:null,body_insight:'Slept well.',top_win:'Good sleep.',focus_next:'Add dal at dinner.',recovery_tip:'Drink water early.',tomorrow:{Breakfast:'Protein first: 2 boiled eggs with 1 chapati.',Lunch:null,Snack:null,Dinner:'Dinner by 8 PM, half the rice.',walk_morning:'Aim for 11:30 min/km at 105 steps a minute.',walk_second:'A 20-minute brisk walk after tea.',keep:[{at:'Lunch',text:'Yesterday’s dal-and-sabji lunch was spot on. Same again?'}],water:'500 ml before 10 AM this time.',move:'Yesterday’s walk was great. Stand up and keep it rolling.'}}));
       // the free AI sometimes answers in words: first reply prose, the retry wraps JSON in a sentence
@@ -286,6 +289,13 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     if(!await p.$('svg[role=progressbar]'))throw new Error('no loading indicator while the coach thinks');await expect('Reading');
     await p.evaluate(()=>{window.__slowAI=false;});await W(1500);await expect('Protein was low at lunch.');
     await p.click('[aria-label="Back"]');await W(600);await expect('Breakfast');});
+  await step('Busy free AI: waits, then the lighter model',async()=>{
+    await p.evaluate(()=>{window.__busyModel='gemini-flash-latest';window.__aiCalls=[];window.__lmLogOpen('coach');});await W(800);
+    await p.click('[aria-label="Get a fresh review"]');await p.waitForTimeout(7500);
+    const c=await p.evaluate(()=>window.__aiCalls);await p.evaluate(()=>{window.__busyModel=null;});
+    if(c.filter(u=>/gemini-flash-latest/.test(u)).length<3||!c.some(u=>/flash-lite/.test(u)))throw new Error('calls: '+c.join(' | '));
+    if(await p.evaluate(()=>/Couldn’t get the coach/.test(document.body.innerText)))throw new Error('the review should have come through');
+    await p.click('.dock-pill.bar [aria-label=Back]');await W();});
   await step('Free AI used by default',async()=>{const c=await p.evaluate(()=>window.__aiCalls);if(!c.some(u=>/generativelanguage/.test(u)))throw new Error('AI did not go to Gemini: '+c.join(','));});
   await step('Colour picker',async()=>{await tab(4);await click('.x-item','Theme & colour');await click('.x-btn','Make your own colour');for(const m of ['RGB','HSV','Hex'])await click('.x-seg button',m);await close();});
   await step('Update check',async()=>{await p.evaluate(()=>{window.LMNative.installSource=async()=>({installedAt:Date.parse('2026-11-01T10:00:00+05:30'),updatedAt:Date.parse('2026-11-09T01:58:00+05:30'),

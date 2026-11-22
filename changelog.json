@@ -19,6 +19,9 @@
     },
     {
       "text": "Fixed: the “Get tomorrow’s plan” pill stayed up after you tapped it. It now goes away as soon as the coach starts reviewing your day, and doesn’t come back once the review is in."
+    },
+    {
+      "text": "When Google’s free AI is overloaded (“high demand”), the app now waits a moment and tries again, then uses the lighter free model, before giving up, so the coach’s review usually comes through anyway. If it still can’t, it says so in plain words. The same wait-and-retry applies to Claude when it’s busy."
     }
   ],
   "releases": [

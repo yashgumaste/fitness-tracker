@@ -69,7 +69,12 @@
   async function askGemini(prompt,maxTokens,kind,json){
     const key=await geminiKey();
     if(!key)throw new Error('The free AI is not set up in this build — add a Gemini key or switch to Claude in Settings → AI');
-    const model=GEMINI[kind==='fast'?'fast':'smart'];
+    // Google's free models are sometimes overloaded (503 "high demand"): wait a moment and try again, then use the
+    // other model (lite ↔ full) before giving up. A short test (Settings → AI) can pass while the bigger one is busy.
+    const order=kind==='fast'?[GEMINI.fast,GEMINI.smart]:[GEMINI.smart,GEMINI.fast];
+    const busy=st=>st===503||st===500||st===502||st===504;
+    const wait=ms=>new Promise(res=>setTimeout(res,ms));
+    let model=order[0];
     const send=(thinking,room)=>fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{method:'POST',
       headers:{'content-type':'application/json','x-goog-api-key':key},
       body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],
@@ -78,9 +83,12 @@
     // ask with as little thinking as this model allows (models differ in which setting they accept)
     const sendLeast=async room=>{let x=await send({thinkingBudget:0},room);if(x.status===400)x=await send({thinkingLevel:'minimal'},room);if(x.status===400)x=await send(null,room);return x;};
     let r;
-    try{r=await send({thinkingLevel:'low'});}catch(e){throw new Error('No internet connection — try again');}
-    if(r.status===400)r=await sendLeast();
+    const once=async()=>{let x;try{x=await send({thinkingLevel:'low'});}catch(e){throw new Error('No internet connection — try again');}
+      if(x.status===400)x=await sendLeast();return x;};
+    outer:for(const m of order){model=m;
+      for(const pause of [0,1500,4000]){if(pause)await wait(pause);r=await once();if(!busy(r.status))break outer;}}
     if(!r.ok){
+      if(busy(r.status))throw new Error('Google’s free AI is very busy right now — try again in a few minutes, or switch to Claude in Settings → AI');
       const t=await r.text();let msg=t.slice(0,160);try{msg=JSON.parse(t).error.message;}catch(_){}
       if(r.status===429)throw new Error((gemKeyCache?'Your Gemini key':'The free AI')+' has used up its allowance for now — try again later, or add your own key in Settings → AI');
       if(r.status===400&&/API key/i.test(msg)||r.status===403)throw new Error('Gemini key not accepted — check Settings → AI');
@@ -115,8 +123,12 @@
     try{r=await send(true);}catch(e){throw new Error('No internet connection — try again');}
     // If a model rejects the thinking/effort options, retry once without them
     if(r.status===400){const t=await r.clone().text();if(/thinking|effort|output_config/i.test(t))r=await send(false);}
+    // overloaded (529) or a passing server error: wait a moment and try again, twice
+    for(const pause of [2000,5000]){if(![529,503,500,502,504].includes(r.status))break;await new Promise(res=>setTimeout(res,pause));
+      try{r=await send(true);if(r.status===400)r=await send(false);}catch(e){break;}}
     if(!r.ok){
       const t=await r.text();let msg=t.slice(0,160);try{msg=JSON.parse(t).error.message;}catch(_){}
+      if(r.status===529||r.status===503)throw new Error('Claude is very busy right now — try again in a few minutes');
       if(r.status===401)throw new Error('API key not accepted — check it in Settings → AI');
       if(r.status===402||/credit balance/i.test(msg))throw new Error('Out of API credits — top up at platform.claude.com');
       if(r.status===429)throw new Error('Too many requests — wait a moment and try again');
