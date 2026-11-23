@@ -46,7 +46,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     window.fetch=async(u,o)=>{
       while(window.__slowAI)await new Promise(r=>setTimeout(r,50));   // lets a test see the loading state
       if(/api\.github\.com/.test(String(u)))return{ok:true,status:200,json:async()=>({tag_name:'v99.1',html_url:'https://github.com/x/releases/v99.1',body:'**What\'s new**\n- Faster logging\n- Brighter charts',assets:[{name:'FitnessTracker-99.1.apk',browser_download_url:'https://github.com/x/FitnessTracker-99.1.apk'}]})};
-      const body=o&&o.body?String(o.body):'';gem=/generativelanguage/.test(String(u));window.__aiCalls.push(String(u));
+      const body=o&&o.body?String(o.body):'';gem=/generativelanguage/.test(String(u));window.__aiCalls.push(String(u));(window.__aiBodies=window.__aiBodies||[]).push(body);
       // Google's "high demand" answer, for one model
       if(window.__busyModel&&String(u).includes('/models/'+window.__busyModel+':'))return{ok:false,status:503,
         text:async()=>JSON.stringify({error:{message:'This model is currently experiencing high demand.'}}),json:async()=>({}),clone(){return this;}};
@@ -257,6 +257,12 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     if(!t2.includes('2026-11-10-Lunch')||t2.includes('2026-11-10-keep0'))throw new Error('want the lunch tip without the habit nudge: '+t2.join(', ')+'');
     await p.click('[aria-label="Back"]');await W(600);
   });
+  await step('Sore throat: the coach is told to suggest warm food',async()=>{
+    await p.evaluate(()=>{window.__aiBodies=[];window.__lmLogSymptom('throat');window.__lmLogOpen('coach');});await W(800);
+    await p.click('[aria-label="Get a fresh review"]');await W(2500);
+    const b=await p.evaluate(()=>(window.__aiBodies||[]).filter(x=>/reviewing one whole day/.test(x)).pop()||'');
+    if(!/ILLNESS FOOD RULE \(sore throat/.test(b)||!/no dahi/.test(b))throw new Error('coach prompt has no warm-food rule');
+    await p.evaluate(()=>window.__lmLogSymptom('throat',true));await p.click('.dock-pill.bar [aria-label=Back]');await W();});
   await step('Due reminders show as pills',async()=>{try{
     // late evening, dinner not logged: a "Log dinner" pill and a bedtime pill, even with no notification tapped
     await p.clock.setFixedTime(new Date('2026-11-09T23:05:00+05:30'));await p.evaluate(()=>{try{localStorage.removeItem('lm-pill-hide')}catch(_){}});

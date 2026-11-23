@@ -2365,6 +2365,7 @@ function App(){
     setSymptomLog(p=>({...p,[date]:(p[date]||[]).filter(e=>e.ts!==ts)}));
   }
   const todaySymptoms=symptomLog[TODAY]||[];
+  window.__lmLogSymptom=(id,off)=>off?setSymptomLog(p=>({...p,[TODAY]:(p[TODAY]||[]).filter(e=>e.id!==id)})):logSymptom(id);   // for the tests
   const [expandedSymptom,setExpandedSymptom]=useState(null); // symptom id being configured
   const [editingSymDay,setEditingSymDay]=useState(null);
   // Food History renders in pages — newest days first, more added as you scroll
@@ -2810,6 +2811,15 @@ async function handleDietAdd(text,at){
      RENDER: DIET HISTORY
   ═══════════════════════════════════════════════════════ */
   /* ═══ THE DAY'S COACH: one full review of a day, shown the same on Home, Food and Fitness ═══ */
+  // Cold, sore throat, cough or fever on this day or the day before: food advice has to be warm and soothing,
+  // never cold (no dahi, chaas, raita…) — for the review and for tomorrow's meal tips alike
+  function illnessFoodRule(date){
+    const ids=['fever','cold','throat','cough'];
+    const seen=[...new Set([0,-1].flatMap(o=>(symptomLog[calAddDays(date,o)]||[]).filter(x=>ids.includes(x.id)).map(x=>SYMPTOMS.find(y=>y.id===x.id).label.toLowerCase())))];
+    if(!seen.length)return '';
+    return `ILLNESS FOOD RULE (${seen.join(', ')} logged): every food suggestion, including tomorrow's meal tips, must be warm and soothing for the throat: soups (moong or masoor dal soup, tomato, rasam, vegetable, chicken or egg-drop soup), dal, khichdi, a hot sabji with chapati, warm eggs, paneer or soya in a hot curry, haldi doodh, ginger-tulsi tea, warm water. Do NOT suggest anything cold or chilled: no dahi, chaas, raita, lassi, cold milk, smoothies, cold salads, ice cream or cold drinks until the symptoms are gone, and if such a food was eaten, gently suggest a warm swap. Get protein from warm sources so the protein target still holds; smaller, softer meals are fine if swallowing hurts.
+`;
+  }
   async function fetchDayInsight(date){
     if(!buildTimeline(date).length&&!(dietGrouped[date]||[]).length)return;
     setShowDayInsight(p=>({...p,[date]:true}));
@@ -2901,7 +2911,7 @@ Walking reference: brisk = ~100+ steps/min and 5-6 km/h (pace 10-12 min/km); ~4 
   return t.length?`\nUsually takes ${t.join(' and ')} (last 3 weeks).`:'';})()}
 
 RULES:
-${foodRule}
+${illnessFoodRule(date)}${foodRule}
 Illness: if illness signs are logged (fever, cold, sore throat, cough, body ache, headache), first consider a viral infection or being run-down (poor sleep, stress, hard training) rather than food: suggest rest, fluids, warm light meals and skipping intense workouts until better, and a doctor if fever is 102 °F+ or lasts over 3 days.
 Stomach pain: use its region and how long it has lasted (upper-middle = acidity/gastritis, left side or navel = gas, upper-right after oily food = gallbladder); say plainly to see a doctor if it is severe, worsening, lasting over 2-3 days, lower-right with fever or vomiting, or with blood.
 
@@ -2918,7 +2928,7 @@ Give a JSON response ONLY (no markdown):
   "recovery_tip": "<practical tip for tonight and tomorrow: food, sleep, water or rest, based on the whole day>"${wantPlan?`,
   "tomorrow": {
     "_": "Reminders the app sends on ${planDay}: meal tips ${fmtLead(remOff('coach'))} and walk nudges ${fmtLead(remOff('walk'))} before the usual time, so there's time to plan. Each line is a phone notification: under 110 characters, specific, friendly, in plain words. Use null where there is nothing specific to say.",
-    "Breakfast": "<what to eat at breakfast, from what this day lacked or overdid, e.g. 'Protein first: 2 boiled eggs or 150 g dahi with 1 chapati'>",
+    "Breakfast": "<what to eat at breakfast, from what this day lacked or overdid, e.g. ${illnessFoodRule(date)?"'Warm and protein first: moong dal chilla or 2 eggs with a bowl of tomato soup'":"'Protein first: 2 boiled eggs or 150 g dahi with 1 chapati'"}>",
     "Lunch": "<same for lunch>", "Snack": "<same for the snack, or null>", "Dinner": "<same for dinner, e.g. timing or a lighter plate>",
     "walk_morning": "<the morning brisk walk: a target pace in m:ss min/km, steps/min or minutes, from this day's walks>",
     "walk_second": "<a second brisk walk ${(()=>{const W=usualWalks();return W.lunchOff!=null||W.pm==null?'right after lunch (that is when this person takes it)':'later in the day';})()}, only if the plan or this day's steps call for one; else null>",
@@ -3033,6 +3043,7 @@ USER PROFILE:
 - Program week: ${weekNum} (${totalDays} days since start)
 - Total sessions completed: ${fitSessions}
 - Diet follows Indian food patterns (roti, dal, sabji, dahi, paneer, eggs etc.)
+${illnessFoodRule(TODAY)}
 
 SLEEP, LAST 7 NIGHTS (goal 7–9 h): ${Array.from({length:7},(_,i)=>calAddDays(TODAY,i-6)).map(k=>sleepLog[k]&&sleepMin(sleepLog[k])?`${k}: ${sleepText(sleepLog[k])}`:null).filter(Boolean).join('; ')||'not logged'}
 WATER, LAST 7 DAYS (goal ${fmtL(WATER_GOAL.ml)}/day): ${Array.from({length:7},(_,i)=>calAddDays(TODAY,i-6)).map(k=>waterMl(k)?`${k}: ${fmtL(waterMl(k))}`:null).filter(Boolean).join('; ')||'not logged'}
@@ -3851,7 +3862,7 @@ Reply ONLY with valid JSON (no markdown):
       const mv=known?moveDay(day):null,w=mv&&mv.walks.find(x=>x.start<min);
       const body=w?`Nice ${w.name.toLowerCase()} this morning 🚶 Refuel with some protein, then log what you had.`
         :isWeekend(day)?'Something special? Log it, no judgement 😄'
-        :pick([`Log it so the coach can plan your day. A protein start (eggs, paneer, dahi) makes ${GOALS.protein.target} g much easier.`,'Log what you had while you remember it.','A good breakfast sets up the whole day. What did you have?']);
+        :pick([`Log it so the coach can plan your day. A protein start (${illnessFoodRule(day)?'warm eggs, moong dal chilla, paneer bhurji':'eggs, paneer, dahi'}) makes ${GOALS.protein.target} g much easier.`,'Log what you had while you remember it.','A good breakfast sets up the whole day. What did you have?']);
       return {title,body};
     }
     if(kind==='Lunch'){
