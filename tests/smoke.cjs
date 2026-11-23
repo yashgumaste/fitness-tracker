@@ -165,7 +165,19 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await click('button','Pause');await expect('Resume');await click('button','Resume');
     await click('button','Finish');await expect('Finish this walk');await click('.x-btn','Save walk');await W(900);
     await expect('Pace for each km');await expect('Moving time');
-    if(!(await p.evaluate(()=>/25\s*mins\s*0\s*secs/.test(document.body.innerText))))throw new Error('moving time should read 25 mins 0 secs');await expect('Elevation');
+    if(!(await p.evaluate(()=>/25\s*mins\s*0\s*secs/.test(document.body.innerText))))throw new Error('moving time should read 25 mins 0 secs');
+    // the map moves with a finger and glides back 2 s later
+    const tile0=await p.evaluate(()=>{const i=document.querySelector('[aria-label="Route map"]').parentElement.querySelector('img');return i?i.style.left:null;});
+    const box=await (await p.$('[aria-label="Route map"]')).boundingBox();
+    await p.mouse.move(box.x+box.width/2,box.y+box.height/2);await p.mouse.down();await p.mouse.move(box.x+box.width/2+80,box.y+box.height/2+30,{steps:5});await p.mouse.up();await W(200);
+    const tile1=await p.evaluate(()=>document.querySelector('[aria-label="Route map"]').parentElement.querySelector('img').style.left);
+    if(tile1===tile0)throw new Error('map did not move when dragged');
+    await W(2900);const tile2=await p.evaluate(()=>document.querySelector('[aria-label="Route map"]').parentElement.querySelector('img').style.left);
+    if(tile2!==tile0)throw new Error('map should glide back after 2 s: '+tile0+' → '+tile2);
+    // a point thrown across the road by a tall building is dropped (and so is the distance it added)
+    const cl=await p.evaluate(()=>{const a=[];for(let i=0;i<20;i++)a.push([i*2,19.0645+i*0.00005,72.8655+i*0.00003]);
+      a.splice(10,0,[19,19.0630,72.8670]);const r=window.__lmCleanTrack(a);return{n:r.pts.length,cut:Math.round(r.cut)};});
+    if(cl.n!==20||cl.cut<200)throw new Error('spike not removed: '+JSON.stringify(cl));await expect('Elevation');
     await expect('How it went over time');await expect('Cadence');await expect('Stride');await expect('higher = faster');
     if(!(await p.$('[aria-label="Route map"]')))throw new Error('no route map');
     await p.click('[aria-label="Back"]');await W();});

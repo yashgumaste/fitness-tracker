@@ -30,6 +30,9 @@
     },
     {
       "text": "Walks find your location much faster: recording now uses Google’s location service, the same one Google Maps uses, which combines GPS with Wi-Fi, mobile towers and the phone’s motion sensors instead of waiting on the GPS chip alone. Rough Wi-Fi positions indoors aren’t drawn on the route, so indoor walking is counted from your steps."
+    },
+    {
+      "text": "Walk maps: drag to move, pinch (or double-tap) to zoom; 2 seconds after you let go the map glides back to the whole route. Points that GPS throws across the road near tall buildings (a sudden spike out and back) are now dropped from the route and from the distance, on your past walks too."
     }
   ],
   "releases": [

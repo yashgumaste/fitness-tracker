@@ -1057,6 +1057,26 @@ function gpsHeight(pts){
   }
   return alt;
 }
+// GPS near tall buildings sometimes throws one or two points across the road (reflections off glass): a spike
+// out and back. Drop points that stick out like that, and a far-off first or last point, before drawing or
+// counting. Returns the kept points and how many metres the spikes had added.
+function cleanTrack(pts){
+  if(!pts||pts.length<3)return{pts:pts||[],cut:0};
+  const D=(a,b)=>distM([a[1],a[2]],[b[1],b[2]]),len=a=>{let m=0;for(let i=1;i<a.length;i++)m+=D(a[i-1],a[i]);return m;};
+  let p=pts.slice(),changed=true,guard=0;
+  while(changed&&guard++<6){changed=false;const out=[];
+    for(let i=0;i<p.length;i++){const a=out[out.length-1],b=p[i],c=p[i+1],d2=p[i+2];
+      if(a&&c){const ab=D(a,b),bc=D(b,c);
+        if(ab>30&&bc>30&&D(a,c)<0.35*(ab+bc)){changed=true;continue;}                    // one point out and back
+        if(d2){const cd=D(c,d2);if(ab>30&&cd>30&&D(b,c)<0.5*Math.min(ab,cd)&&D(a,d2)<0.35*(ab+D(b,c)+cd)){changed=true;i++;continue;}}}   // two points
+      out.push(b);}
+    // a first or last point far from the rest (the fix still settling)
+    if(out.length>=3&&D(out[0],out[1])>40&&D(out[1],out[2])<0.3*D(out[0],out[1])){out.shift();changed=true;}
+    const n=out.length;if(n>=3&&D(out[n-1],out[n-2])>40&&D(out[n-2],out[n-3])<0.3*D(out[n-1],out[n-2])){out.pop();changed=true;}
+    p=out;}
+  return{pts:p,cut:Math.max(0,len(pts)-len(p))};
+}
+if(typeof window!=='undefined')window.__lmCleanTrack=p=>cleanTrack(p);   // for the tests
 function trackStats(pts,altSrc){
   const out={trend:[],dist:0,splits:[],gain:0,loss:0,profile:[],speed:[],maxKmh:0,hasAlt:false,maxAlt:null,minAlt:null,movingSec:0,climbSec:0,
     steepUp:0,steepDown:0,kcalPerKg:0,jogs:[],jogSec:0,jogM:0};
@@ -3155,7 +3175,8 @@ Reply ONLY with valid JSON (no markdown):
     const sb=stepsLog[date]?.b,wl=walkLog[date];
     const trs=Object.values(tracks).filter(t=>t&&localDate(new Date(t.start))===date);
     const ck=JSON.stringify([kg,kmStep,stepsLog[date]?.at,wl,trs.map(t=>t.id+':'+t.pts.length+':'+(t.name||''))]);const c=moveCache.current[date];if(c&&c.k===ck)return c.v;
-    const gps=trs.map(t=>{const st=trackStats(t.pts,t.altSrc),km=((t.distGps||st.dist||0)+(t.distSteps||0))/1000,hike=t.kind==='hike';
+    const gps=trs.map(t0=>{const cl=cleanTrack(t0.pts),t=cl.cut?{...t0,pts:cl.pts}:t0;
+      const st=trackStats(t.pts,t.altSrc),km=((t.distGps?Math.max(0,t.distGps-cl.cut):st.dist||0)+(t.distSteps||0))/1000,hike=t.kind==='hike';
       // a hike's moving time leaves out rests (no movement for 30 s or more); a walk's is the recorder's time minus pauses
       const mSec=hike&&st.movingSec>60?st.movingSec:t.movingMs/1000,min=Math.max(1,Math.round(mSec/60));
       const kmh=km/Math.max(1/60,mSec/3600),kind=hike?'hike':speedKind(kmh),d0=new Date(t.start),start=d0.getHours()*60+d0.getMinutes()+d0.getSeconds()/60;
@@ -4438,7 +4459,7 @@ Reply ONLY with valid JSON (no markdown):
             <div style={{...TILE_TXT,minHeight:18}}>{subOf(k)}</div>
           </div>);})}
         </div>}
-        <RouteMap pts={r.pts.map(p=>[0,p[1],p[2]])} live height={big.length?220:290} dark={!isLight}/>
+        <RouteMap pts={cleanTrack(r.pts).pts.map(p=>[0,p[1],p[2]])} live height={big.length?220:290} dark={!isLight}/>
         {small.length>0&&<div className="x-grid3" style={{gap:8}}>
           {small.map((k,i)=><div key={k} className="x-card" style={{padding:'12px 8px',textAlign:'center',borderRadius:i%3===0?'28px 12px 12px 28px':i%3===2?'12px 28px 28px 12px':12}}>
               <div style={{...TILE_TXT,fontSize:12}}>{head(k)}</div>
@@ -7005,31 +7026,66 @@ function recNow(pts,spm){
     :(cad!=null&&cad>=140)||(kmh!=null&&kmh>=7.5&&(cad==null||cad>=115));
   return{kmh,cad,jogging:_jogging};
 }
+// The route on an OpenStreetMap map. Drag to move it, pinch (or scroll) to zoom, double-tap to zoom in; 2 s after
+// you let go it glides back to fit the whole route (or, while recording, to where you are).
 function RouteMap({pts,height=280,live=false,dark=true,round=28,jogs=[]}){
   const ref=useRef(null);const [w,setW]=useState(360);
   useEffect(()=>{const el=ref.current;if(!el)return;const f=()=>setW(el.clientWidth||360);f();
     const ro=window.ResizeObserver?new ResizeObserver(f):null;ro&&ro.observe(el);return()=>ro&&ro.disconnect();},[]);
   const H=height,pad=36;
   const ll=(pts||[]).map(p=>[p[1],p[2]]);
-  let z=17,cx=0,cy=0;
+  // the fitted view: whole route (while recording, never closer than street level), as centre lat/lon and zoom
+  let fz=17,flat=0,flon=0;
   if(ll.length){
     const lats=ll.map(p=>p[0]),lons=ll.map(p=>p[1]);
     const n=Math.max(...lats),s=Math.min(...lats),e=Math.max(...lons),wst=Math.min(...lons);
-    // fit the whole route (while recording, never closer than street level)
-    z=live?17:18;while(z>3&&(lonX(e,z)-lonX(wst,z)>w-2*pad||latY(s,z)-latY(n,z)>H-2*pad))z--;
-    const c=[(n+s)/2,(e+wst)/2];cx=lonX(c[1],z);cy=latY(c[0],z);
+    fz=live?17:18;while(fz>3&&(lonX(e,fz)-lonX(wst,fz)>w-2*pad||latY(s,fz)-latY(n,fz)>H-2*pad))fz--;
+    flat=(n+s)/2;flon=(e+wst)/2;
   }
-  const ox=cx-w/2,oy=cy-H/2;
+  // what you've moved it to (null = fitted); eases back 2 s after the last touch
+  const [view,setView]=useState(null);const g=useRef({ptrs:new Map(),t:0,anim:0,last:0});
+  const fit={lat:flat,lon:flon,z:fz},v=view||fit;
+  const toWorld=(lat,lon,z)=>[lonX(lon,z),latY(lat,z)];
+  const fromWorld=(x,y,z)=>{const n=256*2**z,lon=x/n*360-180,lat=Math.atan(Math.sinh(Math.PI*(1-2*y/n)))*180/Math.PI;return[lat,lon];};
+  const back=()=>{clearTimeout(g.current.t);g.current.t=setTimeout(()=>{
+    cancelAnimationFrame(g.current.anim);const from=g.current.view||fit,t0=performance.now();
+    const step=now=>{const k=Math.min(1,(now-t0)/450),e=1-Math.pow(1-k,3);
+      if(k>=1){setView(null);g.current.view=null;return;}
+      const nv={lat:from.lat+(fit.lat-from.lat)*e,lon:from.lon+(fit.lon-from.lon)*e,z:from.z+(fit.z-from.z)*e};g.current.view=nv;setView(nv);
+      g.current.anim=requestAnimationFrame(step);};
+    g.current.anim=requestAnimationFrame(step);},2000);};
+  useEffect(()=>()=>{clearTimeout(g.current.t);cancelAnimationFrame(g.current.anim);},[]);
+  const set=nv=>{nv.z=Math.max(3,Math.min(19,nv.z));g.current.view=nv;setView(nv);};
+  // zoom by f around a point on screen (px), keeping that point still
+  const zoomAt=(cur,f,px,py)=>{const z2=Math.max(3,Math.min(19,cur.z+Math.log2(f))),[cx,cy]=toWorld(cur.lat,cur.lon,cur.z);
+    const wx=cx+(px-w/2),wy=cy+(py-H/2),k=2**(z2-cur.z),nx=wx*k-(px-w/2),ny=wy*k-(py-H/2),[lat,lon]=fromWorld(nx,ny,z2);return{lat,lon,z:z2};};
+  const local=e=>{const r=ref.current.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top];};
+  const onDown=e=>{if(!ll.length)return;cancelAnimationFrame(g.current.anim);clearTimeout(g.current.t);
+    try{e.currentTarget.setPointerCapture(e.pointerId);}catch(_){}g.current.ptrs.set(e.pointerId,local(e));g.current.view=g.current.view||view||fit;
+    const now=Date.now();if(g.current.ptrs.size===1&&now-g.current.last<300){const[px,py]=local(e);set(zoomAt(g.current.view,2,px,py));}g.current.last=now;};
+  const onMove=e=>{const P=g.current.ptrs;if(!P.has(e.pointerId))return;const prev=[...P.values()],old=P.get(e.pointerId),nw=local(e);P.set(e.pointerId,nw);
+    const cur=g.current.view||fit;
+    if(P.size===1){const[cx,cy]=toWorld(cur.lat,cur.lon,cur.z),[lat,lon]=fromWorld(cx-(nw[0]-old[0]),cy-(nw[1]-old[1]),cur.z);set({lat,lon,z:cur.z});}
+    else if(P.size===2){const[a,b]=prev,o=a===old?b:a,d0=Math.hypot(old[0]-o[0],old[1]-o[1]),d1=Math.hypot(nw[0]-o[0],nw[1]-o[1]);
+      if(d0>4){const mid=[(nw[0]+o[0])/2,(nw[1]+o[1])/2],mid0=[(old[0]+o[0])/2,(old[1]+o[1])/2];
+        let nv=zoomAt(cur,d1/d0,mid[0],mid[1]);const[cx,cy]=toWorld(nv.lat,nv.lon,nv.z),[lat,lon]=fromWorld(cx-(mid[0]-mid0[0]),cy-(mid[1]-mid0[1]),nv.z);set({lat,lon,z:nv.z});}}};
+  const onUp=e=>{g.current.ptrs.delete(e.pointerId);if(!g.current.ptrs.size)back();};
+  const onWheel=e=>{if(!ll.length)return;const[px,py]=local(e);set(zoomAt(g.current.view||view||fit,e.deltaY<0?1.25:0.8,px,py));back();};
+  // draw: tiles at the whole zoom level below, scaled by the fraction
+  const z=Math.floor(v.z+1e-9),k=2**(v.z-z),[cx,cy]=toWorld(v.lat,v.lon,z);
+  const ox=cx-w/2/k,oy=cy-H/2/k;
   const tiles=[];
-  if(ll.length){const n=2**z;for(let tx=Math.floor(ox/256);tx<=Math.floor((ox+w)/256);tx++)for(let ty=Math.floor(oy/256);ty<=Math.floor((oy+H)/256);ty++){
-    if(ty<0||ty>=n)continue;const wx=((tx%n)+n)%n;tiles.push({k:`${z}/${wx}/${ty}`,x:tx*256-ox,y:ty*256-oy});}}
-  const xy=ll.map(p=>[lonX(p[1],z)-ox,latY(p[0],z)-oy]);
+  if(ll.length){const n=2**z;for(let tx=Math.floor(ox/256);tx<=Math.floor((ox+w/k)/256);tx++)for(let ty=Math.floor(oy/256);ty<=Math.floor((oy+H/k)/256);ty++){
+    if(ty<0||ty>=n)continue;const wx=((tx%n)+n)%n;tiles.push({k:`${z}/${wx}/${ty}`,x:(tx*256-ox)*k,y:(ty*256-oy)*k});}}
+  const xy=ll.map(p=>[(lonX(p[1],z)-ox)*k,(latY(p[0],z)-oy)*k]);
   const d=xy.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
-  return(<div ref={ref} style={{position:'relative',height:H,borderRadius:round,overflow:'hidden',background:'var(--s2)',
-      backgroundImage:'radial-gradient(var(--line) 1px, transparent 1px)',backgroundSize:'18px 18px'}}>
+  const ts=256*k+0.5;
+  return(<div ref={ref} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onWheel={onWheel}
+      style={{position:'relative',height:H,borderRadius:round,overflow:'hidden',background:'var(--s2)',touchAction:ll.length?'none':'auto',
+      backgroundImage:'radial-gradient(var(--line) 1px, transparent 1px)',backgroundSize:'18px 18px',cursor:ll.length?'grab':'default'}}>
     {tiles.map(t=><img key={t.k} alt="" src={`https://tile.openstreetmap.org/${t.k}.png`} draggable="false" onError={e=>{e.currentTarget.style.visibility='hidden';}}
-      style={{position:'absolute',left:t.x,top:t.y,width:256,height:256,filter:dark?'invert(1) hue-rotate(180deg) brightness(.82) contrast(.88) saturate(.5)':'saturate(.7)',pointerEvents:'none'}}/>)}
-    {xy.length>0&&<svg width={w} height={H} style={{position:'absolute',left:0,top:0,overflow:'visible'}} aria-label="Route map" role="img">
+      style={{position:'absolute',left:t.x,top:t.y,width:ts,height:ts,filter:dark?'invert(1) hue-rotate(180deg) brightness(.82) contrast(.88) saturate(.5)':'saturate(.7)',pointerEvents:'none'}}/>)}
+    {xy.length>0&&<svg width={w} height={H} style={{position:'absolute',left:0,top:0,overflow:'visible',pointerEvents:'none'}} aria-label="Route map" role="img">
       <path d={d} fill="none" stroke="var(--bg)" strokeWidth="10" strokeLinejoin="round" strokeLinecap="round" opacity=".85"/>
       <path d={d} fill="none" stroke="var(--pri)" strokeWidth="5.5" strokeLinejoin="round" strokeLinecap="round"/>
       {jogs.map((j,n)=><path key={n} d={xy.slice(j.i0,j.i1+1).map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ')}
@@ -7041,7 +7097,7 @@ function RouteMap({pts,height=280,live=false,dark=true,round=28,jogs=[]}){
           <circle cx={xy[xy.length-1][0]} cy={xy[xy.length-1][1]} r="3.5" fill="var(--pri)"/></g>}
     </svg>}
     {!xy.length&&<div style={{position:'absolute',inset:0,display:'grid',placeItems:'center',color:'var(--fg2)',fontWeight:700}}>{live?'📡 Finding GPS…':'No route'}</div>}
-    {tiles.length>0&&<span style={{position:'absolute',right:10,bottom:8,fontSize:10,fontWeight:700,color:'var(--fg2)',background:'var(--bg)',padding:'2px 6px',borderRadius:8,opacity:.85}}>© OpenStreetMap</span>}
+    {tiles.length>0&&<span style={{position:'absolute',right:10,bottom:8,fontSize:10,fontWeight:700,color:'var(--fg2)',background:'var(--bg)',padding:'2px 6px',borderRadius:8,opacity:.85,pointerEvents:'none'}}>© OpenStreetMap</span>}
   </div>);
 }
 // Small route drawing for a walk's card (no map)
