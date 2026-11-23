@@ -68,6 +68,7 @@ class LogReminderPlugin : Plugin() {
         val k = call.getString("kind", "") ?: ""
         // "nudge:<tag>" clears one of the coach's nudges
         NotificationManagerCompat.from(context).cancel(if (k.startsWith("nudge:")) Logs.nudgeId(k.removePrefix("nudge:")) else Logs.noteId(k))
+        Logs.dropSnooze(context, k)
         call.resolve()
     }
 
@@ -122,8 +123,31 @@ object Logs {
         val a = items(c); val list = ArrayList<JSONObject>()
         for (i in 0 until a.length()) list.add(a.getJSONObject(i))
         setAlarms(c, list)
+        // a "Later" still to come goes back too; an old one (e.g. yesterday's, left over when the app updated) is dropped,
+        // or it would go off straight away
         val s = prefs(c).getString("snooze", null)
-        if (s != null) try { snooze(c, JSONObject(s), JSONObject(s).optLong("at")) } catch (e: Exception) { }
+        if (s != null) try { val o = JSONObject(s)
+            if (fresh(o)) snooze(c, o, maxOf(o.optLong("at"), System.currentTimeMillis() + 5_000L)) else prefs(c).edit().remove("snooze").apply()
+        } catch (e: Exception) { prefs(c).edit().remove("snooze").apply() }
+    }
+
+    /** A snoozed reminder still worth showing: due in the future or in the last 3 hours, and for today. */
+    private fun fresh(o: JSONObject): Boolean {
+        val now = System.currentTimeMillis(); val at = o.optLong("at")
+        val today = java.time.LocalDate.now().toString(); val day = o.optString("day", today)
+        return at > now - 3 * 3600_000L && (day.isEmpty() || day >= today)
+    }
+
+    /** Logged it (or cleared it): a pending "Later" for the same thing shouldn't come back. */
+    fun dropSnooze(c: Context, k: String) {
+        val s = prefs(c).getString("snooze", null) ?: return
+        val o = try { JSONObject(s) } catch (e: Exception) { prefs(c).edit().remove("snooze").apply(); return }
+        val same = if (k.startsWith("nudge:")) o.optString("tag") == k.removePrefix("nudge:") else o.optString("kind") == k
+        if (!same) return
+        prefs(c).edit().remove("snooze").apply()
+        val pi = PendingIntent.getBroadcast(c, ALARM_BASE + 90, Intent(c, LogAlarmReceiver::class.java),
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
+        if (pi != null) { (c.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(pi); pi.cancel() }
     }
 
     /** An alarm went off: post the reminder that was due (the newest one not later than now). */
@@ -224,7 +248,7 @@ object Logs {
     fun fireSnooze(c: Context) {
         val s = prefs(c).getString("snooze", null) ?: return
         prefs(c).edit().remove("snooze").apply()
-        try { post(c, JSONObject(s)) } catch (e: Exception) { }
+        try { val o = JSONObject(s); if (fresh(o)) post(c, o) } catch (e: Exception) { }
     }
 }
 

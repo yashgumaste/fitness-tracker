@@ -3927,6 +3927,10 @@ Reply ONLY with valid JSON (no markdown):
         const L=(day===TODAY?lunchMin(day):null)??(we?U.Lunch.we:U.Lunch.wd),afterLunch=W.lunchOff!=null||W.pm==null;
         add(earlyW(afterLunch?L+(W.lunchOff??20):W.pm),'walkPM','walk','walk',afterLunch?'Walk after lunch 🚶':'Second brisk walk 🚶',plan.walk_second);}
     }
+    // one reminder per moment: a "keep it going" that lands within 20 min of the coach's meal tip or a walk reminder
+    // would be a second ping about the same thing, and the tip is the more useful one, so the habit one is dropped
+    const keepOut=out.filter(o=>/-keep\d$/.test(o.tag)&&out.some(x=>!/-keep\d$/.test(x.tag)&&Math.abs(x.at-o.at)<20*60000));
+    for(const k of keepOut)out.splice(out.indexOf(k),1);
     // dinner is logged but the day hasn't been reviewed: ask for the review so tomorrow can be planned
     if(logCfg.coach&&day===TODAY&&logged.has('Dinner')&&!(prefs.coach||{})[TODAY]){
       const din=(dietGrouped[TODAY]||[]).filter(e=>e.mealType==='Dinner').map(e=>mealTime(e).ts).sort((a,b)=>b-a)[0]||now;

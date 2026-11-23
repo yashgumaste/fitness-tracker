@@ -51,7 +51,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
       if(window.__busyModel&&String(u).includes('/models/'+window.__busyModel+':'))return{ok:false,status:503,
         text:async()=>JSON.stringify({error:{message:'This model is currently experiencing high demand.'}}),json:async()=>({}),clone(){return this;}};
       if(/Split each meal/.test(body))return reply('[]');
-      if(/reviewing one whole day/.test(body))return reply(JSON.stringify({rating:'✅ Solid',summary:'A steady day.',food_insight:'Protein was low at lunch.',walk_insight:null,workout_insight:null,body_insight:'Slept well.',top_win:'Good sleep.',focus_next:'Add dal at dinner.',recovery_tip:'Drink water early.',tomorrow:{Breakfast:'Protein first: 2 boiled eggs with 1 chapati.',Lunch:null,Snack:null,Dinner:'Dinner by 8 PM, half the rice.',walk_morning:'Aim for 11:30 min/km at 105 steps a minute.',walk_second:'A 20-minute brisk walk after tea.',keep:[{at:'Lunch',text:'Yesterday’s dal-and-sabji lunch was spot on. Same again?'}],water:'500 ml before 10 AM this time.',move:'Yesterday’s walk was great. Stand up and keep it rolling.'}}));
+      if(/reviewing one whole day/.test(body))return reply(JSON.stringify({rating:'✅ Solid',summary:'A steady day.',food_insight:'Protein was low at lunch.',walk_insight:null,workout_insight:null,body_insight:'Slept well.',top_win:'Good sleep.',focus_next:'Add dal at dinner.',recovery_tip:'Drink water early.',tomorrow:{Breakfast:'Protein first: 2 boiled eggs with 1 chapati.',Lunch:window.__lunchTip||null,Snack:null,Dinner:'Dinner by 8 PM, half the rice.',walk_morning:'Aim for 11:30 min/km at 105 steps a minute.',walk_second:'A 20-minute brisk walk after tea.',keep:[{at:'Lunch',text:'Yesterday’s dal-and-sabji lunch was spot on. Same again?'}],water:'500 ml before 10 AM this time.',move:'Yesterday’s walk was great. Stand up and keep it rolling.'}}));
       // the free AI sometimes answers in words: first reply prose, the retry wraps JSON in a sentence
       if(/cabbage rice/.test(body)){window.__jsonMode=/responseMimeType|nutrition data API/.test(body);
         return reply(/not valid JSON/.test(body)?'Sure! {"emoji":"🍚","items":[{"name":"cabbage rice","calories":420,"protein":9,"carbs":70,"fat":11}]} Hope that helps.':'Cabbage is on the list, so the gas risk is high.');}
@@ -249,6 +249,12 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const wp=items.find(x=>x.tag==='2026-11-10-walkPM');
     if(!/after lunch/.test(wp.title))throw new Error('second walk should be the after-lunch walk: '+wp.title);
     const wt=await p.evaluate(at=>new Date(at).getHours(),wp.at);if(wt<11||wt>=15)throw new Error('after-lunch walk nudge should come around lunch, got hour '+wt);
+    // a lunch tip and a lunch "keep it going" at the same time: only the tip
+    await p.evaluate(()=>{window.__lunchTip='Add 150 g dahi to the chapati and sabji.';window.__planned=null;});
+    const tc=await p.evaluate(()=>Date.now());await p.clock.setFixedTime(tc+60000);   // a new review gets a new time, which re-plans
+    await p.click('[aria-label="Get a fresh review"]');await W(2800);
+    const t2=(await p.evaluate(()=>window.__planned||[])).filter(x=>x.kind==='nudge').map(x=>x.tag);await p.evaluate(()=>{window.__lunchTip=null;});
+    if(!t2.includes('2026-11-10-Lunch')||t2.includes('2026-11-10-keep0'))throw new Error('want the lunch tip without the habit nudge: '+t2.join(', ')+'');
     await p.click('[aria-label="Back"]');await W(600);
   });
   await step('Due reminders show as pills',async()=>{try{
