@@ -111,7 +111,7 @@ textarea.x-field{resize:none;line-height:1.45;}
 .x-sheet{width:100%;max-width:560px;background:var(--s1);border-radius:36px 36px 0 0;
   padding:8px 18px calc(22px + env(safe-area-inset-bottom,0px));box-shadow:0 -1px 0 var(--line);}
 .x-grab{width:40px;height:5px;border-radius:3px;background:var(--s4);margin:4px auto 14px;}
-.x-sheet-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:16px;}
+.x-sheet-head{display:flex;align-items:flex-start;gap:12px;margin:0 -18px 16px;padding:8px 18px;position:sticky;top:0;z-index:6;background:var(--s1);}
 .x-sheet-head h2{margin:0;font-family:var(--font-ui);font-stretch:122%;font-weight:850;font-size:26px;line-height:1.1;}
 .x-sheet-foot{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px;}
 
@@ -5845,7 +5845,7 @@ Reply ONLY with valid JSON (no markdown):
   function renderSheetX(){
     const s=sheet,d=draft,close=closeSheet;
     const set=f=>setDraft(p=>({...p,...f}));
-    let title='',sub=null,lead=null,body=null,foot=null;
+    let title='',sub=null,lead=null,body=null,foot=null,headAct=null;
     const delBtn=(label,fn)=>arm
       ?<button className="x-btn danger" onClick={fn}>Confirm delete</button>
       :<button className="x-btn outline" onClick={()=>setArm(true)}>{label}</button>;
@@ -5901,7 +5901,8 @@ Reply ONLY with valid JSON (no markdown):
             :[[`Usual ${mealType.toLowerCase()}`,MEAL_HOUR[mealType]]]}/>}
         <div className="x-sub" style={{marginTop:10}}>Write it the way you'd say it. The AI splits it into foods and works out calories, protein, carbs and fat.</div>
       </>;
-      foot=<button className="x-btn" disabled={!d.text?.trim()||busy||!target} onClick={submit} onMouseDown={keep}>{busy?<><BtnSpinner size={20}/>Working out macros…</>:'Log it'}</button>;
+      // up in the header, which stays on screen, so it's never hidden behind the keyboard or the time picker
+      headAct=<button className="x-btn sm" style={{height:44,padding:'0 18px',fontSize:16}} disabled={!d.text?.trim()||busy||!target} onClick={submit} onMouseDown={keep}>{busy?<><BtnSpinner size={18}/>Working…</>:'Log it'}</button>;
     }
     else if(s.type==='meal'){
       const e=dietEntries.find(x=>x.id===s.id);
@@ -6309,6 +6310,7 @@ Reply ONLY with valid JSON (no markdown):
           <div className="x-sheet-head">
             {lead}
             <div style={{flex:1,minWidth:0}}><h2 style={{overflowWrap:'anywhere'}}>{title}</h2>{sub&&<div className="x-sub" style={{marginTop:4}}>{sub}</div>}</div>
+            {headAct}
             <button className="x-ibtn sm" onClick={close} aria-label="Close">✕</button>
           </div>
           {body}
