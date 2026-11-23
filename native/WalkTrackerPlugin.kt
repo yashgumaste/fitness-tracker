@@ -13,6 +13,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.location.GnssStatus
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -123,13 +124,14 @@ object WalkState {
     var gainM = 0.0                        // climb so far, for the live screen
     private var refAlt = Double.NaN
     var lastFix = 0L; var lastAcc = 0f
+    @Volatile var satsUsed = 0; @Volatile var satsSeen = 0   // while finding GPS: satellites in the fix / in view
     private var last: Location? = null
 
     @Synchronized fun reset(k: String) {
         kind = k; state = "recording"; start = System.currentTimeMillis()
         movingBase = SystemClock.elapsedRealtime(); movingAcc = 0
         distanceM = 0.0; stepsBase = -1; stepsNow = -1; stepsPaused = 0
-        points.clear(); last = null; lastFix = 0; gainM = 0.0; refAlt = Double.NaN; det.clear(); cnt.clear()
+        points.clear(); last = null; lastFix = 0; gainM = 0.0; refAlt = Double.NaN; det.clear(); cnt.clear(); satsUsed = 0; satsSeen = 0
     }
 
     fun onPressure(hPa: Float) {
@@ -212,6 +214,7 @@ object WalkState {
         o.put("alt", if (points.isEmpty() || points[points.size - 1][3].isNaN()) JSONObject.NULL else points[points.size - 1][3])
         o.put("baro", !baro.isNaN())
         o.put("spm", liveSpm() ?: JSONObject.NULL)
+        o.put("sats", JSArray().put(satsUsed).put(satsSeen))
         val a = JSArray()
         for (i in maxOf(0, from) until points.size) {
             val p = points[i]; val q = JSONArray()
@@ -233,6 +236,13 @@ object WalkState {
 }
 
 class WalkService : Service(), LocationListener, SensorEventListener {
+    // how many satellites the phone sees and uses, so "Finding GPS…" can show progress
+    private val gnss: Any? = if (Build.VERSION.SDK_INT >= 24) object : GnssStatus.Callback() {
+        override fun onSatelliteStatusChanged(st: GnssStatus) {
+            var used = 0; for (i in 0 until st.satelliteCount) if (st.usedInFix(i)) used++
+            WalkState.satsUsed = used; WalkState.satsSeen = st.satelliteCount
+        }
+    } else null
     private val handler = Handler(Looper.getMainLooper())
     private val tick = object : Runnable { override fun run() { update(); handler.postDelayed(this, 5000) } }
 
@@ -252,6 +262,7 @@ class WalkService : Service(), LocationListener, SensorEventListener {
             val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
             try {
                 lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000L, 0f, this, Looper.getMainLooper())
+                if (Build.VERSION.SDK_INT >= 24 && gnss != null) lm.registerGnssStatusCallback(gnss as GnssStatus.Callback, handler)
             } catch (e: SecurityException) { } catch (e: IllegalArgumentException) { }
             val sm = getSystemService(Context.SENSOR_SERVICE) as SensorManager
             if (Build.VERSION.SDK_INT < 29 || ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED) {
@@ -307,6 +318,7 @@ class WalkService : Service(), LocationListener, SensorEventListener {
     override fun onDestroy() {
         handler.removeCallbacks(tick)
         try { (getSystemService(Context.LOCATION_SERVICE) as LocationManager).removeUpdates(this) } catch (e: Exception) { }
+        try { if (Build.VERSION.SDK_INT >= 24 && gnss != null) (getSystemService(Context.LOCATION_SERVICE) as LocationManager).unregisterGnssStatusCallback(gnss as GnssStatus.Callback) } catch (e: Exception) { }
         try { (getSystemService(Context.SENSOR_SERVICE) as SensorManager).unregisterListener(this) } catch (e: Exception) { }
         super.onDestroy()
     }

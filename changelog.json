@@ -24,6 +24,9 @@
     },
     {
       "text": "Every length of time is now in words: the live recording clock (“25 mins 03.45 secs”), the jogging pill (“Jogged 1 min 15 secs · 210 m”) and sleep (“7 hrs 30 mins”, “30 mins short of 7 hrs”), as well as walks."
+    },
+    {
+      "text": "Recording no longer waits on GPS: until it finds you (indoors it may not at all), distance, speed, pace and stride are worked out from your steps and step length, marked ≈ and “from steps”. When GPS finds you it takes over, and the distance you walked before that still counts, in the saved walk too. While it’s looking, you see how many satellites it has, e.g. “Finding GPS… 3/11 satellites”."
     }
   ],
   "releases": [

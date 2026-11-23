@@ -3155,7 +3155,7 @@ Reply ONLY with valid JSON (no markdown):
     const sb=stepsLog[date]?.b,wl=walkLog[date];
     const trs=Object.values(tracks).filter(t=>t&&localDate(new Date(t.start))===date);
     const ck=JSON.stringify([kg,kmStep,stepsLog[date]?.at,wl,trs.map(t=>t.id+':'+t.pts.length+':'+(t.name||''))]);const c=moveCache.current[date];if(c&&c.k===ck)return c.v;
-    const gps=trs.map(t=>{const st=trackStats(t.pts,t.altSrc),km=(t.distGps||st.dist||0)/1000,hike=t.kind==='hike';
+    const gps=trs.map(t=>{const st=trackStats(t.pts,t.altSrc),km=((t.distGps||st.dist||0)+(t.distSteps||0))/1000,hike=t.kind==='hike';
       // a hike's moving time leaves out rests (no movement for 30 s or more); a walk's is the recorder's time minus pauses
       const mSec=hike&&st.movingSec>60?st.movingSec:t.movingMs/1000,min=Math.max(1,Math.round(mSec/60));
       const kmh=km/Math.max(1/60,mSec/3600),kind=hike?'hike':speedKind(kmh),d0=new Date(t.start),start=d0.getHours()*60+d0.getMinutes()+d0.getSeconds()/60;
@@ -3248,7 +3248,8 @@ Reply ONLY with valid JSON (no markdown):
     const alt=p=>useBaro?(p[5]==null?null:p[5]+off):p[3];
     const pts=thinTrack(raw.map(p=>{const a=alt(p);return[Math.max(0,Math.round((p[0]-start)/1000)),+(+p[1]).toFixed(6),+(+p[2]).toFixed(6),a==null?null:Math.round(a*10)/10,p[6]==null?null:+p[6]];}));
     const id=String(start);
-    setTracks(p=>({...p,[id]:{id,start,end,kind:st.kind==='hike'?'hike':'walk',altSrc:useBaro?'baro':'gps',movingMs:st.movingMs||0,steps:st.steps||0,distGps:Math.round(st.distanceM||0),pts}}));
+    setTracks(p=>({...p,[id]:{id,start,end,kind:st.kind==='hike'?'hike':'walk',altSrc:useBaro?'baro':'gps',movingMs:st.movingMs||0,steps:st.steps||0,distGps:Math.round(st.distanceM||0),
+      distSteps:Math.round(((raw[0]&&raw[0][6]!=null?+raw[0][6]:raw.length?0:st.steps)||0)*kmPerStep()*1000),pts}}));
     setRec(null);setRecOpen(false);setStepsPage(null);openAct(localDate(new Date(start)),'gps-'+id);
     showToast(what+' saved 🎉','var(--ok)');
   }
@@ -3416,7 +3417,7 @@ Reply ONLY with valid JSON (no markdown):
     // a walk or hike being recorded right now
     if(day===TODAY&&rec&&rec.start&&rec.state&&rec.state!=='idle'){const hk=rec.kind==='hike';
       items.push({kind:'rec',id:'rec',ts:rec.start,emoji:hk?'🥾':'🚶',title:`${rec.state==='paused'?'Paused':'Recording'} ${hk?'hike':'walk'} · now`,
-        meta:[`${((rec.distanceM||0)/1000).toFixed(2)} km`,fmtDur((rec.movingMs||0)/1000),hk&&rec.gainM>=1?`↑ ${Math.round(rec.gainM)} m`:null,rec.steps?`${fmtN(rec.steps)} steps`:null].filter(Boolean).join(' · ')});}
+        meta:[`${(recDist(rec).m/1000).toFixed(2)} km`,fmtDur((rec.movingMs||0)/1000),hk&&rec.gainM>=1?`↑ ${Math.round(rec.gainM)} m`:null,rec.steps?`${fmtN(rec.steps)} steps`:null].filter(Boolean).join(' · ')});}
     if(weightLog[day])items.push({kind:'weight',id:'wt',ts:at('07:30'),approx:true,emoji:'⚖️',title:`${weightLog[day]} kg`,meta:'Body weight'});
     (symptomLog[day]||[]).forEach(e=>{const sx=SYMPTOMS.find(x=>x.id===e.id);
       items.push({kind:'feel',id:'f'+e.ts,ts:e.since&&localDate(new Date(e.since))===day?e.since:e.ts,entry:e,emoji:sx?.emoji||'😶',title:sx?.label||e.id,meta:(t=>!t||t===sx?.label?'Feeling':t)(symptomText(e,day).replace((sx?.label||'')+' ',''))});});
@@ -3446,7 +3447,7 @@ Reply ONLY with valid JSON (no markdown):
   function allPills(pagePills){
     const out=[],now=Date.now();
     if(rec&&!recOpen)out.push({id:'rec',tone:'err',icon:<span className={`rec-dot${rec.state==='paused'?' paused':''}`}/>,
-      text:`${rec.state==='paused'?'Paused':rec.kind==='hike'?'🥾 Hike':'🚶 Walk'} ${((rec.distanceM||0)/1000).toFixed(2)} km · ${fmtDur((rec.movingMs||0)/1000)}${rec.kind==='hike'&&rec.gainM>=1?` · ↑ ${Math.round(rec.gainM)} m`:''}`,
+      text:`${rec.state==='paused'?'Paused':rec.kind==='hike'?'🥾 Hike':'🚶 Walk'} ${(recDist(rec).m/1000).toFixed(2)} km · ${fmtDur((rec.movingMs||0)/1000)}${rec.kind==='hike'&&rec.gainM>=1?` · ↑ ${Math.round(rec.gainM)} m`:''}`,
       tap:()=>setRecOpen(true),label:'Open the recording'});
     const EM={Breakfast:'🍳',Lunch:'🍛',Snack:'🍎',Dinner:'🍽️'};
     let due=[];try{due=storageReady?planLogItems(true):[];}catch(e){console.warn(e);}
@@ -4338,11 +4339,22 @@ Reply ONLY with valid JSON (no markdown):
   const REC_DEF={walk:{big:['time','steps'],small:['distance','pace','cadence','stride','speed','calories']},
     hike:{big:['time','distance'],small:['climb','height','pace','steps','cadence','speed']}};
   const [recEdit,setRecEdit]=useState(false);
+  // Until GPS finds you (indoors it may never), distance, speed, pace and stride come from your steps and your
+  // step length (from height); once it does, GPS takes over, and the steps before the first fix still count.
+  const kmPerStep=()=>bodySaved&&+bodyMeasure.heightCm?bodyMeasure.heightCm*0.415/100000:KM_PER_STEP;
+  function recDist(r){const ks=kmPerStep()*1000,p0=(r.pts||[])[0],steps=r.steps||0;
+    if(!p0)return{m:steps*ks,pre:steps*ks,est:true};
+    const pre=(p0[6]!=null?+p0[6]:0)*ks;return{m:(r.distanceM||0)+pre,pre,est:false};}
   function renderRecPage(){
     const r=rec||{state:'idle',pts:[]};const paused=r.state==='paused',running=r.state==='recording';
-    const sec=(r.movingMs||0)/1000,km=(r.distanceM||0)/1000,pace=km>=0.02?sec/km:NaN,min=sec/60;
-    const cadAvg=r.steps&&min>=0.5?Math.round(r.steps/min):null,now=recNow(r.pts,r.spm);
-    const gpsTxt=r.gps==='ok'?`GPS ±${Math.round(r.accuracy||0)} m`:r.gps==='lost'?'GPS signal lost':'Finding GPS…';
+    const dist=recDist(r),est=dist.est&&(r.steps||0)>0;
+    const sec=(r.movingMs||0)/1000,km=dist.m/1000,pace=km>=0.02?sec/km:NaN,min=sec/60;
+    const cadAvg=r.steps&&min>=0.5?Math.round(r.steps/min):null,now0=recNow(r.pts,r.spm);
+    // no GPS yet: "now" speed is your cadence × step length
+    const now=est&&now0.cad!=null?{...now0,kmh:now0.cad*kmPerStep()*60}:now0;
+    const sats=r.sats&&r.sats[1]?` · ${r.sats[0]}/${r.sats[1]} satellites`:'';
+    const gpsTxt=r.gps==='ok'?`GPS ±${Math.round(r.accuracy||0)} m`:r.gps==='lost'?'GPS signal lost':`Finding GPS…${sats}`;
+    const e=est?'≈':'';   // marks numbers worked out from steps
     const W=window.LMNative?.walk,hike=r.kind==='hike',what=hike?'hike':'walk',kind=hike?'hike':'walk';
     const kmh=sec>30&&km>0?km/(sec/3600):0,stride=r.steps>20&&km>0?km*100000/r.steps:null;
     const kg=latestWeight?.w||bodyMeasure?.weightKg||70;
@@ -4352,8 +4364,8 @@ Reply ONLY with valid JSON (no markdown):
       for(let i=1;i<r.pts.length;i++){d+=distM([r.pts[i-1][1],r.pts[i-1][2]],[r.pts[i][1],r.pts[i][2]]);
         if(r.pts[i][3]!=null&&(j++%step===0))o.push({x:(d/1000).toFixed(1)+' km',y:Math.round(r.pts[i][3])});}return o;})():null;
     // the jog you're on now: when it started and at what distance
-    if(now.jogging&&running){if(!jogRef.current)jogRef.current={t:Date.now(),m:r.distanceM||0};}else jogRef.current=null;
-    const jog=jogRef.current,jogM=jog?Math.max(0,(r.distanceM||0)-jog.m):0;
+    if(now.jogging&&running){if(!jogRef.current)jogRef.current={t:Date.now(),m:dist.m};}else jogRef.current=null;
+    const jog=jogRef.current,jogM=jog?Math.max(0,dist.m-jog.m):0;
     // a live number that's clearly above your average for this walk (and has been for 3 s) turns the jogging colour
     const nowStride=running&&now.kmh>0.5&&now.cad>=40?now.kmh/3.6*60/now.cad*100:null;
     const above={speed:running&&now.kmh>0.5&&kmh>0&&now.kmh>=kmh*1.1,cadence:running&&now.cad!=null&&cadAvg&&now.cad>=cadAvg*1.08,
@@ -4366,16 +4378,17 @@ Reply ONLY with valid JSON (no markdown):
     // every number this screen can show: [label, value, unit, small line underneath]
     const M={
       time:['Time',null,'',r.start?`Started ${clockStr(r.start)}`:''],
-      distance:['Distance',km.toFixed(2),'km',''],
+      distance:['Distance',e+km.toFixed(2),'km',est?'from steps':''],
       steps:['Steps',r.steps?fmtN(r.steps):'—','steps',''],
       // pace, speed and cadence: what you're doing right now in big, the average underneath;
       // when there's no "now" (paused, standing, GPS just starting) the average shows in big, marked as such
       ...(()=>{const nk=running&&now.kmh>0.5?now.kmh:null,nc=running&&now.cad!=null?now.cad:null,hasP=isFinite(pace);
-        return{pace:nk?['Pace',fmtPaceS(3600/nk),'min/km',hasP?`avg ${fmtPaceS(pace)}`:'']:['Pace',fmtPaceS(pace),'min/km',hasP?'average':''],
-          speed:nk?['Speed',nk.toFixed(1),'km/h',kmh?`avg ${kmh.toFixed(1)}`:'']:['Speed',kmh?kmh.toFixed(1):'—','km/h',kmh?'average':''],
+        const fs=est?' · from steps':'';
+        return{pace:nk?['Pace',e+fmtPaceS(3600/nk),'min/km',(hasP?`avg ${fmtPaceS(pace)}`:'')+fs]:['Pace',hasP?e+fmtPaceS(pace):'—','min/km',hasP?'average'+fs:''],
+          speed:nk?['Speed',e+nk.toFixed(1),'km/h',(kmh?`avg ${kmh.toFixed(1)}`:'')+fs]:['Speed',kmh?e+kmh.toFixed(1):'—','km/h',kmh?'average'+fs:''],
           cadence:nc!=null?['Cadence',String(nc),'steps/min',cadAvg?`avg ${cadAvg}`:'']:['Cadence',cadAvg?String(cadAvg):'—','steps/min',cadAvg?'average':'']};})(),
       // stride now: distance a minute ÷ steps a minute, from the same "now" speed and cadence
-      stride:(()=>{const ns=running&&now.kmh>0.5&&now.cad>=40?now.kmh/3.6*60/now.cad*100:null;
+      stride:est?['Stride',r.steps?'≈'+Math.round(kmPerStep()*100000):'—','cm a step',r.steps?'from your height':'']:(()=>{const ns=running&&now.kmh>0.5&&now.cad>=40?now.kmh/3.6*60/now.cad*100:null;
         return ns?['Stride',String(Math.round(ns)),'cm a step',stride?`avg ${Math.round(stride)}`:'']:['Stride',stride?String(Math.round(stride)):'—','cm a step',stride?'average':''];})(),
       calories:['Calories',`~${fmtN(kcal)}`,'kcal',''],
       ...(hike?{climb:['Climb',`↑ ${Math.round(r.gainM||0)}`,'m',''],height:['Height',r.alt!=null?fmtN(r.alt):'—','m above sea','']}:{})};

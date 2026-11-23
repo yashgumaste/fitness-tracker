@@ -125,15 +125,21 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await p.evaluate(()=>{window.LMNative.walk={available:()=>true,_st:'idle',_t0:0,_pts:[],
       async start(){this._st='recording';this._t0=Date.now()-25*60000;const c=[18.5204,73.8567];
         this._pts=Array.from({length:120},(_,i)=>{const a=i/120*2*Math.PI;return[this._t0+i*12500,c[0]+0.004*Math.sin(a),c[1]+0.006*Math.cos(a)+i*0.00003,560+10*Math.sin(a*2),5,null,i*27];});return this.status(0);},
-      async status(from){return{state:this._st,start:this._t0,movingMs:25*60000,distanceM:2600,steps:3300,spm:this._spm,gps:'ok',accuracy:5,count:this._pts.length,from:from||0,points:this._pts.slice(from||0)};},
+      async status(from){if(this._noGps)return{state:this._st,start:this._t0,movingMs:5*60000,distanceM:0,steps:600,spm:120,gps:'searching',accuracy:0,count:0,sats:[3,11],from:from||0,points:[]};
+        return{state:this._st,start:this._t0,movingMs:25*60000,distanceM:2600,steps:3300,spm:this._spm,gps:'ok',accuracy:5,count:this._pts.length,from:from||0,points:this._pts.slice(from||0)};},
       async pause(){this._st='paused';return this.status(1e9);},async resume(){this._st='recording';return this.status(1e9);},
       async stop(){const s=await this.status(0);s.end=this._t0+26*60000;this._st='idle';return s;},async discard(){this._st='idle';}};});
     await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);
     // 3 · 2 · 1 · Go first, with Cancel for a mis-tap
     await click('.x-btn','Start a walk');await W(500);await expect('Walk starts in');await click('button','Cancel');await W(400);
     if(await has('Started'))throw new Error('Cancel should stop the recording from starting');await W(3500);if(await has('Started'))throw new Error('started after Cancel');
+    await p.evaluate(()=>{window.LMNative.walk._noGps=true;});
     await click('.x-btn','Start a walk');await W(1200);if(await has('Started'))throw new Error('recording started before the countdown ended');await W(3800);
-    await expect('Started');await expect('Now ');await expect('steps/min');
+    await expect('Started');
+    // no GPS yet (indoors): distance, speed, pace and stride from steps, marked ≈, and the satellites it can see
+    await expect('3/11 satellites');await expect('from steps');
+    if(!(await p.evaluate(()=>/≈\s*0\.\d\d/.test(document.body.innerText))))throw new Error('distance from steps should show as ≈0.xx km');
+    await p.evaluate(()=>{window.LMNative.walk._noGps=false;});await W(2500);await expect('Now ');await expect('steps/min');
     if(await p.$('nav.dock-pill'))throw new Error('the floating island should be hidden while recording');
     await click('.x-btn','Layout');await expect('Numbers on this screen');
     // more than 2 big numbers: Pace, Cadence and Calories join Time and Steps up top
