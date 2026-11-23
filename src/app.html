@@ -947,7 +947,9 @@ function WaterGlass({pct=0,size=60,color='var(--sky)',glass='var(--on-sky-c)',dr
 const SLEEP_KEY='lm-sleep-v1';   // {wakeDate:{bed:'HH:MM',wake:'HH:MM',q:1-5,wakes:n}} — keyed by the morning you woke up
 const SLEEP_Q=[[1,'😫','Awful'],[2,'😕','Poor'],[3,'😐','Okay'],[4,'🙂','Good'],[5,'😴','Great']];
 const sleepMin=s=>s&&s.bed&&s.wake?walkMinutes(s.bed,s.wake):0;
-const fmtHM=m=>`${Math.floor(m/60)} h${m%60?' '+m%60+' min':''}`;
+// a length of time in minutes, in words: "7 hrs 30 mins", "45 mins", "1 hr"
+const fmtHM=m=>{m=Math.max(0,Math.round(m));const h=Math.floor(m/60),mi=m%60;
+  return [h?`${h} ${h===1?'hr':'hrs'}`:null,mi||!h?`${mi} ${mi===1?'min':'mins'}`:null].filter(Boolean).join(' ');};
 function sleepText(s){if(!s||!sleepMin(s))return '';const q=SLEEP_Q.find(x=>x[0]===s.q);
   const t=(hm)=>{const [h,mi]=hm.split(':').map(Number);return `${h%12||12}:${String(mi).padStart(2,'0')} ${h>=12?'PM':'AM'}`;};
   return `${fmtHM(sleepMin(s))} (bed ${t(s.bed)} → up ${t(s.wake)})${q?`, felt ${q[2].toLowerCase()}`:''}${s.wakes?`, woke ${s.wakes}× in the night`:''}`;}
@@ -4402,8 +4404,8 @@ Reply ONLY with valid JSON (no markdown):
           <span className="x-tag" style={{background:r.gps==='ok'?'var(--mint-c)':'var(--amber-c)',color:r.gps==='ok'?'var(--on-mint-c)':'var(--on-amber-c)'}}>{gpsTxt}</span>
         </div>
         {jog&&<div role="status" aria-label={`Jogging for ${fmtDur((Date.now()-jog.t)/1000)}, ${jogM<1000?Math.round(jogM)+' metres':(jogM/1000).toFixed(2)+' kilometres'}`}
-          style={{background:'var(--amber)',color:'#fff',borderRadius:999,padding:'12px 22px',display:'flex',alignItems:'center',justifyContent:'center',gap:10,
-            fontWeight:850,fontSize:26,lineHeight:1.1,textShadow:'0 1px 3px rgba(0,0,0,.45)',transformOrigin:'50% 0',animation:'lm-pop-in .45s var(--m-spatial) both'}}>
+          style={{background:'var(--amber)',color:'#fff',borderRadius:999,padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'center',gap:7,
+            flexWrap:'wrap',rowGap:2,fontWeight:850,fontSize:18.5,lineHeight:1.1,textShadow:'0 1px 3px rgba(0,0,0,.45)',transformOrigin:'50% 0',animation:'lm-pop-in .45s var(--m-spatial) both'}}>
           <span aria-hidden="true">🏃</span><span>Jogged</span><JogClock since={jog.t}/><span aria-hidden="true" style={{opacity:.8}}>·</span>
           <span className="x-num">{jogM<1000?`${Math.round(jogM)} m`:`${(jogM/1000).toFixed(2)} km`}</span></div>}
         {recEdit&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:6}}>
@@ -6134,8 +6136,8 @@ Reply ONLY with valid JSON (no markdown):
       body=<>
         <div className="x-card sa" style={{background:'var(--night-c)',color:'var(--on-sky-c)',display:'flex',flexDirection:'column',gap:12,marginBottom:12}}>
           <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap'}}>
-            <span className="x-num" style={{fontSize:46,color:'var(--fg)'}}>{Math.floor(m/60)}<span style={{fontSize:22}}> h </span>{m%60}<span style={{fontSize:22}}> min</span></span>
-            <span className="x-tag" style={{marginLeft:'auto',background:'var(--bg)',color:ok?'var(--mint)':'var(--amber)'}}>{m<420?`${fmtHM(420-m)} short of 7 h`:m>540?'Over 9 h':'In the 7–9 h range ✓'}</span>
+            <span className="x-num" style={{fontSize:46,color:'var(--fg)'}}>{Math.floor(m/60)}<span style={{fontSize:22}}> {Math.floor(m/60)===1?'hr':'hrs'} </span>{m%60}<span style={{fontSize:22}}> {m%60===1?'min':'mins'}</span></span>
+            <span className="x-tag" style={{marginLeft:'auto',background:'var(--bg)',color:ok?'var(--mint)':'var(--amber)'}}>{m<420?`${fmtHM(420-m)} short of 7 hrs`:m>540?'Over 9 hrs':'In the 7–9 hrs range ✓'}</span>
           </div>
           <WavyBar value={m} max={540} color="var(--night)" track="rgba(0,0,0,.3)" h={14}/>
         </div>
@@ -6932,17 +6934,17 @@ function lonX(lon,z){return 256*2**z*(lon+180)/360;}
 function latY(lat,z){const r=lat*Math.PI/180;return 256*2**z*(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2;}
 // a clock time like 5:40 AM
 const clockStr=ms=>new Date(ms).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true}).toUpperCase();
-// stopwatch: h:mm:ss or m:ss, with hundredths shown small
-const fmtWatch=ms=>{ms=Math.max(0,ms);const cs=Math.floor(ms/10)%100,t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor(t/60)%60,s=t%60;
-  return [h?`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`:`${m}:${String(s).padStart(2,'0')}`,'.'+String(cs).padStart(2,'0')];};
 // the live elapsed time, ticking smoothly between the recorder's once-a-second updates
 function RecClock({ms,at,running,size}){
   const [,tick]=useState(0);const last=useRef(0);
   useEffect(()=>{if(!running)return;const t=setInterval(()=>tick(x=>x+1),40);return()=>clearInterval(t);},[running]);
   let v=running?ms+Math.min(1500,Date.now()-(at||Date.now())):ms;
   if(running&&v<last.current&&last.current-v<1500)v=last.current;last.current=v;
-  const [a,b]=fmtWatch(v);
-  return <span className="x-num" style={{fontSize:size,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{a}<span style={{fontSize:size*0.42,opacity:.7}}>{b}</span></span>;
+  const t=Math.floor(v/1000),cs=String(Math.floor(v/10)%100).padStart(2,'0'),parts=durParts(t),z=size*0.6;
+  // in words, so it can't be read as a clock time: 25 mins 03.45 secs (hundredths small)
+  return <span className="x-num" style={{fontSize:z,lineHeight:1.05,fontVariantNumeric:'tabular-nums',display:'inline-flex',flexWrap:'wrap',alignItems:'baseline',justifyContent:'center',columnGap:z*0.16}}>
+    {parts.map(([n,u],i)=>{const sec=/^sec/.test(u);return <span key={u} style={{whiteSpace:'nowrap'}}>{sec&&i>0?String(n).padStart(2,'0'):n}
+      {sec&&<span style={{fontSize:z*0.42,opacity:.7}}>.{cs}</span>}<span style={{fontSize:Math.max(12,z*0.34),fontWeight:750,color:'var(--fg2)',marginLeft:z*0.06}}>{u}</span></span>;})}</span>;
 }
 // what you're doing right now, from the last ~30 s of the route: cadence, speed, and whether it's a jog
 // Live "now" numbers on the recording screen. Cadence comes from the step sensor's last 4 seconds (spm, from the
@@ -6956,7 +6958,7 @@ function JogClock({since}){
   const [,tick]=useState(0);
   useEffect(()=>{const t=setInterval(()=>tick(x=>x+1),1000);return()=>clearInterval(t);},[]);
   const s=Math.max(0,Math.floor((Date.now()-since)/1000));
-  return <span className="x-num">{Math.floor(s/60)}:{String(s%60).padStart(2,'0')}</span>;
+  return <span className="x-num">{fmtDur(s)}</span>;
 }
 // race-start beeps: ting · tingg · tiiing · tuuut (and a buzz with each)
 let _ac=null;

@@ -21,6 +21,9 @@
     },
     {
       "text": "How long a walk took now reads in words, like “9 mins 15 secs” or “1 hr 4 mins 9 secs”, so it can’t be mistaken for a clock time like 9:15. This covers the walk page (moving and total time, with big numbers and small units), the recording pill and finish screen, jogs, and what the coach is told. Pace stays as min/km."
+    },
+    {
+      "text": "Every length of time is now in words: the live recording clock (“25 mins 03.45 secs”), the jogging pill (“Jogged 1 min 15 secs · 210 m”) and sleep (“7 hrs 30 mins”, “30 mins short of 7 hrs”), as well as walks."
     }
   ],
   "releases": [
