@@ -125,10 +125,14 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await p.evaluate(()=>{window.LMNative.walk={available:()=>true,_st:'idle',_t0:0,_pts:[],
       async start(){this._st='recording';this._t0=Date.now()-25*60000;const c=[18.5204,73.8567];
         this._pts=Array.from({length:120},(_,i)=>{const a=i/120*2*Math.PI;return[this._t0+i*12500,c[0]+0.004*Math.sin(a),c[1]+0.006*Math.cos(a)+i*0.00003,560+10*Math.sin(a*2),5,null,i*27];});return this.status(0);},
-      async status(from){return{state:this._st,start:this._t0,movingMs:25*60000,distanceM:2600,steps:3300,gps:'ok',accuracy:5,count:this._pts.length,from:from||0,points:this._pts.slice(from||0)};},
+      async status(from){return{state:this._st,start:this._t0,movingMs:25*60000,distanceM:2600,steps:3300,spm:this._spm,gps:'ok',accuracy:5,count:this._pts.length,from:from||0,points:this._pts.slice(from||0)};},
       async pause(){this._st='paused';return this.status(1e9);},async resume(){this._st='recording';return this.status(1e9);},
       async stop(){const s=await this.status(0);s.end=this._t0+26*60000;this._st='idle';return s;},async discard(){this._st='idle';}};});
-    await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);await click('.x-btn','Start a walk');await W(1500);
+    await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);
+    // 3 · 2 · 1 · Go first, with Cancel for a mis-tap
+    await click('.x-btn','Start a walk');await W(500);await expect('Walk starts in');await click('button','Cancel');await W(400);
+    if(await has('Started'))throw new Error('Cancel should stop the recording from starting');await W(3500);if(await has('Started'))throw new Error('started after Cancel');
+    await click('.x-btn','Start a walk');await W(1200);if(await has('Started'))throw new Error('recording started before the countdown ended');await W(3800);
     await expect('Started');await expect('Now ');await expect('steps/min');
     if(await p.$('nav.dock-pill'))throw new Error('the floating island should be hidden while recording');
     await click('.x-btn','Layout');await expect('Numbers on this screen');
@@ -138,6 +142,15 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const bigs=await p.evaluate(()=>[...document.querySelectorAll('[data-rec-big]')].map(e=>e.dataset.recBig));
     for(const n of ['Time','Steps','Pace','Cadence','Calories'])if(!bigs.some(t=>t.toLowerCase()===n.toLowerCase()))throw new Error(n+' is not big: '+bigs.join(', '));
     await click('.x-btn','Done');
+    // jogging: a big amber pill with how long and how far; cadence well above average turns amber after 3 s
+    await p.evaluate(()=>{window.LMNative.walk._spm=150;});await W(1500);await expect('Jogged');
+    const amber=await p.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--amber').trim());
+    const cadCol=()=>p.evaluate(()=>getComputedStyle(document.querySelector('[data-rec-big=cadence] .x-num')).color);
+    const toRgb=await p.evaluate(c=>{const d=document.createElement('i');d.style.color=c;document.body.appendChild(d);const r=getComputedStyle(d).color;d.remove();return r;},amber);
+    const t0=await p.evaluate(()=>Date.now());await p.clock.setFixedTime(t0+4000);   // the test clock stands still: move it on 4 s
+    await W(1500);if(await cadCol()!==toRgb)throw new Error('cadence should turn amber after 3 s above average: '+await cadCol()+' vs '+toRgb);
+    await p.evaluate(()=>{window.LMNative.walk._spm=100;});await W(1500);
+    if(await has('Jogged'))throw new Error('jog pill should go when you slow down');if(await cadCol()===toRgb)throw new Error('cadence should go back to normal');
     // leave the recording screen: a pinned pill at the top shows it's still going, and opens it again
     await p.evaluate(()=>{const b=[...document.querySelectorAll('button')].find(b=>/^Back/.test(b.getAttribute('aria-label')||''));b&&b.click();});await W(1200);
     const pill=await p.$('[aria-label="Open the recording"]');if(!pill)throw new Error('no recording pill after leaving the recording screen');
@@ -153,7 +166,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await p.evaluate(()=>{const W=window.LMNative.walk;W.start=async function(kind){this._st='recording';this._kind=kind;this._t0=Date.now()-60*60000;const c=[18.366,73.747];
       this._pts=Array.from({length:300},(_,i)=>{const up=i<150?i:300-i;return[this._t0+i*12000,c[0]+i*0.00006,c[1]+0.0003*Math.sin(i/20),700+up*3+Math.random()*8,6,660+up*3];});return this.status(0);};
       const st=W.status;W.status=async function(from){const r=await st.call(this,from);r.kind=this._kind;r.gainM=120;r.alt=900;r.distanceM=4000;return r;};});
-    await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);await click('.x-btn','Start a hike');await W(1500);
+    await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);await click('.x-btn','Start a hike');await W(4800);
     await expect('Climb');await expect('m above sea');if(await p.$('nav.dock-pill'))throw new Error('island should be hidden');await click('button','Finish');await expect('Finish this hike');await click('.x-btn','Save hike');await W(900);
     await expect('Elevation gain');await expect('Highest point');await expect('Each km: pace and climb');await expect('Speed');
     await p.click('[aria-label="Back"]');await W();});

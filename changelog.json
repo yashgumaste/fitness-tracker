@@ -1,5 +1,13 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "Recording a walk or hike now starts with a race-style countdown: 3 · 2 · 1 · Go! with beeps (ting, tingg, tiiing, tuuut) and a buzz on each. Tapped Start by mistake? Press Cancel before Go and nothing is recorded."
+    },
+    {
+      "text": "While you jog, a big amber pill on the recording screen shows how long you’ve jogged and how far (“🏃 Jogged 1:15 · 210 m”). And any live number (pace, speed, cadence, stride) that stays clearly above your average for this walk for 3 seconds turns amber too, so you can see at a glance when you’re pushing.",
+      "img": "docs/whatsnew/jogging.png"
+    }
+  ],
   "releases": [
     {
       "version": "1.38",

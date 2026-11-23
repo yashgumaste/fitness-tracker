@@ -682,6 +682,8 @@ input.m3-input{border-radius:999px;}
 ::view-transition-new(lm-pop){transform-origin:50% 0;animation:lm-pop-in .42s var(--m-spatial) both}
 ::view-transition-old(lm-pop){transform-origin:50% 0;animation:lm-pop-out .2s var(--m-emph) both}
 @keyframes lm-pop-in{from{opacity:0;transform:translateY(-22px) scale(.72,.3)}35%{opacity:1}to{opacity:1;transform:none}}
+@keyframes lm-cd-pop{from{opacity:0;transform:scale(.45) rotate(-40deg)}40%{opacity:1}to{opacity:1;transform:none}}
+@keyframes lm-cd-out{to{opacity:0;visibility:hidden}}
 @keyframes lm-pop-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-18px) scale(.8,.35)}}
 :root[data-vt=pop]::view-transition-old(root),:root[data-vt=pop]::view-transition-new(root){animation:none}
 @keyframes lm-vt-recede{to{opacity:.4;transform:scale(.94)}}
@@ -2077,7 +2079,9 @@ function App(){
   const [aiAnalysis,setAiAnalysis]=useState(null);
   const [aiAnalysisLoading,setAiAnalysisLoading]=useState(false);
   const [dayInsight,setDayInsight]=useState({});
-  const [dayInsightLoading,setDayInsightLoading]=useState(false);   // the date being reviewed, or false
+  const [dayInsightLoading,setDayInsightLoading]=useState(false);
+  const [cd,setCd]=useState(null);const cdT=useRef([]);          // the 3-2-1 before a recording: {kind, n}
+  const jogRef=useRef(null),hotRef=useRef({});                    // the current jog; when each live number went above average   // the date being reviewed, or false
   const bottomRef=useRef(null);
   const prevDietLen=useRef(0);
   const TODAY=todayKey();
@@ -3178,12 +3182,38 @@ Reply ONLY with valid JSON (no markdown):
   const setActPage=vtSet('actPage',setActPage_,(a,b)=>!a&&b?'open':a&&!b?'back':null);
   const recRef=useRef(null);recRef.current=rec;
   const openAct=(date,id)=>{setActPage({date,id});window.scrollTo(0,0);};
-  async function startRecording(kind){
+  // Ready, set, go: 3 · 2 · 1 · Go with race-start beeps before a recording starts, and Cancel for a mis-tap
+  function startRecording(kind){
     kind=kind==='hike'?'hike':'walk';
     const W=window.LMNative?.walk;
     if(!W||!W.available()){showToast(`Recording a ${kind} works in the Android app`,'var(--warn)');return;}
     setSheet(null);
-    try{const st=await W.start(kind);setRec({...st,pts:st.points||[]});setRecOpen(true);setActPage(null);window.scrollTo(0,0);}
+    cdT.current.forEach(clearTimeout);cdT.current=[];
+    const at=(ms,f)=>cdT.current.push(setTimeout(f,ms));
+    setCd({kind,n:3});raceBeep(3);
+    at(1000,()=>{setCd({kind,n:2});raceBeep(2);});
+    at(2000,()=>{setCd({kind,n:1});raceBeep(1);});
+    at(3000,()=>{setCd({kind,n:0});raceBeep(0);beginRecording(kind);});
+    at(3750,()=>setCd(null));
+  }
+  function cancelCountdown(){cdT.current.forEach(clearTimeout);cdT.current=[];setCd(null);showToast('Cancelled · nothing recorded');}
+  function renderCountdown(){
+    const go=cd.n===0;
+    return(<div role="dialog" aria-label={go?'Go':`Starting in ${cd.n}`} style={{position:'fixed',inset:0,zIndex:290,background:'var(--bg)',display:'flex',flexDirection:'column',
+        alignItems:'center',justifyContent:'center',gap:30,animation:go?'lm-cd-out .35s var(--m-effects) .4s both':undefined}}>
+      <div className="x-eyebrow" style={{fontSize:14}}>{go?'Recording':`${cd.kind==='hike'?'Hike':'Walk'} starts in`}</div>
+      <div key={cd.n} style={{animation:'lm-cd-pop .55s var(--m-spatial) both'}}>
+        <Shape kind={['sunny','clover','flower','cookie9'][cd.n]} size={230} fill={go?'var(--mint)':'var(--pri-c)'} color={go?'var(--bg)':'var(--pri)'} font={go?72:130}>
+          <span className="x-num" style={{lineHeight:1}}>{go?'Go!':cd.n}</span></Shape>
+      </div>
+      {!go&&<button className="x-btn tonal" style={{position:'absolute',bottom:'calc(48px + env(safe-area-inset-bottom,0px))',minWidth:190}} onClick={cancelCountdown}>✕  Cancel</button>}
+    </div>);
+  }
+  async function beginRecording(kind){
+    const W=window.LMNative?.walk;
+    // the Go! screen covers the switch, so no page transition: the recording is simply there when it fades
+    try{const st=await W.start(kind);vtBack.current.push({y:window.scrollY,key:null});
+      setRec({...st,pts:st.points||[]});setRecOpen_(true);setActPage_(null);window.scrollTo(0,0);}
     catch(e){const m=String(e&&(e.message||e.code)||e);
       showToast(/location/i.test(m)?'Allow precise location so the app can draw your route':'Couldn’t start recording: '+m,'var(--warn)');}
   }
@@ -4298,6 +4328,17 @@ Reply ONLY with valid JSON (no markdown):
     const live=hike&&altPts.length>=6?(()=>{const n=24,step=Math.max(1,Math.floor(altPts.length/n));const o=[];let d=0,j=0;
       for(let i=1;i<r.pts.length;i++){d+=distM([r.pts[i-1][1],r.pts[i-1][2]],[r.pts[i][1],r.pts[i][2]]);
         if(r.pts[i][3]!=null&&(j++%step===0))o.push({x:(d/1000).toFixed(1)+' km',y:Math.round(r.pts[i][3])});}return o;})():null;
+    // the jog you're on now: when it started and at what distance
+    if(now.jogging&&running){if(!jogRef.current)jogRef.current={t:Date.now(),m:r.distanceM||0};}else jogRef.current=null;
+    const jog=jogRef.current,jogM=jog?Math.max(0,(r.distanceM||0)-jog.m):0;
+    // a live number that's clearly above your average for this walk (and has been for 3 s) turns the jogging colour
+    const nowStride=running&&now.kmh>0.5&&now.cad>=40?now.kmh/3.6*60/now.cad*100:null;
+    const above={speed:running&&now.kmh>0.5&&kmh>0&&now.kmh>=kmh*1.1,cadence:running&&now.cad!=null&&cadAvg&&now.cad>=cadAvg*1.08,
+      stride:nowStride!=null&&stride&&nowStride>=stride*1.08};
+    above.pace=above.speed;
+    const hot={};for(const k of Object.keys(above)){const t=Date.now();
+      if(above[k]){if(!hotRef.current[k])hotRef.current[k]=t;hot[k]=t-hotRef.current[k]>=3000;}else hotRef.current[k]=0;}
+    const tint=k=>hot[k]?'var(--amber)':undefined;
     const toggle=async()=>{try{const st=paused?await W.resume():await W.pause();setRec(p=>({...p,state:st.state,_at:Date.now()}));}catch(_){}};
     // every number this screen can show: [label, value, unit, small line underneath]
     const M={
@@ -4321,7 +4362,7 @@ Reply ONLY with valid JSON (no markdown):
     const lay={...REC_DEF[kind],...((prefs.recLayout||{})[kind]||{})};
     const big=lay.big.filter(k=>M[k]),small=lay.small.filter(k=>M[k]&&!big.includes(k));
     const val=(k,size)=>k==='time'?<RecClock ms={r.movingMs||0} at={r._at} running={running} size={size}/>
-      :<span className="x-num" style={{fontSize:size,lineHeight:1}}>{M[k][1]}</span>;
+      :<span className="x-num" style={{fontSize:size,lineHeight:1,color:tint(k),transition:'color .4s var(--m-effects)'}}>{M[k][1]}</span>;
     const setLay=(k,where)=>{let b=lay.big.filter(x=>x!==k),sm=lay.small.filter(x=>x!==k);
       if(where==='big')b=[...b,k];
       if(where==='small')sm=[...sm,k];
@@ -4338,8 +4379,12 @@ Reply ONLY with valid JSON (no markdown):
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
           <span className="x-tag" aria-label="Time now" style={{background:'var(--s3)',color:'var(--fg)'}}>🕐 Now {clockStr(clock)}</span>
           <span className="x-tag" style={{background:r.gps==='ok'?'var(--mint-c)':'var(--amber-c)',color:r.gps==='ok'?'var(--on-mint-c)':'var(--on-amber-c)'}}>{gpsTxt}</span>
-          {now.jogging&&!paused&&<span className="x-tag" style={{background:'var(--amber)',color:'var(--bg)'}}>🏃 Jogging</span>}
         </div>
+        {jog&&<div role="status" aria-label={`Jogging for ${fmtDur((Date.now()-jog.t)/1000)}, ${jogM<1000?Math.round(jogM)+' metres':(jogM/1000).toFixed(2)+' kilometres'}`}
+          style={{background:'var(--amber)',color:'#fff',borderRadius:999,padding:'12px 22px',display:'flex',alignItems:'center',justifyContent:'center',gap:10,
+            fontWeight:850,fontSize:26,lineHeight:1.1,textShadow:'0 1px 3px rgba(0,0,0,.45)',transformOrigin:'50% 0',animation:'lm-pop-in .45s var(--m-spatial) both'}}>
+          <span aria-hidden="true">🏃</span><span>Jogged</span><JogClock since={jog.t}/><span aria-hidden="true" style={{opacity:.8}}>·</span>
+          <span className="x-num">{jogM<1000?`${Math.round(jogM)} m`:`${(jogM/1000).toFixed(2)} km`}</span></div>}
         {recEdit&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:6}}>
           <b style={{fontSize:16}}>Numbers on this screen</b>
           <div className="x-sub" style={{fontSize:12.5}}>Pick as many big and small numbers as you like: big ones go two to a row, in the order you tap them. Saved for every {what} you record; {hike?'walks':'hikes'} keep their own layout.</div>
@@ -6708,6 +6753,7 @@ Reply ONLY with valid JSON (no markdown):
       {renderTopPills(pillsNow)}
       {sheet&&renderSheetX()}
       {bgAsk&&!sheet&&renderBgAsk()}
+      {cd&&renderCountdown()}
     </div>
   );
 }
@@ -6882,6 +6928,26 @@ function RecClock({ms,at,running,size}){
 // recording screen: a number's heading and the line under it use the same type
 const TILE_TXT={fontSize:13.5,fontWeight:750,color:'var(--fg2)',lineHeight:1.3};
 let _jogging=false;
+// how long the current jog has lasted, ticking every second
+function JogClock({since}){
+  const [,tick]=useState(0);
+  useEffect(()=>{const t=setInterval(()=>tick(x=>x+1),1000);return()=>clearInterval(t);},[]);
+  const s=Math.max(0,Math.floor((Date.now()-since)/1000));
+  return <span className="x-num">{Math.floor(s/60)}:{String(s%60).padStart(2,'0')}</span>;
+}
+// race-start beeps: ting · tingg · tiiing · tuuut (and a buzz with each)
+let _ac=null;
+function raceBeep(n){
+  try{navigator.vibrate&&navigator.vibrate(n===0?320:45);}catch(_){}
+  try{_ac=_ac||new (window.AudioContext||window.webkitAudioContext)();if(_ac.state==='suspended')_ac.resume();
+    const go=n===0,len=go?0.95:[0,0.45,0.28,0.17][n],t=_ac.currentTime;
+    const tone=(f,type,vol)=>{const o=_ac.createOscillator(),g=_ac.createGain();o.type=type;o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+0.012);
+      if(go){g.gain.setValueAtTime(vol,t+len-0.15);}
+      g.gain.exponentialRampToValueAtTime(0.0001,t+len);o.connect(g);g.connect(_ac.destination);o.start(t);o.stop(t+len+0.05);};
+    if(go){tone(880,'triangle',0.5);tone(1760,'sine',0.12);}else{tone(1318.5,'sine',0.45);tone(2637,'sine',0.08);}
+  }catch(_){}
+}
 function recNow(pts,spm){
   let cad=spm!=null?Math.round(spm):null,kmh=null;
   if(pts&&pts.length>=2){
