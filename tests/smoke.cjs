@@ -299,8 +299,12 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const on=await p.evaluate(()=>[...document.querySelectorAll('.x-sheet .x-chip.on,.x-sheet [aria-pressed=true],.x-sheet .on')].map(e=>e.textContent).join('|'));
     if(!/Lunch/.test(on))throw new Error('Lunch not picked: '+on);await close();});
   await step('Log food with AI',async()=>{await tab(0);await p.evaluate(()=>document.querySelector('.dock-add').click());await W();
-    await click('.x-sheet button','Food');await p.fill('.x-sheet textarea','2 boiled eggs');await click('.x-sheet-head button','Log it');await W(800);
-    await tab(1);await expect('2 boiled eggs');await expect('140 kcal');});
+    // logged straight away; the macros follow when the AI answers
+    await p.evaluate(()=>{window.__slowAI=true;});
+    await click('.x-sheet button','Food');await p.fill('.x-sheet textarea','2 boiled eggs');await click('.x-sheet-head button','Log it');await W(500);
+    if(await p.$('.x-sheet textarea'))throw new Error('the sheet should close at once, not wait for the AI');
+    await tab(1);await expect('2 boiled eggs');await expect('Working out macros');
+    await p.evaluate(()=>{window.__slowAI=false;});await W(1500);await expect('140 kcal');});
   await step('AI reply in words is handled',async()=>{await tab(0);await p.evaluate(()=>document.querySelector('.dock-add').click());await W();
     await click('.x-sheet button','Food');await p.fill('.x-sheet textarea','1 plate cabbage rice');await click('.x-sheet-head button','Log it');await W(1200);
     await tab(1);await expect('420 kcal');if(!(await p.evaluate(()=>window.__jsonMode)))throw new Error('Gemini was not asked for JSON');});

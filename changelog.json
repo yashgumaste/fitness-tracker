@@ -33,6 +33,9 @@
     },
     {
       "text": "Walk maps: drag to move, pinch (or double-tap) to zoom; 2 seconds after you let go the map glides back to the whole route. Points that GPS throws across the road near tall buildings (a sudden spike out and back) are now dropped from the route and from the distance, on your past walks too."
+    },
+    {
+      "text": "Logging food no longer waits for the AI: tap Log it and the meal is in straight away, marked “Working out macros…”, and its calories, protein, carbs and fat fill in a few seconds later while you carry on. If the AI can’t answer, the meal stays logged and shows “Macros failed · tap to retry”; if the app closes first, it finishes the next time you open it. Same for adding food to a past day."
     }
   ],
   "releases": [

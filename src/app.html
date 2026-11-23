@@ -2483,36 +2483,44 @@ function App(){
 
   /* ═══ DIET ACTIONS ═══ */
 
-async function handleDietAdd(text,at){
-    const food=(text||'').trim();
-    if(!food||isLogging)return false;
-    const now=new Date(at||Date.now()).toISOString();
-    const draft={id:Date.now(),food,mealType,timestamp:now,day:getDayKey(now),...(at?{timeSet:true}:{})};
-    setIsLogging(true);
+// Logging food doesn't wait for the AI: the meal goes in straight away ("Working out macros…") and its calories,
+// protein, carbs and fat fill in when the answer comes. If the app closes first, it finishes next time it opens.
+  const macroRun=useRef(new Set());
+  async function macroBg(entry){
+    if(macroRun.current.has(entry.id))return;macroRun.current.add(entry.id);
+    setCalcingEntries(p=>new Set([...p,entry.id]));
     try{
-      const raw=await callAI(buildMacroPrompt(mealType,food),700,'fast',true);
-      const parsed=JSON.parse(raw);
-      const items=parsed.items||[];
-      draft.items=items;
-      draft.emoji=parsed.emoji||'🍽️';
-      draft.carbHeavy=parsed.carbHeavy||false;
-      draft.gasRisk=parsed.gasRisk||false;
-      draft.proteinScore=parsed.proteinScore||'low';
-      draft.note=parsed.note||'';
-      draft.protein=items.reduce((s,it)=>s+(parseFloat(it.protein)||0),0)||null;
-      draft.calories=items.reduce((s,it)=>s+(parseFloat(it.calories)||0),0)||null;
-      draft.carbs=items.reduce((s,it)=>s+(parseFloat(it.carbs)||0),0)||null;
-      draft.fat=items.reduce((s,it)=>s+(parseFloat(it.fat)||0),0)||null;
-      // Store image in entry if we had one
-
+      const raw=await callAI(buildMacroPrompt(entry.mealType,entry.food),700,'fast',true);
+      const parsed=JSON.parse(raw);const items=parsed.items||[];
+      if(!items.length)throw new Error('no foods found');
+      const sum=k=>items.reduce((s,it)=>s+(parseFloat(it[k])||0),0)||null;
+      const upd={items,emoji:parsed.emoji||'🍽️',carbHeavy:!!parsed.carbHeavy,gasRisk:!!parsed.gasRisk,proteinScore:parsed.proteinScore||'low',
+        note:parsed.note||'',protein:sum('protein'),calories:sum('calories'),carbs:sum('carbs'),fat:sum('fat'),pending:false,macroErr:false};
+      setDietEntries(p=>p.map(en=>en.id===entry.id?{...en,...upd}:en));
+      if(upd.carbHeavy)showToast('⚠ Carb-heavy meal','var(--warn)');
+      else if(upd.proteinScore==='high')showToast(`💪 +${rnd(upd.protein||0)}g protein`,'var(--pro)');
     }catch(err){
-      draft.emoji='🍽️';
-      showToast('⚠ Macro calc failed: '+err.message.slice(0,50),'var(--danger)');
+      setDietEntries(p=>p.map(en=>en.id===entry.id?{...en,pending:false,macroErr:true,emoji:en.emoji==='⏳'?'🍽️':en.emoji}:en));
+      showToast(`Couldn’t work out macros for “${entry.food.slice(0,24)}”: tap it to try again`,'var(--danger)');
     }
-    setDietEntries(p=>[...p,draft]);
-    setIsLogging(false);
-    if(draft.carbHeavy)showToast('⚠ Carb-heavy meal','var(--warn)');
-    else if(draft.proteinScore==='high')showToast(`💪 +${rnd(draft.protein||0)}g protein`,'var(--pro)');
+    macroRun.current.delete(entry.id);
+    setCalcingEntries(p=>{const x=new Set(p);x.delete(entry.id);return x;});
+  }
+  function logFood(draft){
+    const e={...draft,id:draft.id||Date.now(),emoji:'⏳',items:[],pending:true};
+    setDietEntries(p=>[...p,e]);macroBg(e);return e;
+  }
+  // meals still waiting for their macros when the app was closed
+  useEffect(()=>{if(!storageReady)return;dietEntries.filter(e=>e.pending).forEach(e=>macroBg(e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[storageReady]);
+
+  async function handleDietAdd(text,at){
+    const food=(text||'').trim();
+    if(!food)return false;
+    const now=new Date(at||Date.now()).toISOString();
+    logFood({food,mealType,timestamp:now,day:getDayKey(now),...(at?{timeSet:true}:{})});
+    showToast('Logged · working out macros…');
   }
 
   async function handleDietEdit(id){
@@ -2533,44 +2541,21 @@ async function handleDietAdd(text,at){
   }
 
   async function handleAddToDay(dayKey,text,meal,at){
-    if(!text||addDayLoading)return;
-    setAddDayLoading(true);
-    const draft=at?{id:Date.now(),food:text,mealType:meal,timestamp:new Date(at).toISOString(),timeSet:true}
-      :{id:Date.now(),food:text,mealType:meal,timestamp:pastMealTs(dayKey,meal),approxTime:true};
-    try{
-      const raw=await callAI(buildMacroPrompt(meal,text),600,'fast',true);
-      const parsed=JSON.parse(raw);const items=parsed.items||[];
-      Object.assign(draft,{items,emoji:parsed.emoji||'🍽️',carbHeavy:parsed.carbHeavy||false,gasRisk:parsed.gasRisk||false,
-        proteinScore:parsed.proteinScore||'low',note:parsed.note||'',
-        protein:items.reduce((s,i)=>s+(i.protein||0),0)||null,
-        calories:items.reduce((s,i)=>s+(i.calories||0),0)||null,
-        carbs:items.reduce((s,i)=>s+(i.carbs||0),0)||null,
-        fat:items.reduce((s,i)=>s+(i.fat||0),0)||null});
-    }catch(_){draft.emoji='🍽️';}
-    setDietEntries(p=>[...p,draft]);setAddingToDay(null);setAddDayLoading(false);
-    showToast('Added ✓');
+    if(!text)return;
+    logFood(at?{food:text,mealType:meal,timestamp:new Date(at).toISOString(),timeSet:true}
+      :{food:text,mealType:meal,timestamp:pastMealTs(dayKey,meal),approxTime:true});
+    setAddingToDay(null);showToast('Added · working out macros…');
   }
 
   async function handleAddNewDay(text,meal,date){
-    if(!date||!text||newDayLoading)return;
-    setNewDayLoading(true);
-    const draft={id:Date.now(),food:text,mealType:meal,timestamp:pastMealTs(date,meal),approxTime:true};
-    try{
-      const raw=await callAI(buildMacroPrompt(meal,text),600,'fast',true);
-      const parsed=JSON.parse(raw);const items=parsed.items||[];
-      Object.assign(draft,{items,emoji:parsed.emoji||'🍽️',carbHeavy:parsed.carbHeavy||false,gasRisk:parsed.gasRisk||false,
-        proteinScore:parsed.proteinScore||'low',note:parsed.note||'',
-        protein:items.reduce((s,i)=>s+(i.protein||0),0)||null,
-        calories:items.reduce((s,i)=>s+(i.calories||0),0)||null,
-        carbs:items.reduce((s,i)=>s+(i.carbs||0),0)||null,
-        fat:items.reduce((s,i)=>s+(i.fat||0),0)||null});
-    }catch(_){draft.emoji='🍽️';}
-    setDietEntries(p=>[...p,draft]);setShowNewDay(false);setNewDayLoading(false);
-    showToast('Added ✓');
+    if(!date||!text)return;
+    logFood({food:text,mealType:meal,timestamp:pastMealTs(date,meal),approxTime:true});
+    setShowNewDay(false);showToast('Added · working out macros…');
   }
 
   async function calcEntry(id){
     const e=dietEntries.find(en=>en.id===id);if(!e)return;
+    if(e.macroErr||e.pending)return macroBg(e);
     setCalcingEntries(p=>new Set([...p,id]));
     try{
       const raw=await callAI(buildMacroPrompt(e.mealType,e.food),600,'fast',true);
@@ -4327,7 +4312,8 @@ Reply ONLY with valid JSON (no markdown):
               <span className="x-tag" style={{background:'var(--pri-c)',color:'var(--on-pri-c)'}}>{fmtN(m.cal)} kcal</span>
               <span className="x-tag" style={{background:'var(--violet-c)',color:'var(--on-violet-c)'}}>{rnd(m.pro)} g protein</span>
               <span className="x-tag" style={{background:'var(--amber-c)',color:'var(--on-amber-c)'}}>{rnd(m.carbs)} g carbs</span><span className="x-tag" style={{background:'var(--pink-c)',color:'var(--on-pink-c)'}}>{rnd(m.fat)} g fat</span>
-            </>:<span className="x-tag" style={{background:'var(--amber-c)',color:'var(--on-amber-c)'}}>Macros pending</span>}
+            </>:calcingEntries.has(e.id)?<span className="x-tag" style={{background:'var(--pri-c)',color:'var(--on-pri-c)',display:'inline-flex',alignItems:'center',gap:6}}><BtnSpinner size={14}/>Working out macros…</span>
+              :<span className="x-tag" style={{background:e.macroErr?'var(--err-c)':'var(--amber-c)',color:e.macroErr?'var(--on-err-c)':'var(--on-amber-c)'}}>{e.macroErr?'Macros failed · tap to retry':'Macros pending'}</span>}
             {e.carbHeavy&&<span className="x-tag" style={{background:'var(--amber-c)',color:'var(--on-amber-c)'}}>Carb-heavy</span>}
             {e.gasRisk&&<span className="x-tag" style={{background:'var(--err-c)',color:'var(--on-err-c)'}}>💨 Gas risk</span>}
           </span>
