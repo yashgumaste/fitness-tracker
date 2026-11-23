@@ -1,44 +1,49 @@
 {
-  "unreleased": [
-    {
-      "text": "Recording a walk or hike now starts with a race-style countdown: 3 · 2 · 1 · Go! with beeps (ting, tingg, tiiing, tuuut) and a buzz on each. Tapped Start by mistake? Press Cancel before Go and nothing is recorded."
-    },
-    {
-      "text": "While you jog, a big amber pill on the recording screen shows how long you’ve jogged and how far (“🏃 Jogged 1:15 · 210 m”). And any live number (pace, speed, cadence, stride) that stays clearly above your average for this walk for 3 seconds turns amber too, so you can see at a glance when you’re pushing.",
-      "img": "docs/whatsnew/jogging.png"
-    },
-    {
-      "text": "Log food: the Log it button is now at the top, next to ✕, and the top of every sheet stays on screen as you scroll, so the button is never hidden behind the keyboard or the time picker."
-    },
-    {
-      "text": "Fixed: after the app updated overnight, an old reminder you’d tapped “Later” on (like Sunday’s breakfast) could pop up the next morning. Old snoozed reminders are now dropped, and a snoozed one is also dropped as soon as you log that thing."
-    },
-    {
-      "text": "One reminder per moment: when the coach has a tip for a meal (or a walk reminder) at the same time as a “Keep it going” habit, you now get just the tip instead of two notifications about the same meal."
-    },
-    {
-      "text": "When you’ve logged a cold, sore throat, cough or fever (today or yesterday), the coach now sticks to warm, soothing food: soups, dal, khichdi, hot sabji, warm eggs or paneer, haldi doodh, ginger tea, instead of dahi, chaas or anything cold, and still finds you warm protein. Tomorrow’s meal tips follow the same rule."
-    },
-    {
-      "text": "How long a walk took now reads in words, like “9 mins 15 secs” or “1 hr 4 mins 9 secs”, so it can’t be mistaken for a clock time like 9:15. This covers the walk page (moving and total time, with big numbers and small units), the recording pill and finish screen, jogs, and what the coach is told. Pace stays as min/km."
-    },
-    {
-      "text": "Every length of time is now in words: the live recording clock (“25 mins 03.45 secs”), the jogging pill (“Jogged 1 min 15 secs · 210 m”) and sleep (“7 hrs 30 mins”, “30 mins short of 7 hrs”), as well as walks."
-    },
-    {
-      "text": "Recording no longer waits on GPS: until it finds you (indoors it may not at all), distance, speed, pace and stride are worked out from your steps and step length, marked ≈ and “from steps”. When GPS finds you it takes over, and the distance you walked before that still counts, in the saved walk too. While it’s looking, you see how many satellites it has, e.g. “Finding GPS… 3/11 satellites”."
-    },
-    {
-      "text": "Walks find your location much faster: recording now uses Google’s location service, the same one Google Maps uses, which combines GPS with Wi-Fi, mobile towers and the phone’s motion sensors instead of waiting on the GPS chip alone. Rough Wi-Fi positions indoors aren’t drawn on the route, so indoor walking is counted from your steps."
-    },
-    {
-      "text": "Walk maps: drag to move, pinch (or double-tap) to zoom; 2 seconds after you let go the map glides back to the whole route. Points that GPS throws across the road near tall buildings (a sudden spike out and back) are now dropped from the route and from the distance, on your past walks too."
-    },
-    {
-      "text": "Logging food no longer waits for the AI: tap Log it and the meal is in straight away, marked “Working out macros…”, and its calories, protein, carbs and fat fill in a few seconds later while you carry on. If the AI can’t answer, the meal stays logged and shows “Macros failed · tap to retry”; if the app closes first, it finishes the next time you open it. Same for adding food to a past day."
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.43",
+      "date": "2026-11-24",
+      "items": [
+        {
+          "text": "Recording a walk or hike now starts with a race-style countdown: 3 · 2 · 1 · Go! with beeps (ting, tingg, tiiing, tuuut) and a buzz on each. Tapped Start by mistake? Press Cancel before Go and nothing is recorded."
+        },
+        {
+          "text": "While you jog, a big amber pill on the recording screen shows how long you’ve jogged and how far (“🏃 Jogged 1:15 · 210 m”). And any live number (pace, speed, cadence, stride) that stays clearly above your average for this walk for 3 seconds turns amber too, so you can see at a glance when you’re pushing.",
+          "img": "docs/whatsnew/jogging.png"
+        },
+        {
+          "text": "Log food: the Log it button is now at the top, next to ✕, and the top of every sheet stays on screen as you scroll, so the button is never hidden behind the keyboard or the time picker."
+        },
+        {
+          "text": "Fixed: after the app updated overnight, an old reminder you’d tapped “Later” on (like Sunday’s breakfast) could pop up the next morning. Old snoozed reminders are now dropped, and a snoozed one is also dropped as soon as you log that thing."
+        },
+        {
+          "text": "One reminder per moment: when the coach has a tip for a meal (or a walk reminder) at the same time as a “Keep it going” habit, you now get just the tip instead of two notifications about the same meal."
+        },
+        {
+          "text": "When you’ve logged a cold, sore throat, cough or fever (today or yesterday), the coach now sticks to warm, soothing food: soups, dal, khichdi, hot sabji, warm eggs or paneer, haldi doodh, ginger tea, instead of dahi, chaas or anything cold, and still finds you warm protein. Tomorrow’s meal tips follow the same rule."
+        },
+        {
+          "text": "How long a walk took now reads in words, like “9 mins 15 secs” or “1 hr 4 mins 9 secs”, so it can’t be mistaken for a clock time like 9:15. This covers the walk page (moving and total time, with big numbers and small units), the recording pill and finish screen, jogs, and what the coach is told. Pace stays as min/km."
+        },
+        {
+          "text": "Every length of time is now in words: the live recording clock (“25 mins 03.45 secs”), the jogging pill (“Jogged 1 min 15 secs · 210 m”) and sleep (“7 hrs 30 mins”, “30 mins short of 7 hrs”), as well as walks."
+        },
+        {
+          "text": "Recording no longer waits on GPS: until it finds you (indoors it may not at all), distance, speed, pace and stride are worked out from your steps and step length, marked ≈ and “from steps”. When GPS finds you it takes over, and the distance you walked before that still counts, in the saved walk too. While it’s looking, you see how many satellites it has, e.g. “Finding GPS… 3/11 satellites”."
+        },
+        {
+          "text": "Walks find your location much faster: recording now uses Google’s location service, the same one Google Maps uses, which combines GPS with Wi-Fi, mobile towers and the phone’s motion sensors instead of waiting on the GPS chip alone. Rough Wi-Fi positions indoors aren’t drawn on the route, so indoor walking is counted from your steps."
+        },
+        {
+          "text": "Walk maps: drag to move, pinch (or double-tap) to zoom; 2 seconds after you let go the map glides back to the whole route. Points that GPS throws across the road near tall buildings (a sudden spike out and back) are now dropped from the route and from the distance, on your past walks too."
+        },
+        {
+          "text": "Logging food no longer waits for the AI: tap Log it and the meal is in straight away, marked “Working out macros…”, and its calories, protein, carbs and fat fill in a few seconds later while you carry on. If the AI can’t answer, the meal stays logged and shows “Macros failed · tap to retry”; if the app closes first, it finishes the next time you open it. Same for adding food to a past day."
+        }
+      ]
+    },
     {
       "version": "1.38",
       "date": "2026-11-23",
