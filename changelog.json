@@ -27,6 +27,9 @@
     },
     {
       "text": "Recording no longer waits on GPS: until it finds you (indoors it may not at all), distance, speed, pace and stride are worked out from your steps and step length, marked ≈ and “from steps”. When GPS finds you it takes over, and the distance you walked before that still counts, in the saved walk too. While it’s looking, you see how many satellites it has, e.g. “Finding GPS… 3/11 satellites”."
+    },
+    {
+      "text": "Walks find your location much faster: recording now uses Google’s location service, the same one Google Maps uses, which combines GPS with Wi-Fi, mobile towers and the phone’s motion sensors instead of waiting on the GPS chip alone. Rough Wi-Fi positions indoors aren’t drawn on the route, so indoor walking is counted from your steps."
     }
   ],
   "releases": [

@@ -14,6 +14,13 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.GnssStatus
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -178,7 +185,7 @@ object WalkState {
     @Synchronized fun onLocation(l: Location) {
         lastFix = System.currentTimeMillis(); lastAcc = l.accuracy
         if (state != "recording") return
-        if (!l.hasAccuracy() || l.accuracy > 35f) return          // too rough to draw
+        if (!l.hasAccuracy() || l.accuracy > 25f) return          // too rough to draw (Wi-Fi positions indoors are 20-50 m)
         val p = last
         if (p != null) {
             val d = p.distanceTo(l)
@@ -236,6 +243,9 @@ object WalkState {
 }
 
 class WalkService : Service(), LocationListener, SensorEventListener {
+    private val fused = object : LocationCallback() {
+        override fun onLocationResult(r: LocationResult) { for (l in r.locations) WalkState.onLocation(l) }
+    }
     // how many satellites the phone sees and uses, so "Finding GPS…" can show progress
     private val gnss: Any? = if (Build.VERSION.SDK_INT >= 24) object : GnssStatus.Callback() {
         override fun onSatelliteStatusChanged(st: GnssStatus) {
@@ -261,7 +271,14 @@ class WalkService : Service(), LocationListener, SensorEventListener {
         if (i?.getBooleanExtra("refresh", false) != true) {
             val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
             try {
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000L, 0f, this, Looper.getMainLooper())
+                // Google's fused location (like Google Maps): GPS plus Wi-Fi, cell towers and the motion sensors, and it
+                // keeps the satellite data warm, so it finds you far sooner than the GPS chip alone. Without Google Play
+                // services, the GPS chip on its own.
+                if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this) == ConnectionResult.SUCCESS) {
+                    val req = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2000L).setMinUpdateIntervalMillis(1000L)
+                        .setWaitForAccurateLocation(false).build()
+                    LocationServices.getFusedLocationProviderClient(this).requestLocationUpdates(req, fused, Looper.getMainLooper())
+                } else lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000L, 0f, this, Looper.getMainLooper())
                 if (Build.VERSION.SDK_INT >= 24 && gnss != null) lm.registerGnssStatusCallback(gnss as GnssStatus.Callback, handler)
             } catch (e: SecurityException) { } catch (e: IllegalArgumentException) { }
             val sm = getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -318,6 +335,7 @@ class WalkService : Service(), LocationListener, SensorEventListener {
     override fun onDestroy() {
         handler.removeCallbacks(tick)
         try { (getSystemService(Context.LOCATION_SERVICE) as LocationManager).removeUpdates(this) } catch (e: Exception) { }
+        try { LocationServices.getFusedLocationProviderClient(this).removeLocationUpdates(fused) } catch (e: Exception) { }
         try { if (Build.VERSION.SDK_INT >= 24 && gnss != null) (getSystemService(Context.LOCATION_SERVICE) as LocationManager).unregisterGnssStatusCallback(gnss as GnssStatus.Callback) } catch (e: Exception) { }
         try { (getSystemService(Context.SENSOR_SERVICE) as SensorManager).unregisterListener(this) } catch (e: Exception) { }
         super.onDestroy()
