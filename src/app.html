@@ -1128,7 +1128,13 @@ function thinTrack(pts,minM=4){if(!pts||pts.length<3)return pts||[];const out=[p
   for(let i=1;i<pts.length-1;i++){const l=out[out.length-1];if(distM([l[1],l[2]],[pts[i][1],pts[i][2]])>=minM)out.push(pts[i]);}
   out.push(pts[pts.length-1]);return out;}
 const speedKind=kmh=>kmh>=8?'run':kmh>=5.6?'brisk':kmh>=4?'walk':'stroll';
-const fmtDur=sec=>{sec=Math.round(sec);const h=Math.floor(sec/3600),m=Math.floor(sec/60)%60,s=sec%60;return h?`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`:`${m}:${String(s).padStart(2,'0')}`;};
+// how long something took, in words so it can't be read as a clock time: "9 mins 15 secs", "1 hr 4 mins 9 secs"
+const durParts=sec=>{sec=Math.max(0,Math.round(sec));const h=Math.floor(sec/3600),m=Math.floor(sec/60)%60,s=sec%60;
+  return [h?[h,h===1?'hr':'hrs']:null,h||m?[m,m===1?'min':'mins']:null,[s,s===1?'sec':'secs']].filter(Boolean);};
+const fmtDur=sec=>durParts(sec).map(([n,u])=>n+' '+u).join(' ');
+// the same with big numbers and small units, for the stat tiles
+const DurBig=({sec})=><span style={{display:'inline-flex',flexWrap:'wrap',alignItems:'baseline',columnGap:7}}>
+  {durParts(sec).map(([n,u])=><span key={u}>{n}<span style={{fontSize:'.46em',fontWeight:750,color:'var(--fg2)',marginLeft:3}}>{u}</span></span>)}</span>;
 // pace as minutes:seconds per km, e.g. 13:36 (shown with "min/km")
 const fmtPaceS=secPerKm=>{if(!isFinite(secPerKm)||secPerKm<=0)return '—';const t=Math.round(secPerKm);return `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`;};
 
@@ -4470,7 +4476,7 @@ Reply ONLY with valid JSON (no markdown):
     const stride=w.steps>0&&w.km>0?w.km*1000/w.steps:null,est=w.src==='hc'||(w.src==='manual'&&!walkLog[date]?.[w.slot]?.km);
     const e=est?'≈ ':'';
     const rise=st.maxAlt!=null&&st.minAlt!=null?st.maxAlt-st.minAlt:0;
-    const stats=hike?[['⏱','Moving time',fmtDur(sec),''],['🕐','Total time',fmtDur(elapsed),`${fmtDur(Math.max(0,elapsed-sec))} resting`],
+    const stats=hike?[['⏱','Moving time',<DurBig sec={sec}/>,''],['🕐','Total time',<DurBig sec={elapsed}/>,`${fmtDur(Math.max(0,elapsed-sec))} resting`],
       ['⛰️','Elevation gain',`${fmtN(st.gain)}`,'m climbed'],['↘️','Elevation loss',`${fmtN(st.loss)}`,'m down'],
       ...(st.hasAlt?[['🏔️','Highest point',fmtN(st.maxAlt),'m above sea'],['🏞️','Lowest point',fmtN(st.minAlt),`m · ${fmtN(rise)} m between`]]:[]),
       ['📈','Climbing speed',st.climbSec>120?fmtN(st.gain/(st.climbSec/3600)):'—','m up an hour while climbing'],
@@ -4478,7 +4484,7 @@ Reply ONLY with valid JSON (no markdown):
       ['⚡','Average pace',fmtPaceS(pace),'min/km moving'],['🏎️','Average speed',kmh?kmh.toFixed(1):'—','km/h moving'],
       ['👟','Steps',w.steps?fmtN(w.steps):'—',w.cadence?`${w.cadence} a minute`:''],['📏','Stride',stride?Math.round(stride*100):'—',stride?'cm a step':''],
       ['🔥','Calories',`~${fmtN(w.kcal)}`,'kcal, counting the climb'],['💨','Top speed',st.maxKmh?st.maxKmh.toFixed(1):'—','km/h']]
-     :[['⏱','Moving time',fmtDur(sec),''],...(gps?[['🕐','Total time',fmtDur(elapsed),'with pauses']]:[]),
+     :[['⏱','Moving time',<DurBig sec={sec}/>,''],...(gps?[['🕐','Total time',<DurBig sec={elapsed}/>,'with pauses']]:[]),
       ['⚡','Average pace',e+fmtPaceS(pace),'min/km'],['🏎️','Average speed',e+(kmh?kmh.toFixed(1):'—'),'km/h'],
       ['👟','Steps',w.steps?fmtN(w.steps):'—',''],['🎵','Cadence',w.cadence?String(w.cadence):'—','steps a minute'],
       ['📏','Stride',stride?e+Math.round(stride*100):'—',stride?'cm a step':''],['🔥','Calories',`~${w.kcal}`,'kcal from moving'],

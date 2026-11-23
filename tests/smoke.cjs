@@ -158,7 +158,8 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await pill.click();await W(600);if(await p.$('[aria-label="Open the recording"]'))throw new Error('pill should hide on the recording screen');await expect('Started');
     await click('button','Pause');await expect('Resume');await click('button','Resume');
     await click('button','Finish');await expect('Finish this walk');await click('.x-btn','Save walk');await W(900);
-    await expect('Pace for each km');await expect('Moving time');await expect('Elevation');
+    await expect('Pace for each km');await expect('Moving time');
+    if(!(await p.evaluate(()=>/25\s*mins\s*0\s*secs/.test(document.body.innerText))))throw new Error('moving time should read 25 mins 0 secs');await expect('Elevation');
     await expect('How it went over time');await expect('Cadence');await expect('Stride');await expect('higher = faster');
     if(!(await p.$('[aria-label="Route map"]')))throw new Error('no route map');
     await p.click('[aria-label="Back"]');await W();});
