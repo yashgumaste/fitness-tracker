@@ -7,7 +7,7 @@ const run=parseInt(process.env.RUN||'1',10);
 // Manifest
 const mf=path.join(app,'src/main/AndroidManifest.xml');
 let m=fs.readFileSync(mf,'utf8');
-for(const perm of ['android.permission.POST_NOTIFICATIONS','android.permission.RECEIVE_BOOT_COMPLETED','android.permission.WAKE_LOCK','android.permission.REQUEST_INSTALL_PACKAGES','android.permission.ACTIVITY_RECOGNITION',
+for(const perm of ['android.permission.POST_NOTIFICATIONS','android.permission.VIBRATE','android.permission.RECEIVE_BOOT_COMPLETED','android.permission.WAKE_LOCK','android.permission.REQUEST_INSTALL_PACKAGES','android.permission.ACTIVITY_RECOGNITION',
   'android.permission.ACCESS_FINE_LOCATION','android.permission.ACCESS_COARSE_LOCATION','android.permission.FOREGROUND_SERVICE','android.permission.FOREGROUND_SERVICE_LOCATION']){
   if(!m.includes(perm))m=m.replace('</manifest>',`    <uses-permission android:name="${perm}" />\n</manifest>`);
 }

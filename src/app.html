@@ -57,6 +57,11 @@ button.x-card:active{filter:brightness(1.12);}
 .x-ibtn{width:44px;height:44px;border-radius:22px;border:none;background:var(--s3);color:var(--fg);display:grid;place-items:center;font-size:18px;flex:none;
   transition:border-radius .28s var(--spring)!important;}
 .x-ibtn:active{border-radius:14px;}
+.x-chip{transition:border-radius .3s var(--spring)!important;}
+.x-chip:active:not(:disabled){border-radius:10px;}
+.dock-tab,.dock-add{transition:border-radius .3s var(--spring)!important;}
+.dock-tab:active{border-radius:18px;}
+.dock-add:active:not(:disabled){border-radius:16px;}
 .x-ibtn.pri{background:var(--pri);color:var(--on-pri);}
 .x-ibtn.tonal{background:var(--pri-c);color:var(--on-pri-c);}
 .x-ibtn.sm{width:36px;height:36px;font-size:15px;}
@@ -662,10 +667,12 @@ input.m3-input{border-radius:999px;}
 ::view-transition-new(lm-hero){height:100%;object-fit:cover;animation:lm-vt-in .24s var(--m-effects) .05s both}
 :root[data-vt=open]::view-transition-old(root){animation:lm-vt-recede .35s var(--m-effects) both}
 :root[data-vt=open]::view-transition-new(root){animation:lm-vt-in .35s var(--m-effects) both}
-:root[data-vt=back]::view-transition-old(root){animation:lm-vt-out-r .3s var(--m-emph) both}
-:root[data-vt=back]::view-transition-new(root){animation:lm-vt-in-l .38s var(--m-emph) both}
-:root[data-vt=tab]::view-transition-old(root){animation:lm-vt-fade-out .09s linear both}
-:root[data-vt=tab]::view-transition-new(root){animation:lm-vt-through .3s var(--m-effects) .06s both}
+/* Motion starts where you tapped (--tx, --ty): a tab or a page opened from the island spreads up from the bottom,
+   one opened from a pill comes down from the top; Back gathers it back into that spot. Springy and slow-fast-slow. */
+:root[data-vt=back]::view-transition-old(root){z-index:2;transform-origin:var(--tx) var(--ty);animation:lm-vt-gather .42s var(--m-emph) both}
+:root[data-vt=back]::view-transition-new(root){animation:lm-vt-settle .45s var(--m-effects) both}
+:root[data-vt=tab]::view-transition-old(root),:root[data-vt=grow]::view-transition-old(root){transform-origin:var(--tx) var(--ty);animation:lm-vt-recede .5s var(--m-emph) both}
+:root[data-vt=tab]::view-transition-new(root),:root[data-vt=grow]::view-transition-new(root){transform-origin:var(--tx) var(--ty);animation:lm-vt-spread .55s var(--m-spatial) both}
 :root[data-vt=sheet]::view-transition-new(root){animation:lm-vt-rise .42s var(--m-spatial) both}
 :root[data-vt=sheet]::view-transition-old(root){animation:lm-vt-fade-out .2s linear both}
 :root[data-vt=unsheet]::view-transition-old(root){animation:lm-vt-sink .3s var(--m-emph) both;z-index:2}
@@ -686,7 +693,19 @@ input.m3-input{border-radius:999px;}
 @keyframes lm-cd-out{to{opacity:0;visibility:hidden}}
 @keyframes lm-pop-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-18px) scale(.8,.35)}}
 :root[data-vt=pop]::view-transition-old(root),:root[data-vt=pop]::view-transition-new(root){animation:none}
-@keyframes lm-vt-recede{to{opacity:.4;transform:scale(.94)}}
+@keyframes lm-vt-recede{to{opacity:.35;transform:scale(.93)}}
+@keyframes lm-vt-spread{from{clip-path:circle(24px at var(--tx) var(--ty));transform:scale(.9)}to{clip-path:circle(var(--tr) at var(--tx) var(--ty));transform:none}}
+@keyframes lm-vt-gather{from{clip-path:circle(var(--tr) at var(--tx) var(--ty))}to{clip-path:circle(20px at var(--tx) var(--ty));transform:scale(.88);opacity:.2}}
+@keyframes lm-vt-settle{from{opacity:.5;transform:scale(.96)}}
+/* full-screen pages carry their own name (lm-hero): when there's no card to grow out of, they spread from the tap too */
+:root[data-vt=grow]::view-transition-new(lm-hero):only-child{transform-origin:var(--tx) var(--ty);animation:lm-vt-spread .55s var(--m-spatial) both}
+:root[data-vt=back]::view-transition-old(lm-hero):only-child,:root[data-vt=tab]::view-transition-old(lm-hero):only-child{transform-origin:var(--tx) var(--ty);animation:lm-vt-gather .42s var(--m-emph) both}
+/* something appearing or going in the page (the jogging pill): grows open on a spring, shrinks away smoothly */
+.lm-show{display:grid;grid-template-rows:1fr;animation:lm-show-in .5s var(--m-spatial) both}
+.lm-show.out{animation:lm-show-out .38s var(--m-emph) both}
+.lm-show>*{min-height:0}
+@keyframes lm-show-in{from{grid-template-rows:0fr;opacity:0;transform:scale(.86)}45%{opacity:1}to{grid-template-rows:1fr;opacity:1;transform:none}}
+@keyframes lm-show-out{from{grid-template-rows:1fr;opacity:1;transform:none}to{grid-template-rows:0fr;opacity:0;transform:scale(.9)}}
 @keyframes lm-vt-in{from{opacity:0}}
 @keyframes lm-vt-out-r{to{opacity:0;transform:translateX(18%)}}
 @keyframes lm-vt-in-l{from{opacity:0;transform:translateX(-12%)}}
@@ -1954,7 +1973,11 @@ function App(){
   // reduced motion, the change just happens.
   const vtCur=useRef({}),lastTap=useRef(null),vtBack=useRef([]);
   const heroKey=e=>(e.getAttribute('aria-label')||'')+'|'+(e.textContent||'').slice(0,40);
-  useEffect(()=>{const h=e=>{lastTap.current={el:e.target.closest&&e.target.closest('button,[role=button],.top-pill'),t:Date.now()};};
+  // a light tick under your thumb on every tap (Android only; nothing while scrolling)
+  useEffect(()=>{const h=e=>{const b=e.target.closest&&e.target.closest('button:not(:disabled),[role=button],.top-pill');
+      if(b){try{navigator.vibrate&&navigator.vibrate(7);}catch(_){}}};
+    document.addEventListener('click',h,true);return()=>document.removeEventListener('click',h,true);},[]);
+  useEffect(()=>{const h=e=>{lastTap.current={el:e.target.closest&&e.target.closest('button,[role=button],.top-pill'),t:Date.now(),x:e.clientX,y:e.clientY};};
     document.addEventListener('pointerdown',h,true);return()=>document.removeEventListener('pointerdown',h,true);},[]);
   // The island's main button: hold timer, and a short label the first time each new action shows up
   const fabHold=useRef({t:0,held:false}),fabNow=useRef(null),fabLast=useRef(null),fabSeen=useRef({});
@@ -1967,10 +1990,17 @@ function App(){
     if(!d.startViewTransition||!(window.ReactDOM&&ReactDOM.flushSync)||d.hidden||(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)){update();return;}
     // grow out of what was tapped, unless a full-screen page (which already carries the name) is up
     const busy=d.querySelector('[style*="view-transition-name: lm-hero"]');
-    const tp=lastTap.current,hero=!busy&&kind==='open'&&tp&&tp.el&&tp.el.isConnected&&Date.now()-tp.t<1500?tp.el:null;
-    if(kind==='open')vtBack.current.push({y:window.scrollY,key:hero?heroKey(hero):null});
+    const tp=lastTap.current,fresh=tp&&Date.now()-tp.t<1500,hero=!busy&&kind==='open'&&fresh&&tp.el&&tp.el.isConnected?tp.el:null;
+    // where the motion starts: the point you tapped (the island at the bottom, a pill at the top…); Back goes home
+    // to where its page came from
+    const W=window.innerWidth,Hh=window.innerHeight;
+    const at=fresh&&tp.x!=null?{x:tp.x,y:tp.y}:{x:W/2,y:Hh/2};
+    if(kind==='open')vtBack.current.push({y:window.scrollY,key:hero?heroKey(hero):null,x:at.x,y0:at.y});
     const back=kind==='back'?vtBack.current.pop():null;
-    root.dataset.vt=kind;if(hero)hero.style.viewTransitionName='lm-hero';
+    const o=back&&back.x!=null?{x:back.x,y:back.y0}:at;
+    root.style.setProperty('--tx',o.x+'px');root.style.setProperty('--ty',o.y+'px');
+    root.style.setProperty('--tr',Math.ceil(Math.hypot(Math.max(o.x,W-o.x),Math.max(o.y,Hh-o.y))+8)+'px');
+    root.dataset.vt=hero?kind:kind==='open'?'grow':kind;if(hero)hero.style.viewTransitionName='lm-hero';
     try{const t=d.startViewTransition(()=>{if(hero)hero.style.viewTransitionName='';ReactDOM.flushSync(update);
         if(back){window.scrollTo(0,back.y);
           // Back: the page shrinks into the same card it grew out of (found again by its label and text)
@@ -1978,7 +2008,7 @@ function App(){
           if(el){el.style.viewTransitionName='lm-hero';t.finished.catch(()=>{}).finally(()=>{el.style.viewTransitionName='';});}}});
       // a newer transition can cut this one short: that's fine, the update has still run
       t.ready.catch(()=>{});t.updateCallbackDone.catch(()=>{});
-      t.finished.catch(()=>{}).finally(()=>{if(root.dataset.vt===kind)delete root.dataset.vt;});}
+      t.finished.catch(()=>{}).finally(()=>{if(root.dataset.vt===kind||root.dataset.vt==='grow')delete root.dataset.vt;});}
     catch(e){if(hero)hero.style.viewTransitionName='';update();}
   }
   // a small thing growing into a bigger one in place (a pill into its card), named lm-pop
@@ -1991,6 +2021,22 @@ function App(){
   }
   function vtSet(name,raw,kindOf){return v=>{const prev=vtCur.current[name],next=typeof v==='function'?v(prev):v;
     const k=kindOf(prev,next);if(!k){raw(v);return;}vtCur.current={...vtCur.current,[name]:next};vtRun(k,()=>raw(next));};}
+  useEffect(()=>{
+    if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+    let tx=null,lastY=window.scrollY,lastT=performance.now(),v=0,ang=0,raf=0;
+    const tick=()=>{raf=0;const W=window.innerWidth,side=tx==null?0:tx>W/2?-1:1;
+      const target=Math.max(-1.1,Math.min(1.1,v*0.55))*side;ang+=(target-ang)*0.22;v*=0.86;
+      document.querySelectorAll('[data-cloth]').forEach(e=>{
+        if(Math.abs(ang)<0.008){e.style.transform='';return;}
+        e.style.transformOrigin=`${tx==null?W/2:tx}px 50%`;e.style.transform=`skewY(${ang.toFixed(3)}deg)`;});
+      if(Math.abs(ang)>=0.008||Math.abs(v)>0.02)raf=requestAnimationFrame(tick);};
+    const onTouch=e=>{const t=e.touches&&e.touches[0];if(t)tx=t.clientX;};
+    const onScroll=()=>{const t=performance.now(),dy=window.scrollY-lastY,dt=Math.max(8,t-lastT);lastY=window.scrollY;lastT=t;
+      v=v*0.6+(dy/dt)*0.4;if(!raf)raf=requestAnimationFrame(tick);};
+    window.addEventListener('touchstart',onTouch,{passive:true});window.addEventListener('touchmove',onTouch,{passive:true});
+    window.addEventListener('scroll',onScroll,{passive:true});
+    return()=>{window.removeEventListener('touchstart',onTouch);window.removeEventListener('touchmove',onTouch);window.removeEventListener('scroll',onScroll);cancelAnimationFrame(raf);};
+  },[]);
   const [tab,setTab_]=useState('home');
   const setTab=vtSet('tab',setTab_,(a,b)=>a!==b?'tab':null);
   const [sheet,setSheet_]=useState(null);
@@ -4423,11 +4469,11 @@ Reply ONLY with valid JSON (no markdown):
           <span className="x-tag" aria-label="Time now" style={{background:'var(--s3)',color:'var(--fg)'}}>🕐 Now {clockStr(clock)}</span>
           <span className="x-tag" style={{background:r.gps==='ok'?'var(--mint-c)':'var(--amber-c)',color:r.gps==='ok'?'var(--on-mint-c)':'var(--on-amber-c)'}}>{gpsTxt}</span>
         </div>
-        {jog&&<div role="status" aria-label={`Jogging for ${fmtDur((Date.now()-jog.t)/1000)}, ${jogM<1000?Math.round(jogM)+' metres':(jogM/1000).toFixed(2)+' kilometres'}`}
-          style={{background:'var(--amber)',color:'#fff',borderRadius:999,padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'center',gap:7,
-            flexWrap:'wrap',rowGap:2,fontWeight:850,fontSize:18.5,lineHeight:1.1,textShadow:'0 1px 3px rgba(0,0,0,.45)',transformOrigin:'50% 0',animation:'lm-pop-in .45s var(--m-spatial) both'}}>
+        <Presence show={!!jog}>{jog&&<div role="status" aria-label={`Jogging for ${fmtDur((Date.now()-jog.t)/1000)}, ${jogM<1000?Math.round(jogM)+' metres':(jogM/1000).toFixed(2)+' kilometres'}`}
+          style={{background:'var(--amber)',color:'#2B1D00',borderRadius:999,padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'center',gap:7,
+            flexWrap:'wrap',rowGap:2,fontWeight:850,fontSize:18.5,lineHeight:1.1}}>
           <span aria-hidden="true">🏃</span><span>Jogged</span><JogClock since={jog.t}/><span aria-hidden="true" style={{opacity:.8}}>·</span>
-          <span className="x-num">{jogM<1000?`${Math.round(jogM)} m`:`${(jogM/1000).toFixed(2)} km`}</span></div>}
+          <span className="x-num">{jogM<1000?`${Math.round(jogM)} m`:`${(jogM/1000).toFixed(2)} km`}</span></div>}</Presence>
         {recEdit&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:6}}>
           <b style={{fontSize:16}}>Numbers on this screen</b>
           <div className="x-sub" style={{fontSize:12.5}}>Pick as many big and small numbers as you like: big ones go two to a row, in the order you tap them. Saved for every {what} you record; {hike?'walks':'hikes'} keep their own layout.</div>
@@ -6774,7 +6820,7 @@ Reply ONLY with valid JSON (no markdown):
       {toast&&<div className="x-snack" role="status" style={sheet?{top:'calc(12px + env(safe-area-inset-top,0px))',bottom:'auto'}:null}><i style={{background:toast.color}}/>{toast.msg}</div>}
       {setupOpen&&!sheet&&renderSetup()}
       {renderBigWater()}
-      {overlayEl&&<div className="page-pad" style={{flex:1,display:'flex',flexDirection:'column',viewTransitionName:'lm-hero'}}>
+      {overlayEl&&<div className="page-pad" data-cloth={recOpen?undefined:''} style={{flex:1,display:'flex',flexDirection:'column',viewTransitionName:'lm-hero'}}>
         {pillsNow.length>0&&<div style={{height:46,flexShrink:0}} aria-hidden="true"/>}
         {overlayEl}</div>}
       <div style={{display:sheet||setupOpen||overlayEl?'none':'flex',flexDirection:'column',flex:1}}>
@@ -6785,7 +6831,7 @@ Reply ONLY with valid JSON (no markdown):
       <div style={{flex:1,display:'flex',flexDirection:'column'}}>
 
         {/* Current page — only the active page renders, ghost is a separate clone below */}
-        <div className="page-pad" style={{flex:1,display:'flex',flexDirection:'column'}}>
+        <div className="page-pad" data-cloth="" style={{flex:1,display:'flex',flexDirection:'column'}}>
           {pillsNow.length>0&&<div style={{height:46,flexShrink:0}} aria-hidden="true"/>}
           {pageEl}
         </div>
@@ -6973,6 +7019,14 @@ function RecClock({ms,at,running,size}){
 // recording screen: a number's heading and the line under it use the same type
 const TILE_TXT={fontSize:13.5,fontWeight:750,color:'var(--fg2)',lineHeight:1.3};
 let _jogging=false;
+// Shows children while `show`; when it turns off, keeps the last ones on screen while they shrink away
+function Presence({show,children,ms=380}){
+  const last=useRef(null),[gone,setGone]=useState(!show);
+  if(show)last.current=children;
+  useEffect(()=>{if(show){setGone(false);return;}const t=setTimeout(()=>setGone(true),ms);return()=>clearTimeout(t);},[show,ms]);
+  if(!show&&(gone||!last.current))return null;
+  return <div className={'lm-show'+(show?'':' out')}><div>{show?children:last.current}</div></div>;
+}
 // how long the current jog has lasted, ticking every second
 function JogClock({since}){
   const [,tick]=useState(0);
