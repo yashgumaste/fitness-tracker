@@ -5861,7 +5861,7 @@ Reply ONLY with valid JSON (no markdown):
               <button className="x-btn" style={{background:'var(--pri)',color:'var(--on-pri)'}} onClick={()=>getUpdate(update)}>⬇ {dl?'Try again':'Download & install'}</button></>}
             {dl&&dl.state==='downloading'&&<div style={{display:'flex',flexDirection:'column',gap:8}}>
               <div style={{display:'flex',justifyContent:'space-between',fontWeight:700}}><span>Downloading…</span><span className="x-num">{dl.pct}%</span></div>
-              <WavyBar value={dl.pct} max={100} color="var(--pri)" track="rgba(0,0,0,.18)"/></div>}
+              <WavyBar value={dl.pct} max={100} color="var(--pri)" track="rgba(0,0,0,.18)" moving/></div>}
             {dl&&dl.state==='done'&&<>
               <div style={{fontWeight:700}}>Downloaded ✓ — tap Install on the next screen. Your data stays.</div>
               <button className="x-btn" style={{background:'var(--pri)',color:'var(--on-pri)'}} onClick={()=>window.LMNative.installUpdate()}>Install now</button></>}
@@ -7286,9 +7286,29 @@ function PeriodBars({items,goal,onPick}){
       <text x={PW+26} y={gy+4} textAnchor="middle" fontSize="10.5" fontWeight="800" style={{fill:'var(--mint)'}}>{goal>=1000?(goal/1000)+'k':goal}</text></g>
   </svg>);
 }
-function WavyBar({value=0,max=1,color='var(--pri)',track='rgba(255,255,255,.12)',h=14,over=false}){
-  const W=300,p=Math.max(0,Math.min(1,max?value/max:0)),x=p*W,mid=h/2,amp=h*.2,wl=22,sw=Math.max(3.5,h*.3);
-  let d='';for(let i=0;i<=x;i+=1.5){d+=(i?'L':'M')+i.toFixed(1)+' '+(mid+amp*Math.sin(i/wl*2*Math.PI)).toFixed(2);}
+// Phase (0..1 of a wavelength) that keeps travelling while `on`, so a wave flows like M3 Expressive's
+// in-progress indicators. Stops for reduced motion, a hidden page or when the bar goes away.
+function useWavePhase(on,period=1100){
+  const [ph,setPh]=useState(0);
+  useEffect(()=>{
+    if(!on||(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches))return;
+    let raf=0,last=0,acc=0;
+    const tick=t=>{const dt=last&&t>last?Math.min(t-last,50):16.7;last=t;
+      if(!document.hidden){acc=(acc+dt/period)%1;setPh(acc);}raf=requestAnimationFrame(tick);};
+    raf=requestAnimationFrame(tick);return()=>cancelAnimationFrame(raf);
+  },[on,period]);
+  return on?ph:0;
+}
+// `moving`: the wave flows forward while something is in progress (a download); it flattens out at 100%.
+function WavyBar({value=0,max=1,color='var(--pri)',track='rgba(255,255,255,.12)',h=14,over=false,moving=false}){
+  const W=300,p=Math.max(0,Math.min(1,max?value/max:0)),wl=22,sw=Math.max(3.5,h*.3),mid=h/2;
+  const flow=moving&&p<1,ph=useWavePhase(flow),sp=useRef(p);
+  // progress arrives in steps (every half second): glide the end towards it on each frame instead of jumping
+  sp.current=flow?sp.current+(p-sp.current)*.1:p;
+  // while moving, ease the wave in from the left so the start stays still and the crests travel to the end
+  const x=flow?Math.max(sp.current*W,14):p*W,amp=h*.2*(moving&&p>=1?0:1);
+  let d='';for(let i=0;i<=x;i+=1.5){const a=flow?amp*Math.min(1,i/10):amp;
+    d+=(i?'L':'M')+i.toFixed(1)+' '+(mid+a*Math.sin((i/wl-ph)*2*Math.PI)).toFixed(2);}
   return(
     <svg viewBox={`0 0 ${W} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{display:'block',overflow:'visible'}} aria-hidden="true">
       {x<W-10&&<line x1={x>0?x+10:0} y1={mid} x2={W} y2={mid} style={{stroke:track}} strokeWidth={sw} strokeLinecap="round" vectorEffect="non-scaling-stroke"/>}

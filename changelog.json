@@ -17,6 +17,9 @@
     },
     {
       "text": "Steps by the hour now include the walks you record. Health Connect often gets a walk’s steps late (or not at all), so a recorded walk could show as 0 steps in its hour; now each hour shows whichever is higher, Health Connect’s count or the walk’s own steps in that hour, and recorded walks are highlighted in mint like the others."
+    },
+    {
+      "text": "While an update downloads, the wavy progress bar now flows like a moving wave and glides forward smoothly instead of standing still."
     }
   ],
   "releases": [
