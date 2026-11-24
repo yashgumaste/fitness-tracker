@@ -1,28 +1,33 @@
 {
-  "unreleased": [
-    {
-      "text": "The jogging pill is easy to read now (dark text on amber), and it grows open on a spring when you start jogging and shrinks away smoothly when you stop, instead of popping in and out."
-    },
-    {
-      "text": "Motion starts where you tap: switching tabs or opening a page from the island at the bottom spreads the new screen up from that button, a page opened from a pill at the top comes down from it, and Back gathers it back into the spot it came from. Everything moves slow-fast-slow with a little spring at the end. Chips and island buttons change shape when pressed, every tap gives a light buzz, and scrolling has a subtle cloth-like feel: the side away from your thumb trails a touch behind and settles when you stop."
-    },
-    {
-      "text": "Scrolling feels like weighted cloth: as you scroll, the side away from your thumb trails behind (up to 3°), and when you stop it swings back a little past flat and settles. Tuned on the Cloth Scroll Lab test page."
-    },
-    {
-      "text": "Settings: all reminders are now on one Reminders page, in sections: Logging, Coach, Movement and Water. “Theme & colour” is now “Look & feel”, with a new Motion section where you can turn cloth-like scrolling off or tune its strength, sensitivity, springiness and wobble (default: your tuning of 2.7°, 3.3, 0.25, no wobble)."
-    },
-    {
-      "text": "Fixed: when GPS barely moved during a walk (indoors or a weak signal), the walk got a tiny distance, and the coach then said you were “shuffling or standing around”. Now, if the GPS distance would mean steps of just a few centimetres, the distance, pace and stride come from your steps × step length instead (marked ≈ with a note on the walk), and the coach is told the GPS failed, so it trusts your steps and cadence. This also fixes walks you’ve already recorded."
-    },
-    {
-      "text": "Steps by the hour now include the walks you record. Health Connect often gets a walk’s steps late (or not at all), so a recorded walk could show as 0 steps in its hour; now each hour shows whichever is higher, Health Connect’s count or the walk’s own steps in that hour, and recorded walks are highlighted in mint like the others."
-    },
-    {
-      "text": "While an update downloads, the progress bar now waves the whole time, like Android’s own Material 3 Expressive bars: the wave keeps rolling even when the download pauses, the bar glides to each new percentage, the wave flattens out near the start and the finish, and there’s a dot marking the end. If the size isn’t known yet, a wavy stretch keeps sweeping across the bar until it is."
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.45",
+      "date": "2026-11-25",
+      "items": [
+        {
+          "text": "The jogging pill is easy to read now (dark text on amber), and it grows open on a spring when you start jogging and shrinks away smoothly when you stop, instead of popping in and out."
+        },
+        {
+          "text": "Motion starts where you tap: switching tabs or opening a page from the island at the bottom spreads the new screen up from that button, a page opened from a pill at the top comes down from it, and Back gathers it back into the spot it came from. Everything moves slow-fast-slow with a little spring at the end. Chips and island buttons change shape when pressed, every tap gives a light buzz, and scrolling has a subtle cloth-like feel: the side away from your thumb trails a touch behind and settles when you stop."
+        },
+        {
+          "text": "Scrolling feels like weighted cloth: as you scroll, the side away from your thumb trails behind (up to 3°), and when you stop it swings back a little past flat and settles. Tuned on the Cloth Scroll Lab test page."
+        },
+        {
+          "text": "Settings: all reminders are now on one Reminders page, in sections: Logging, Coach, Movement and Water. “Theme & colour” is now “Look & feel”, with a new Motion section where you can turn cloth-like scrolling off or tune its strength, sensitivity, springiness and wobble (default: your tuning of 2.7°, 3.3, 0.25, no wobble)."
+        },
+        {
+          "text": "Fixed: when GPS barely moved during a walk (indoors or a weak signal), the walk got a tiny distance, and the coach then said you were “shuffling or standing around”. Now, if the GPS distance would mean steps of just a few centimetres, the distance, pace and stride come from your steps × step length instead (marked ≈ with a note on the walk), and the coach is told the GPS failed, so it trusts your steps and cadence. This also fixes walks you’ve already recorded."
+        },
+        {
+          "text": "Steps by the hour now include the walks you record. Health Connect often gets a walk’s steps late (or not at all), so a recorded walk could show as 0 steps in its hour; now each hour shows whichever is higher, Health Connect’s count or the walk’s own steps in that hour, and recorded walks are highlighted in mint like the others."
+        },
+        {
+          "text": "While an update downloads, the progress bar now waves the whole time, like Android’s own Material 3 Expressive bars: the wave keeps rolling even when the download pauses, the bar glides to each new percentage, the wave flattens out near the start and the finish, and there’s a dot marking the end. If the size isn’t known yet, a wavy stretch keeps sweeping across the bar until it is."
+        }
+      ]
+    },
     {
       "version": "1.43",
       "date": "2026-11-24",
