@@ -2025,17 +2025,22 @@ function App(){
     if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)return;
     let tx=null,lastY=window.scrollY,lastT=performance.now(),v=0,ang=0,raf=0;
     const tick=()=>{raf=0;const W=window.innerWidth,side=tx==null?0:tx>W/2?-1:1;
-      const target=Math.max(-1.1,Math.min(1.1,v*0.55))*side;ang+=(target-ang)*0.22;v*=0.86;
+      const target=Math.max(-1.1,Math.min(1.1,v*0.55))*side;ang+=(target-ang)*0.22;v*=fy==null?0.9:0.8;
       document.querySelectorAll('[data-cloth]').forEach(e=>{
         if(Math.abs(ang)<0.008){e.style.transform='';return;}
         e.style.transformOrigin=`${tx==null?W/2:tx}px 50%`;e.style.transform=`skewY(${ang.toFixed(3)}deg)`;});
       if(Math.abs(ang)>=0.008||Math.abs(v)>0.02)raf=requestAnimationFrame(tick);};
-    const onTouch=e=>{const t=e.touches&&e.touches[0];if(t)tx=t.clientX;};
+    // speed from the finger as well as from scrolling (some scrolls don't report every frame)
+    let fy=null,ft=0;
+    const onTouch=e=>{const t=e.touches&&e.touches[0];if(!t)return;tx=t.clientX;const now=performance.now();
+      if(e.type==='touchmove'&&fy!=null){v=v*0.5+((fy-t.clientY)/Math.max(8,now-ft))*0.5;if(!raf)raf=requestAnimationFrame(tick);}
+      fy=t.clientY;ft=now;};
+    const onEnd=()=>{fy=null;};
     const onScroll=()=>{const t=performance.now(),dy=window.scrollY-lastY,dt=Math.max(8,t-lastT);lastY=window.scrollY;lastT=t;
       v=v*0.6+(dy/dt)*0.4;if(!raf)raf=requestAnimationFrame(tick);};
     window.addEventListener('touchstart',onTouch,{passive:true});window.addEventListener('touchmove',onTouch,{passive:true});
-    window.addEventListener('scroll',onScroll,{passive:true});
-    return()=>{window.removeEventListener('touchstart',onTouch);window.removeEventListener('touchmove',onTouch);window.removeEventListener('scroll',onScroll);cancelAnimationFrame(raf);};
+    window.addEventListener('scroll',onScroll,{passive:true});window.addEventListener('touchend',onEnd,{passive:true});
+    return()=>{window.removeEventListener('touchstart',onTouch);window.removeEventListener('touchmove',onTouch);window.removeEventListener('scroll',onScroll);window.removeEventListener('touchend',onEnd);cancelAnimationFrame(raf);};
   },[]);
   const [tab,setTab_]=useState('home');
   const setTab=vtSet('tab',setTab_,(a,b)=>a!==b?'tab':null);
