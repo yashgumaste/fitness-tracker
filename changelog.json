@@ -11,6 +11,9 @@
     },
     {
       "text": "Settings: all reminders are now on one Reminders page, in sections: Logging, Coach, Movement and Water. “Theme & colour” is now “Look & feel”, with a new Motion section where you can turn cloth-like scrolling off or tune its strength, sensitivity, springiness and wobble (default: your tuning of 2.7°, 3.3, 0.25, no wobble)."
+    },
+    {
+      "text": "Fixed: when GPS barely moved during a walk (indoors or a weak signal), the walk got a tiny distance, and the coach then said you were “shuffling or standing around”. Now, if the GPS distance would mean steps of just a few centimetres, the distance, pace and stride come from your steps × step length instead (marked ≈ with a note on the walk), and the coach is told the GPS failed, so it trusts your steps and cadence. This also fixes walks you’ve already recorded."
     }
   ],
   "releases": [

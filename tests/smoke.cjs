@@ -177,7 +177,13 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     // a point thrown across the road by a tall building is dropped (and so is the distance it added)
     const cl=await p.evaluate(()=>{const a=[];for(let i=0;i<20;i++)a.push([i*2,19.0645+i*0.00005,72.8655+i*0.00003]);
       a.splice(10,0,[19,19.0630,72.8670]);const r=window.__lmCleanTrack(a);return{n:r.pts.length,cut:Math.round(r.cut)};});
-    if(cl.n!==20||cl.cut<200)throw new Error('spike not removed: '+JSON.stringify(cl));await expect('Elevation');
+    if(cl.n!==20||cl.cut<200)throw new Error('spike not removed: '+JSON.stringify(cl));
+    // GPS that barely moved while the steps show real walking (indoors): the distance comes from the steps instead
+    const wk=await p.evaluate(()=>{const s=new Date('2026-11-09T14:00:00+05:30').getTime(),pts=[];for(let i=0;i<40;i++)pts.push([i*30,19.0645+i*0.000002,72.8655]);
+      window.__lmTest.addTrack({id:'weak1',start:s,end:s+40*60000,kind:'walk',movingMs:40*60000,steps:4125,distGps:370,pts});return true;});
+    await W(300);
+    const w=await p.evaluate(()=>{const x=window.__lmTest.moveDay('2026-11-09').walks.find(w=>w.trackId==='weak1');window.__lmTest.dropTrack('weak1');return x&&{km:x.km,weak:x.gpsWeak};});
+    if(!w||!w.weak||w.km<2.5)throw new Error('weak-GPS walk should use steps × step length: '+JSON.stringify(w));await expect('Elevation');
     await expect('How it went over time');await expect('Cadence');await expect('Stride');await expect('higher = faster');
     if(!(await p.$('[aria-label="Route map"]')))throw new Error('no route map');
     await p.click('[aria-label="Back"]');await W();});

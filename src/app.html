@@ -2175,6 +2175,7 @@ function App(){
   const [sleepLog,setSleepLog]=useState({}); // see SLEEP_KEY
   const [waterLog,setWaterLog]=useState({}); // see WATER_KEY
   const [tracks,setTracks]=useState({});      // walks recorded with Start/Finish (GPS)
+  window.__lmTest={addTrack:t=>setTracks(p=>({...p,[t.id]:t})),dropTrack:id=>setTracks(p=>{const n={...p};delete n[id];return n;}),moveDay:d=>moveDay(d)};   // for the tests
   const [stepsLog,setStepsLog]=useState({});  // {date:{b:[144 ten-minute step counts],at}} from Health Connect
   const [walkLog,setWalkLog]=useState({});   // {date:{morning:{from,to,steps,km},night:{…},dayTotal}}
   function deleteWalk(date,slot){ // slot=null → whole-day phone steps
@@ -2921,7 +2922,7 @@ function App(){
       const asM=w=>{const pace=w.min&&w.km?w.min/w.km:null;return{min:w.min,steps:w.steps,km:w.km,pace,speed:pace?60/pace:null,cadence:w.cadence,
         stride:w.steps>50&&w.km>0?w.km*100000/w.steps:null,jogs:w.stats&&w.stats.jogs||[],jogSec:w.stats?w.stats.jogSec:0};};
       const wm=moveDay(date).walks.map(w=>({w,m:asM(w)}));
-      const walkLine=({w,m})=>`${w.name}${w.src==='hc'?' (from phone steps; distance estimated)':w.src==='gps'?' (recorded with GPS)':' (added by hand)'}: ${w.end?`${m2hm(w.start)}-${m2hm(w.end)} (${m.min} min moving)`:'time not logged'}`+
+      const walkLine=({w,m})=>`${w.name}${w.src==='hc'?' (from phone steps; distance estimated)':w.src==='gps'?(w.gpsWeak?' (recorded, but GPS was too weak, likely indoors: distance, pace and stride are estimated from steps × step length)':' (recorded with GPS)'):' (added by hand)'}: ${w.end?`${m2hm(w.start)}-${m2hm(w.end)} (${m.min} min moving)`:'time not logged'}`+
         `${m.steps?`, ${m.steps} steps`:''}${m.km?`, ${m.km.toFixed(2)} km`:''}`+
         `${m.pace?`, pace ${fmtPace(m.pace)} min/km, speed ${m.speed.toFixed(1)} km/h`:''}${m.cadence?`, cadence ${Math.round(m.cadence)} steps/min`:''}${m.stride?`, stride ${Math.round(m.stride)} cm`:''}`+
         `${m.jogs.length?`, including ${m.jogs.length} short jog${m.jogs.length>1?'s':''} (${fmtDur(m.jogSec)} in total, up to ${Math.max(...m.jogs.map(j=>j.kmh)).toFixed(1)} km/h)`:''}, ~${w.kcal} kcal`;
@@ -2990,7 +2991,7 @@ Give a JSON response ONLY (no markdown):
   "rating": "💪 Strong"|"✅ Solid"|"⚠️ Light"|"🎯 Getting started"|"🩹 Recovering",
   "summary": "<2-3 sentences: the whole day at a glance (food, movement, sleep and water together) against the goal>",
   "food_insight": ${hasMeals?'"<as in RULES>"':'null'},
-  "walk_insight": ${wm.length?`"<4-6 sentences, like a running coach reading a watch: (1) what the walks were: distance, stride and pace (write pace as m:ss min/km with km/h in brackets); if a walk's time wasn't logged, say you can't judge its pace. (2) compare with the last 7 days' averages (pace, km/h, steps/min, stride). (3) read cadence against speed: high cadence with slow speed means short, quick steps; long stride with low cadence means overstriding. (4) mention any short jogs and what they add. (5) give concrete targets: a pace in m:ss min/km with km/h, a cadence (steps/min) and a stride tip, and how to split the walks against the plan (e.g. two brisk 30-minute walks instead of one long easy one).>"`:'null'},
+  "walk_insight": ${wm.length?`"<4-6 sentences, like a running coach reading a watch: (1) what the walks were: distance, stride and pace (write pace as m:ss min/km with km/h in brackets); if a walk's time wasn't logged, say you can't judge its pace. (2) compare with the last 7 days' averages (pace, km/h, steps/min, stride). (3) read cadence against speed: high cadence with slow speed means short, quick steps; long stride with low cadence means overstriding. (4) mention any short jogs and what they add. (5) give concrete targets: a pace in m:ss min/km with km/h, a cadence (steps/min) and a stride tip, and how to split the walks against the plan (e.g. two brisk 30-minute walks instead of one long easy one). Trust the step counter and cadence over GPS distance: when steps and steps/min show real walking but GPS distance is tiny (a step of only a few cm), the GPS failed (indoors, a weak signal), the person did not shuffle or stand around; say the distance is estimated and never tell them it wasn't a real walk.>"`:'null'},
   "workout_insight": ${hasWorkout?'"<2-3 sentences: which planned exercises were done or skipped (sets, reps, weight), what that means for this week of the plan, and whether the food that day fuelled it>"':'null'},
   "body_insight": ${bodyLogged?'"<2-3 sentences: sleep, water, weight and feelings or symptoms: what they mean for recovery and the goal; follow the illness and stomach-pain rules>"':'null'},
   "top_win": "<the single best thing about the day, specific>",
@@ -3218,7 +3219,11 @@ Reply ONLY with valid JSON (no markdown):
     const trs=Object.values(tracks).filter(t=>t&&localDate(new Date(t.start))===date);
     const ck=JSON.stringify([kg,kmStep,stepsLog[date]?.at,wl,trs.map(t=>t.id+':'+t.pts.length+':'+(t.name||''))]);const c=moveCache.current[date];if(c&&c.k===ck)return c.v;
     const gps=trs.map(t0=>{const cl=cleanTrack(t0.pts),t=cl.cut?{...t0,pts:cl.pts}:t0;
-      const st=trackStats(t.pts,t.altSrc),km=((t.distGps?Math.max(0,t.distGps-cl.cut):st.dist||0)+(t.distSteps||0))/1000,hike=t.kind==='hike';
+      const st=trackStats(t.pts,t.altSrc),hike=t.kind==='hike';let km=((t.distGps?Math.max(0,t.distGps-cl.cut):st.dist||0)+(t.distSteps||0))/1000;
+      // GPS that barely moved while you clearly walked (indoors, or a weak signal) gives a step of a few cm, which
+      // nobody walks with. Then the steps are the better measure: steps × your step length.
+      const gpsWeak=!hike&&(t.steps||0)>=200&&km*100000/t.steps<40;
+      if(gpsWeak)km=t.steps*kmStep;
       // a hike's moving time leaves out rests (no movement for 30 s or more); a walk's is the recorder's time minus pauses
       const mSec=hike&&st.movingSec>60?st.movingSec:t.movingMs/1000,min=Math.max(1,Math.round(mSec/60));
       const kmh=km/Math.max(1/60,mSec/3600),kind=hike?'hike':speedKind(kmh),d0=new Date(t.start),start=d0.getHours()*60+d0.getMinutes()+d0.getSeconds()/60;
@@ -3226,7 +3231,7 @@ Reply ONLY with valid JSON (no markdown):
       // hikes: calories from speed and slope (uphill costs much more), with a little extra for rough trail
       const kcal=(hike&&st.kcalPerKg>0?Math.round(st.kcalPerKg*kg*1.2):Math.round((WALK_MET[kind]-1)*kg*min/60))
         +Math.round(Math.max(0,8.5-WALK_MET[kind])*kg*st.jogSec/3600);   // short jogs burn more than walking
-      return{id:'gps-'+t.id,src:'gps',trackId:t.id,start,end:start+(t.end-t.start)/60000,min,steps,km,cadence:t.steps?Math.round(t.steps/min):null,kind,kmh,
+      return{id:'gps-'+t.id,src:'gps',trackId:t.id,start,end:start+(t.end-t.start)/60000,min,steps,km,gpsWeak,cadence:t.steps?Math.round(t.steps/min):null,kind,kmh,
         name:t.name||(hike?`${partOfDay(start)[0]} hike`:walkName(kind,start)),emoji:hike?'🥾':partOfDay(start)[1],kcal,stats:st,track:t};});
     const det=(sb?detectWalks(sb):[]).filter(d=>!gps.some(g=>d.start<g.end&&d.end>g.start));
     const kcalOf=w=>Math.round(w.min?(WALK_MET[w.kind]-1)*kg*w.min/60:(w.km||w.steps*kmStep)*kg*0.5);
@@ -4408,7 +4413,10 @@ Reply ONLY with valid JSON (no markdown):
   const kmPerStep=()=>bodySaved&&+bodyMeasure.heightCm?bodyMeasure.heightCm*0.415/100000:KM_PER_STEP;
   function recDist(r){const ks=kmPerStep()*1000,p0=(r.pts||[])[0],steps=r.steps||0;
     if(!p0)return{m:steps*ks,pre:steps*ks,est:true};
-    const pre=(p0[6]!=null?+p0[6]:0)*ks;return{m:(r.distanceM||0)+pre,pre,est:false};}
+    const pre=(p0[6]!=null?+p0[6]:0)*ks,m=(r.distanceM||0)+pre;
+    // GPS barely moving while you walk (indoors): a step of under 40 cm isn't real, so count steps instead
+    if(steps>=200&&m/steps<0.4)return{m:steps*ks,pre,est:true};
+    return{m,pre,est:false};}
   function renderRecPage(){
     const r=rec||{state:'idle',pts:[]};const paused=r.state==='paused',running=r.state==='recording';
     const dist=recDist(r),est=dist.est&&(r.steps||0)>0;
@@ -4552,7 +4560,7 @@ Reply ONLY with valid JSON (no markdown):
     if(!w)return(<div>{head('Walk',dateLong(date),'🚶')}<div className="x-wrap"><div className="x-card">This walk isn’t here any more.</div></div></div>);
     const gps=w.src==='gps',st=w.stats||{},hike=w.kind==='hike',sec=gps?(hike?w.min*60:w.track.movingMs/1000):(w.min||0)*60;
     const elapsed=gps?(w.track.end-w.track.start)/1000:null,pace=w.km>0&&sec>0?sec/w.km:NaN,kmh=sec>0?w.km/(sec/3600):0;
-    const stride=w.steps>0&&w.km>0?w.km*1000/w.steps:null,est=w.src==='hc'||(w.src==='manual'&&!walkLog[date]?.[w.slot]?.km);
+    const stride=w.steps>0&&w.km>0?w.km*1000/w.steps:null,est=w.src==='hc'||w.gpsWeak||(w.src==='manual'&&!walkLog[date]?.[w.slot]?.km);
     const e=est?'≈ ':'';
     const rise=st.maxAlt!=null&&st.minAlt!=null?st.maxAlt-st.minAlt:0;
     const stats=hike?[['⏱','Moving time',<DurBig sec={sec}/>,''],['🕐','Total time',<DurBig sec={elapsed}/>,`${fmtDur(Math.max(0,elapsed-sec))} resting`],
@@ -4582,6 +4590,7 @@ Reply ONLY with valid JSON (no markdown):
         <div className="x-card mint sa" style={{display:'flex',alignItems:'baseline',gap:10,flexWrap:'wrap'}}>
           <span className="x-num" style={{fontSize:64,lineHeight:1,color:'var(--fg)'}}>{e}{w.km.toFixed(2)}</span><span style={{fontWeight:800,fontSize:18}}>km</span>
           <span style={{flex:1}}/><span style={{fontWeight:800}}>{fmtDur(sec)} · {hike?`↑ ${fmtN(st.gain)} m`:`${fmtPaceS(pace)} min/km`}</span>
+          {w.gpsWeak&&<span className="x-sub" style={{flexBasis:'100%',color:'var(--on-mint-c)'}}>≈ From your {fmtN(w.steps)} steps × step length: GPS barely moved (indoors or a weak signal), so it couldn’t measure this walk.</span>}
         </div>
         {gps&&st.jogs&&st.jogs.length>0&&<div className="x-card" style={{display:'flex',flexDirection:'column',gap:8}}>
           <div style={{display:'flex',alignItems:'baseline',gap:8}}><h2 className="x-h2" style={{margin:0,flex:1}}>🏃 Short jogs</h2>
