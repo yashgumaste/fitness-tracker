@@ -97,7 +97,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   for(const v of ['Day','Week','Month','Year'])
     await step('Fitness history '+v,async()=>{await click('.x-seg button','History');await click('.x-seg button',v);await expect('Workouts');});
   await step('Progress',async()=>{await tab(3);await expect('Trends');await expect('Body');});
-  await step('Settings',async()=>{await tab(4);for(const t of ['Profile','Body','Goals','AI','Water reminders','Logging reminders','Move reminders','Health Connect','Theme & colour','Data & backup','About & updates']){
+  await step('Settings',async()=>{await tab(4);for(const t of ['Profile','Body','Goals','AI','Reminders','Health Connect','Look & feel','Data & backup','About & updates']){
       await click('.x-item',t);await W();if(!(await p.$('[aria-label="Back to settings"]')))throw new Error(t+' page did not open');
       await p.click('[aria-label="Back to settings"]');await W();}
     await click('.x-item','Goals');await expect('Daily goals');await expect('Goal weight');
@@ -210,16 +210,19 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await click('.x-btn','Restore from Drive');await W(300);await expect('latest');
     const log=await p.evaluate(()=>window.__drive.join(','));if(!/backup/.test(log)||!/schedule:weekly:false/.test(log))throw new Error('drive calls: '+log);
     await click('.x-btn','Close');await p.click('[aria-label="Back to settings"]');await W();});
-  await step('Move reminders',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Move reminders');
-    await click('.x-seg button','On');await expect('Remind me after sitting for');await click('.x-chip','45 min');await click('.x-seg button','Off');
+  await step('Move reminders',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Reminders');
+    // the On/Off inside the Movement section of the one Reminders page
+    const seg=lab=>p.evaluate(lab=>{const hd=[...document.querySelectorAll('h2')].find(e=>e.textContent==='Movement');
+      const card=hd.closest('div').nextElementSibling;[...card.querySelectorAll('.x-seg button')].find(x=>x.textContent.trim()===lab).click();},lab);
+    await seg('On');await W(300);await expect('Remind me after sitting for');await click('.x-chip','45 min');await seg('Off');await W(300);
     await p.click('[aria-label="Back to settings"]');await W();});
-  await step('Water in sips, gulps & glasses',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Water reminders');
+  await step('Water in sips, gulps & glasses',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Reminders');
     await click('button','Sips, gulps & glasses');await expect('Your gulp is about');await p.click('[aria-label="Back to settings"]');await W();
     await tab(0);await expect('+1 glass');            // favourites: the sample history is all glassesconst before=await p.evaluate(()=>document.body.innerText.match(/([\d.]+)\s*(ml|L)\b/)?.[0]);
     await click('.x-btn','+1 glass');await W(600);
-    await tab(4);await click('.x-item','Water reminders');await click('button','ml');await p.click('[aria-label="Back to settings"]');await W();await tab(0);await expect('+250');});
-  await step('Logging reminders',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Logging reminders');
-    await expect('Logging reminders');await expect('Coach’s reminders');await expect('Next ·');await click('.x-item','Snack');
+    await tab(4);await click('.x-item','Reminders');await click('button','ml');await p.click('[aria-label="Back to settings"]');await W();await tab(0);await expect('+250');});
+  await step('Logging reminders',async()=>{await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Reminders');
+    for(const h of ['Logging','Coach','Movement','Water'])if(!(await p.$(`h2:text-is("${h}")`)))throw new Error('Reminders page should have a '+h+' section');await expect('Next ·');await click('.x-item','Snack');
     // each reminder has its own timing: move Dinner's to 1 h after, the coach's to 2 h before
     const dinnerAt=async()=>p.evaluate(()=>{const r=[...document.querySelectorAll('button.x-item')].find(e=>/\bDinner\b/.test(e.innerText)&&/Usually/.test(e.innerText));return r?r.innerText:'';});
     await p.click('[aria-label="Dinner: 1 h after your usual time"]');await W(300);
@@ -345,7 +348,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     if(await p.evaluate(()=>/Couldn’t get the coach/.test(document.body.innerText)))throw new Error('the review should have come through');
     await p.click('.dock-pill.bar [aria-label=Back]');await W();});
   await step('Free AI used by default',async()=>{const c=await p.evaluate(()=>window.__aiCalls);if(!c.some(u=>/generativelanguage/.test(u)))throw new Error('AI did not go to Gemini: '+c.join(','));});
-  await step('Colour picker',async()=>{await tab(4);await click('.x-item','Theme & colour');await click('.x-btn','Make your own colour');for(const m of ['RGB','HSV','Hex'])await click('.x-seg button',m);await close();});
+  await step('Colour picker',async()=>{await tab(4);await click('.x-item','Look & feel');await expect('Cloth-like scrolling');await expect('Springiness');await click('.x-btn','Make your own colour');for(const m of ['RGB','HSV','Hex'])await click('.x-seg button',m);await close();});
   await step('Update check',async()=>{await p.evaluate(()=>{window.LMNative.installSource=async()=>({installedAt:Date.parse('2026-11-01T10:00:00+05:30'),updatedAt:Date.parse('2026-11-09T01:58:00+05:30'),
       installer:'com.google.android.packageinstaller',initiator:'dev.imranr.obtainium',initiatorName:'Obtainium'});});
     await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','About & updates');await click('.x-btn','Check for updates');await W(500);

@@ -2021,13 +2021,14 @@ function App(){
   }
   function vtSet(name,raw,kindOf){return v=>{const prev=vtCur.current[name],next=typeof v==='function'?v(prev):v;
     const k=kindOf(prev,next);if(!k){raw(v);return;}vtCur.current={...vtCur.current,[name]:next};vtRun(k,()=>raw(next));};}
+  const clothRef=useRef(CLOTH_DEF);
   useEffect(()=>{
     if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)return;
     // the tilt is a small weight on a spring: scrolling pulls it over, it lags, and when you stop it swings back a
-    // little past flat and settles, like cloth with some weight (same numbers as the Cloth Scroll Lab defaults)
-    const C={amt:3.0,sens:4.0,spring:0.31,wobble:0.45};   // Yash's tuning in the Cloth Scroll Lab
+    // little past flat and settles, like cloth with some weight. Settings → Look & feel (prefs.cloth); defaults are
+    // Yash's tuning in the Cloth Scroll Lab
     let tx=null,lastY=window.scrollY,lastT=performance.now(),v=0,ang=0,vel=0,raf=0;
-    const tick=()=>{raf=0;const W=window.innerWidth,side=tx==null?0:tx>W/2?-1:1;
+    const tick=()=>{raf=0;const C=clothRef.current,W=window.innerWidth,side=tx==null||!C.on?0:tx>W/2?-1:1;
       const target=Math.max(-C.amt,Math.min(C.amt,v*C.sens))*side;
       vel+=(target-ang)*C.spring;vel*=1-(1-C.wobble)*0.5;ang=Math.max(-C.amt*1.3,Math.min(C.amt*1.3,ang+vel));v*=fy==null?0.92:0.85;
       const rest=Math.abs(ang)<0.005&&Math.abs(vel)<0.005&&Math.abs(v)<0.01;if(rest){ang=0;vel=0;}
@@ -5506,6 +5507,9 @@ Reply ONLY with valid JSON (no markdown):
     </div>);
   }
   const l2=k=>({sleep:'Sleep',bedtime:'Bedtime',coach:'Coach’s plan',walk:'Brisk walk'}[k]||k);
+  const remHead=(em,t,sub)=><div style={{display:'flex',alignItems:'center',gap:12,margin:'14px 2px 2px'}}>
+    <span style={{fontSize:24}} aria-hidden="true">{em}</span><span><h2 style={{margin:0,fontSize:22,fontWeight:850,fontStretch:'120%'}}>{t}</h2>
+    <span className="x-sub" style={{display:'block'}}>{sub}</span></span></div>;
   function renderLogSettings(){
     const c=logCfg;const setL=f=>setPrefs(p=>{const cur={...c,...(p.logrem||{})};return{...p,logrem:{...cur,...(typeof f==='function'?f(cur):f)}};});
     const native=window.LMNative?.isNative;const U=usualTimes();
@@ -5513,15 +5517,15 @@ Reply ONLY with valid JSON (no markdown):
     const when=at=>{const d=new Date(at);return `${localDate(d)===TODAY?'today':'tomorrow'} ${fmt12(m2hm(d.getHours()*60+d.getMinutes()))}`;};
     const fmtM=m=>fmt12(m2hm(m));
     return(<>
+      {remHead('🔔','Logging','Log what you eat, sleep and drink')}
       <div className="x-card" style={{display:'flex',flexDirection:'column',gap:12}}>
-        <div className="x-sub">Logging reminders: a good-morning check-in to log your sleep, a nudge after your usual meal times if you haven’t logged yet, and a bedtime reminder. Below them, the coach’s reminders, which come <i>before</i> the usual time.</div>
+        <div className="x-sub">A good-morning check-in to log your sleep, a nudge after your usual meal times if you haven’t logged yet, and a bedtime reminder. This switch also turns on the coach’s reminders below, which come <i>before</i> the usual time.</div>
         <Seg items={[['off','Off'],['on','On']]} value={c.on?'on':'off'} onChange={v=>setL({on:v==='on'})}/>
         {c.on&&nx&&<div style={{background:'var(--s4)',borderRadius:22,padding:'12px 14px',display:'flex',gap:12,alignItems:'flex-start'}}>
             <Shape kind="cookie9" size={40} fill={nx.kind==='sleep'?'var(--violet-c)':'var(--amber-c)'} color={nx.kind==='sleep'?'var(--on-violet-c)':'var(--on-amber-c)'} font={19}>{nx.kind==='sleep'||nx.kind==='bedtime'?'🌙':nx.kind==='nudge'?({walk:'🚶',star:'⭐',coach:'🧠'}[nx.icon]||'🍽️'):'🍽️'}</Shape>
             <div style={{flex:1,minWidth:0}}><div className="x-eyebrow" style={{marginBottom:3}}>Next · {when(nx.at)}</div>
             <b style={{display:'block'}}>{nx.title}</b><div className="x-sub" style={{marginTop:2}}>{nx.body}</div></div></div>}
         {c.on&&<>
-          <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Logging reminders</div>
           <div className="x-list">
             {LOG_KINDS.map(([k,em,l,sub])=>{const u=U[k];const nextK=items.find(x=>x.kind===k);
               const bp=k==='bedtime'?bedPlan(new Date().getHours()<4?calAddDays(TODAY,-1):TODAY):null;
@@ -5534,7 +5538,15 @@ Reply ONLY with valid JSON (no markdown):
                 <span className={`m3-switch${c[k]?' on':''}`} aria-checked={!!c[k]} role="switch"><span className="m3-switch-thumb"/></span>
               </button>{c[k]&&remTiming(k,setL)}</React.Fragment>);})}
           </div>
-          <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Coach’s reminders</div>
+          <div className="x-sub">Each reminder has its own timing, under its switch. Usual times are learned from when you log (last 4 weeks, weekdays and weekends apart). Bedtime counts back from lights-out: tomorrow’s wake-up time (same weekday last week, else this morning, else your usual) minus the sleep you need for your age (8 h up to 25, 7 h 30 after), plus 30 min after a short night and 15 min after a hard day. The coach’s nudges never come before you usually wake. Nothing comes if you’ve already logged it (or a later meal), or before 6 AM or after 11 PM. “Later” asks again in 30 minutes.</div>
+          {native&&<button className="x-btn outline" onClick={()=>{const k='sleep',at=Date.now();const msg=logMessage(k,TODAY,new Date(TODAY+'T'+m2hm((isWeekend(TODAY)?U.sleep.we:U.sleep.wd)+30)+':00').getTime());
+            window.LMNative.testLog({kind:k,...msg}).then(ok=>showToast(ok?'Test reminder sent':'Notifications are blocked',ok?'var(--ok)':'var(--warn)'));}}>Send a test reminder</button>}
+          {!native&&<div className="x-sub">Reminders work in the Android app.</div>}
+        </>}
+      </div>
+      {remHead('🧠','Coach','From the coach’s review of your day')}
+      <div className="x-card" style={{display:'flex',flexDirection:'column',gap:12}}>
+        {c.on?<>
           <div className="x-list">
             {[['coach','🧠','Coach’s plan','After you ask the coach to review a day: a food tip before each usual meal, a cheer for a habit worth repeating, and after dinner a nudge to get the review if you haven’t'],
               ['walk','🚶','Brisk walk',(()=>{const W=usualWalks();const second=W.lunchOff!=null?`a walk ${W.lunchOff<10?'right':`about ${W.lunchOff} min`} after lunch`:W.pm!=null?`your usual ${fmt12(m2hm(W.pm))} walk`:'a walk after lunch';
@@ -5547,11 +5559,7 @@ Reply ONLY with valid JSON (no markdown):
                 <span className={`m3-switch${c[k]?' on':''}`} aria-checked={!!c[k]} role="switch"><span className="m3-switch-thumb"/></span>
               </button>{c[k]&&remTiming(k,setL)}</React.Fragment>);})}
           </div>
-          <div className="x-sub">Each reminder has its own timing, under its switch. Usual times are learned from when you log (last 4 weeks, weekdays and weekends apart). Bedtime counts back from lights-out: tomorrow’s wake-up time (same weekday last week, else this morning, else your usual) minus the sleep you need for your age (8 h up to 25, 7 h 30 after), plus 30 min after a short night and 15 min after a hard day. The coach’s nudges never come before you usually wake. Nothing comes if you’ve already logged it (or a later meal), or before 6 AM or after 11 PM. “Later” asks again in 30 minutes.</div>
-          {native&&<button className="x-btn outline" onClick={()=>{const k='sleep',at=Date.now();const msg=logMessage(k,TODAY,new Date(TODAY+'T'+m2hm((isWeekend(TODAY)?U.sleep.we:U.sleep.wd)+30)+':00').getTime());
-            window.LMNative.testLog({kind:k,...msg}).then(ok=>showToast(ok?'Test reminder sent':'Notifications are blocked',ok?'var(--ok)':'var(--warn)'));}}>Send a test reminder</button>}
-          {!native&&<div className="x-sub">Reminders work in the Android app.</div>}
-        </>}
+        </>:<div className="x-sub">The coach’s reminders come with reminders on: switch them on under Logging.</div>}
       </div>
     </>);
   }
@@ -5651,11 +5659,9 @@ Reply ONLY with valid JSON (no markdown):
       ['body','📏','Body',currentBF?`${currentBF}% body fat`:'Height, weight, measurements','pink'],
       ['goals','🎯','Goals',`${fmtN(G.calMin)}–${fmtN(G.calMax)} kcal · ${G.protein} g protein · ${G.steps/1000}k steps`,'amber'],
       ['ai','✨','AI',prov==='claude'?'Claude (your key)':'Free (Gemini)','pri'],
-      ['reminders','💧','Water reminders',waterCfg.on?`Every ${waterCfg.every} min, ${fmt12(waterCfg.start)}–${fmt12(waterCfg.end)}`:'Off','sky'],
-      ['logrem','🔔','Logging reminders',logCfg.on?LOG_KINDS.filter(([k])=>logCfg[k]).map(([,,l])=>l).join(', ')||'Nothing picked':'Off','violet'],
-      ['move','🚶','Move reminders',moveCfg.on?`After ${moveCfg.mins>=60?(moveCfg.mins/60)+' h':moveCfg.mins+' min'} still, ${fmt12(moveCfg.start)}–${fmt12(moveCfg.end)}`:'Off','mint'],
+      ['reminders','🔔','Reminders',[logCfg.on&&'Logging',logCfg.on&&(logCfg.coach||logCfg.walk)&&'Coach',moveCfg.on&&'Movement',waterCfg.on&&'Water'].filter(Boolean).join(' · ')||'All off','violet'],
       ['health','❤️','Health Connect',window.LMNative?.isNative?(hcOn?'Connected':'Not connected'):'Android app only','pink'],
-      ['look','🎨','Theme & colour',`${{system:'Follows phone',light:'Light',dark:'Dark'}[themeMode]} · ${(ACCENTS.find(([h])=>h.toLowerCase()===accent.toLowerCase())||[0,'Custom'])[1]}`,'mint'],
+      ['look','🎨','Look & feel',`${{system:'Follows phone',light:'Light',dark:'Dark'}[themeMode]} · ${(ACCENTS.find(([h])=>h.toLowerCase()===accent.toLowerCase())||[0,'Custom'])[1]} · cloth scroll ${{...CLOTH_DEF,...(prefs.cloth||{})}.on?'on':'off'}`,'mint'],
       ['data','💾','Data & backup',driveSt&&driveSt.email?(driveSt.last?`Drive · backed up ${new Date(driveSt.last).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}`:'Drive · no backup yet'):`${dietEntries.length} meals · back up to Google Drive`,'amber'],
       ['app','ℹ️','About & updates',`Version ${window.LMNative?.version||''}`,'violet']];
     if(!settingsPage)return(
@@ -5747,9 +5753,12 @@ Reply ONLY with valid JSON (no markdown):
       </div>;
     }
     if(settingsPage==='ai')content=<div className="x-wrap" style={{paddingTop:0}}>{renderAISettings()}</div>;
-    if(settingsPage==='reminders')content=<div className="x-wrap" style={{paddingTop:0}}>{renderWaterSettings()}</div>;
-    if(settingsPage==='logrem')content=<div className="x-wrap" style={{paddingTop:0}}>{renderLogSettings()}</div>;
-    if(settingsPage==='move')content=<div className="x-wrap" style={{paddingTop:0}}>{renderMoveSettings()}</div>;
+    // every reminder on one page: logging, the coach's, movement and water
+    if(settingsPage==='reminders')content=<div className="x-wrap" style={{paddingTop:0}}>
+      {renderLogSettings()}
+      {remHead('🚶','Movement','When you’ve been still too long')}{renderMoveSettings()}
+      {remHead('💧','Water','Sips through the day')}{renderWaterSettings()}
+    </div>;
     if(settingsPage==='health')content=renderHealthSettings();
     if(settingsPage==='look')content=<div className="x-wrap" style={{paddingTop:0}}>
       <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Theme</div>
@@ -5777,6 +5786,29 @@ Reply ONLY with valid JSON (no markdown):
               <span className="x-sub" style={{display:'block'}}>{prefs.iconAccent?'The home-screen icon matches your accent (the closest of 36 colours). It changes when you leave the app.':'Off: the home-screen icon stays cyan.'} White background when your phone is in light mode, black in dark mode.</span></span>
             <span className={`m3-switch${prefs.iconAccent?' on':''}`}><span className="m3-switch-thumb"/></span>
           </button>
+      {(()=>{const cl={...CLOTH_DEF,...(prefs.cloth||{})},setC=f=>setPrefs(p=>({...p,cloth:{...CLOTH_DEF,...(p.cloth||{}),...f}}));
+        const slide=(k,label,min,max,step,show,hint)=><div style={{display:'flex',flexDirection:'column',gap:6}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><b style={{fontSize:15}}>{label}</b><span className="x-num" style={{fontSize:15}}>{show(cl[k])}</span></div>
+          <input type="range" className="x-range" min={min} max={max} step={step} value={cl[k]} aria-label={label} disabled={!cl.on}
+            onChange={e=>setC({[k]:+e.target.value})} style={{height:36,background:`linear-gradient(to right,var(--pri) ${(cl[k]-min)/(max-min)*100}%,var(--s4) 0)`,opacity:cl.on?1:.45}}/>
+          <span className="x-sub" style={{fontSize:12.5}}>{hint}</span></div>;
+        const isDef=['amt','sens','spring','wobble'].every(k=>cl[k]===CLOTH_DEF[k]);
+        return(<>
+          <div className="x-eyebrow" style={{margin:'6px 2px 0'}}>Motion</div>
+          <div className="x-card" style={{display:'flex',flexDirection:'column',gap:16}}>
+            <button onClick={()=>setC({on:!cl.on})} role="switch" aria-checked={cl.on} style={{display:'flex',alignItems:'center',gap:14,textAlign:'left',border:'none',background:'transparent',color:'var(--fg)',padding:0}}>
+              <Shape kind="cookie9" size={46} fill="var(--mint-c)" color="var(--on-mint-c)" font={22}>🧣</Shape>
+              <span style={{flex:1,minWidth:0}}><b style={{display:'block',fontSize:16}}>Cloth-like scrolling</b>
+                <span className="x-sub" style={{display:'block'}}>While you scroll, the side away from your thumb trails behind a little, then settles.</span></span>
+              <span className={`m3-switch${cl.on?' on':''}`}><span className="m3-switch-thumb"/></span>
+            </button>
+            {slide('amt','Strength',0,3,0.1,v=>v.toFixed(1)+'°','The most it tilts')}
+            {slide('sens','Sensitivity',0.2,4,0.1,v=>v.toFixed(1),'How much ordinary scrolling tilts it')}
+            {slide('spring','Springiness',0.02,0.4,0.01,v=>v.toFixed(2),'Lower feels heavier and lazier, higher follows your thumb quickly')}
+            {slide('wobble','Wobble',0,0.9,0.05,v=>v.toFixed(2),'How much it swings past flat when you stop (0 = none)')}
+            {!isDef&&<button className="x-btn tonal" onClick={()=>setC({amt:CLOTH_DEF.amt,sens:CLOTH_DEF.sens,spring:CLOTH_DEF.spring,wobble:CLOTH_DEF.wobble})}>Back to the default feel</button>}
+            <span className="x-sub" style={{fontSize:12.5}}>Scroll this page to feel it as you change it. Android’s “Remove animations” turns it off.</span>
+          </div></>);})()}
 
     </div>;
     if(settingsPage==='data')content=<div className="x-wrap" style={{paddingTop:0}}>
@@ -6824,6 +6856,7 @@ Reply ONLY with valid JSON (no markdown):
   const dockSpec=overlayEl?{acts:[{id:'back',icon:ICON.back,label:'Back',act:closeOverlay},...((pageDockSpec&&pageDockSpec.acts)||[]).filter(Boolean)],fab:(pageDockSpec&&pageDockSpec.fab)||null}
     :{fab:tabFab()};
   const dockOn=!kbOpen&&!sheet&&!setupOpen&&!recOpen;
+  clothRef.current={...CLOTH_DEF,...(prefs.cloth||{})};
   fabNow.current=dockOn&&dockSpec.fab?dockSpec.fab.id:null;
   return(
     <div style={{minHeight:'100dvh',background:'var(--bg)',color:'var(--text-primary)',display:'flex',flexDirection:'column',position:'relative'}}>
@@ -7029,6 +7062,8 @@ function RecClock({ms,at,running,size}){
 // recording screen: a number's heading and the line under it use the same type
 const TILE_TXT={fontSize:13.5,fontWeight:750,color:'var(--fg2)',lineHeight:1.3};
 let _jogging=false;
+// cloth-like scrolling: the most it tilts (degrees), how much scrolling tilts it, how quickly it follows, how much it swings
+const CLOTH_DEF={on:true,amt:2.7,sens:3.3,spring:0.25,wobble:0};
 // Shows children while `show`; when it turns off, keeps the last ones on screen while they shrink away
 function Presence({show,children,ms=380}){
   const last=useRef(null),[gone,setGone]=useState(!show);

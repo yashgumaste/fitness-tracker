@@ -8,6 +8,9 @@
     },
     {
       "text": "Scrolling feels like weighted cloth: as you scroll, the side away from your thumb trails behind (up to 3°), and when you stop it swings back a little past flat and settles. Tuned on the Cloth Scroll Lab test page."
+    },
+    {
+      "text": "Settings: all reminders are now on one Reminders page, in sections: Logging, Coach, Movement and Water. “Theme & colour” is now “Look & feel”, with a new Motion section where you can turn cloth-like scrolling off or tune its strength, sensitivity, springiness and wobble (default: your tuning of 2.7°, 3.3, 0.25, no wobble)."
     }
   ],
   "releases": [
