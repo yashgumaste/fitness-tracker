@@ -5860,7 +5860,7 @@ Reply ONLY with valid JSON (no markdown):
               {dl&&<div style={{fontWeight:700}}>The download didn’t finish. Check your internet and try again.</div>}
               <button className="x-btn" style={{background:'var(--pri)',color:'var(--on-pri)'}} onClick={()=>getUpdate(update)}>⬇ {dl?'Try again':'Download & install'}</button></>}
             {dl&&dl.state==='downloading'&&<div style={{display:'flex',flexDirection:'column',gap:8}}>
-              <div style={{display:'flex',justifyContent:'space-between',fontWeight:700}}><span>Downloading…</span><span className="x-num">{dl.pct}%</span></div>
+              <div style={{display:'flex',justifyContent:'space-between',fontWeight:700}}><span>Downloading…</span><span className="x-num">{dl.pct==null?'':dl.pct+'%'}</span></div>
               <WavyBar value={dl.pct} max={100} color="var(--pri)" track="rgba(0,0,0,.18)" moving/></div>}
             {dl&&dl.state==='done'&&<>
               <div style={{fontWeight:700}}>Downloaded ✓ — tap Install on the next screen. Your data stays.</div>
@@ -6817,9 +6817,9 @@ Reply ONLY with valid JSON (no markdown):
   const getUpdate=async u=>{
     const how=await window.LMNative.downloadUpdate(u);
     if(how!=='native'){showToast('Download '+u.latest+' from the page, then open it to install','var(--ok)');return;}
-    setDl({state:'downloading',pct:0});clearInterval(dlTimer.current);
+    setDl({state:'downloading',pct:null});clearInterval(dlTimer.current);
     dlTimer.current=setInterval(async()=>{const st=await window.LMNative.updateStatus();
-      if(st.state==='downloading')setDl({state:'downloading',pct:st.total>0?Math.min(99,Math.round(100*st.done/st.total)):0});
+      if(st.state==='downloading')setDl({state:'downloading',pct:st.total>0?Math.min(99,Math.round(100*st.done/st.total)):null});
       else{clearInterval(dlTimer.current);setDl(st.state==='done'?{state:'done',pct:100}:{state:'failed'});}},500);
   };
   useEffect(()=>()=>clearInterval(dlTimer.current),[]);
@@ -7286,33 +7286,66 @@ function PeriodBars({items,goal,onPick}){
       <text x={PW+26} y={gy+4} textAnchor="middle" fontSize="10.5" fontWeight="800" style={{fill:'var(--mint)'}}>{goal>=1000?(goal/1000)+'k':goal}</text></g>
   </svg>);
 }
-// Phase (0..1 of a wavelength) that keeps travelling while `on`, so a wave flows like M3 Expressive's
-// in-progress indicators. Stops for reduced motion, a hidden page or when the bar goes away.
-function useWavePhase(on,period=1100){
-  const [ph,setPh]=useState(0);
-  useEffect(()=>{
-    if(!on||(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches))return;
-    let raf=0,last=0,acc=0;
-    const tick=t=>{const dt=last&&t>last?Math.min(t-last,50):16.7;last=t;
-      if(!document.hidden){acc=(acc+dt/period)%1;setPh(acc);}raf=requestAnimationFrame(tick);};
-    raf=requestAnimationFrame(tick);return()=>cancelAnimationFrame(raf);
-  },[on,period]);
-  return on?ph:0;
-}
-// `moving`: the wave flows forward while something is in progress (a download); it flattens out at 100%.
+// Wavy bar for amounts (steps, calories, sleep…): a still wave, stretched to the width.
 function WavyBar({value=0,max=1,color='var(--pri)',track='rgba(255,255,255,.12)',h=14,over=false,moving=false}){
-  const W=300,p=Math.max(0,Math.min(1,max?value/max:0)),wl=22,sw=Math.max(3.5,h*.3),mid=h/2;
-  const flow=moving&&p<1,ph=useWavePhase(flow),sp=useRef(p);
-  // progress arrives in steps (every half second): glide the end towards it on each frame instead of jumping
-  sp.current=flow?sp.current+(p-sp.current)*.1:p;
-  // while moving, ease the wave in from the left so the start stays still and the crests travel to the end
-  const x=flow?Math.max(sp.current*W,14):p*W,amp=h*.2*(moving&&p>=1?0:1);
-  let d='';for(let i=0;i<=x;i+=1.5){const a=flow?amp*Math.min(1,i/10):amp;
-    d+=(i?'L':'M')+i.toFixed(1)+' '+(mid+a*Math.sin((i/wl-ph)*2*Math.PI)).toFixed(2);}
+  if(moving)return <FlowBar value={value} max={max} color={color} track={track} h={h}/>;
+  const W=300,p=Math.max(0,Math.min(1,max?value/max:0)),x=p*W,mid=h/2,amp=h*.2,wl=22,sw=Math.max(3.5,h*.3);
+  let d='';for(let i=0;i<=x;i+=1.5){d+=(i?'L':'M')+i.toFixed(1)+' '+(mid+amp*Math.sin(i/wl*2*Math.PI)).toFixed(2);}
   return(
     <svg viewBox={`0 0 ${W} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{display:'block',overflow:'visible'}} aria-hidden="true">
       {x<W-10&&<line x1={x>0?x+10:0} y1={mid} x2={W} y2={mid} style={{stroke:track}} strokeWidth={sw} strokeLinecap="round" vectorEffect="non-scaling-stroke"/>}
       {x>1&&<path d={d} fill="none" style={{stroke:over?'var(--err)':color}} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>}
+    </svg>);
+}
+
+// Time in ms that keeps running while `on` (one frame at a time), for things that move on their own.
+// Built from frame-to-frame steps so it also runs where the clock is frozen (tests). Off for reduced motion.
+function useFrameTime(on){
+  const [t,setT]=useState(0);
+  useEffect(()=>{
+    if(!on||(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches))return;
+    let raf=0,last=0,acc=0;
+    const tick=now=>{const dt=last&&now>last?Math.min(now-last,50):16.7;last=now;
+      if(!document.hidden){acc+=dt;setT(acc);}raf=requestAnimationFrame(tick);};
+    raf=requestAnimationFrame(tick);return()=>cancelAnimationFrame(raf);
+  },[on]);
+  return t;
+}
+// M3 Expressive linear wavy progress indicator, for something in progress (a download).
+// Spec (Compose WavyProgressIndicatorDefaults): 4dp stroke, 3dp amplitude, 40dp wavelength
+// (20dp when indeterminate), the wave travels one wavelength a second whether or not progress moves,
+// 4dp gap before the track, 4dp stop dot at the track's end, amplitude 0 below 10% and from 95%
+// (eased in and out), progress changes glide over 500 ms. value=null: indeterminate.
+function FlowBar({value,max=1,color='var(--pri)',track='rgba(255,255,255,.12)',h=14}){
+  const ref=useRef(null),[W,setW]=useState(300);
+  useEffect(()=>{const el=ref.current;if(!el)return;const f=()=>{const w=el.getBoundingClientRect().width;if(w>0)setW(w);};f();
+    const ro=window.ResizeObserver?new ResizeObserver(f):null;ro&&ro.observe(el);return()=>ro&&ro.disconnect();},[]);
+  const t=useFrameTime(true),indet=value==null;
+  const target=indet?0:Math.max(0,Math.min(1,max?value/max:0));
+  // glide between progress values (linear, 500 ms) and ease the amplitude in and out (300 ms)
+  const st=useRef(null);if(!st.current)st.current={from:target,to:target,t0:t,amp:target>.1&&target<.95?1:0,last:t};
+  const g=st.current;
+  if(target!==g.to){g.from=g.from+(g.to-g.from)*Math.min(1,(t-g.t0)/500);g.to=target;g.t0=t;}
+  const p=g.from+(g.to-g.from)*Math.min(1,Math.max(0,(t-g.t0)/500));
+  const ampGoal=indet||(p>.1&&p<.95)?1:0;g.amp+=Math.sign(ampGoal-g.amp)*Math.min(Math.abs(ampGoal-g.amp),(t-g.last)/300);g.last=t;
+  const sw=4,mid=h/2,gap=4,r=sw/2,A=3*g.amp,wl=indet?20:40,ph=t/1000;   // phase in wavelengths
+  const wave=(x0,x1)=>{if(x1-x0<.5)return '';let d='';for(let x=x0;;x=Math.min(x1,x+2)){
+      d+=(d?'L':'M')+x.toFixed(1)+' '+(mid+A*Math.sin((x/wl-ph)*2*Math.PI)).toFixed(2);if(x>=x1)break;}return d;};
+  const line=(x0,x1,k)=>x1-x0>0&&<line key={k} x1={x0} y1={mid} x2={x1} y2={mid} style={{stroke:track}} strokeWidth={sw} strokeLinecap="round"/>;
+  const L=r,R=W-r;   // round caps stay inside the bar
+  let act=[],trk=[];
+  if(indet){   // a wavy stretch that runs across, speeding up then slowing down, every 1.8 s
+    const c=(t%1800)/1800,ease=u=>u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2;
+    const head=L+(R-L)*ease(Math.min(1,c/.75)),tail=L+(R-L)*ease(Math.max(0,(c-.25)/.75));
+    act=[[tail,head]];trk=[[L,tail-sw-gap],[head+sw+gap,R]];
+  }else{
+    const end=L+(R-L)*p;act=p>0?[[L,end]]:[];trk=[[p>0?end+sw+gap:L,R]];
+  }
+  return(
+    <svg ref={ref} viewBox={`0 0 ${W} ${h}`} width="100%" height={h} style={{display:'block',overflow:'visible'}} aria-hidden="true" data-flow="">
+      {trk.map(([a,b],i)=>line(a,b,i))}
+      {!indet&&p<.999&&<circle cx={R} cy={mid} r={2} style={{fill:color}}/>}
+      {act.map(([a,b],i)=>{const d=wave(a,b);return d&&<path key={'a'+i} d={d} fill="none" style={{stroke:color}} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"/>;})}
     </svg>);
 }
 

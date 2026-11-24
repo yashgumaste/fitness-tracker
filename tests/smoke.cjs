@@ -365,7 +365,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     // the download bar's wave keeps flowing while it downloads
     await p.evaluate(()=>{window.LMNative.downloadUpdate=async()=>'native';window.LMNative.updateStatus=async()=>({state:'downloading',done:40,total:100});});
     await click('.x-btn','Download & install');await W(1200);await expect('Downloading…');
-    const wave=()=>p.evaluate(()=>{const x=[...document.querySelectorAll('.x-card svg[preserveAspectRatio=none] path')].find(e=>e.closest('.x-card').innerText.includes('Downloading'));return x&&x.getAttribute('d');});
+    const wave=()=>p.evaluate(()=>{const x=[...document.querySelectorAll('.x-card svg[data-flow] path')].find(e=>e.closest('.x-card').innerText.includes('Downloading'));return x&&x.getAttribute('d');});
     const w1=await wave();await W(300);const w2=await wave();if(!w1||w1===w2)throw new Error('the download wave is not moving '+String(w1).slice(0,80));
     await p.click('[aria-label="Back to settings"]');});
   await step('Saved to storage',async()=>{await W(1200);const ok=await p.evaluate(()=>Object.keys(localStorage).some(k=>k.startsWith('fs:')));if(!ok)throw new Error('nothing was saved');});
