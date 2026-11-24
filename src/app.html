@@ -3245,12 +3245,24 @@ Reply ONLY with valid JSON (no markdown):
       .filter(x=>![...det,...gps].some(d=>x.timed?(x.start<d.end&&(x.end||x.start+30)>d.start):true));
     const walks=[...gps,...det,...added].sort((a,b)=>a.start-b.start);
     const t=walkDayTotals(wl),sliceSum=sb?sb.reduce((a,x)=>a+(+x||0),0):0;
-    const steps=Math.max(t.best,sliceSum,gps.reduce((a,g)=>a+g.steps,0));
+    // steps by the hour: Health Connect's, plus each recorded walk's own steps in the hours it ran. Health Connect
+    // often gets a walk's steps late (or not at all), so an hour shows whichever count is higher.
+    const hcH=sb?hourly(sb):null,wH=Array(24).fill(0);
+    for(const g of gps){const tr=g.track,n=tr.steps||0;if(!n)continue;
+      const hourAt=ms=>{const d=new Date(ms);return localDate(d)===date?d.getHours():null;};
+      const ps=(tr.pts||[]).filter(q=>q[4]!=null);
+      if(ps.length>=2){let prev=0;
+        for(const q of ps){const c=Math.min(n,+q[4]),h=hourAt(tr.start+q[0]*1000);if(h!=null&&c>prev)wH[h]+=c-prev;prev=Math.max(prev,c);}
+        const h=hourAt(tr.end);if(h!=null&&n>prev)wH[h]+=n-prev;}
+      else{const a=tr.start,b=Math.max(tr.end,a+60000);for(let m=a;m<b;m+=60000){const h=hourAt(m);if(h!=null)wH[h]+=n*Math.min(60000,b-m)/(b-a);}}}
+    const anyW=wH.some(x=>x>0);
+    const hours=hcH||anyW?Array.from({length:24},(_,h)=>Math.round(Math.max(hcH?hcH[h]:0,wH[h]))):null;
+    const steps=Math.max(t.best,sliceSum,hours?hours.reduce((a,x)=>a+x,0):0,gps.reduce((a,g)=>a+g.steps,0));
     const walkSteps=walks.reduce((a,w)=>a+w.steps,0),other=Math.max(0,steps-walkSteps);
     const walkKcal=walks.reduce((a,w)=>a+w.kcal,0),otherKcal=Math.round(other*kg*KCAL_PER_STEP_KG);
     const km=Math.max(steps*kmStep,walks.reduce((a,w)=>a+w.km,0));
     const v={walks,steps,walkSteps,other,km,walkMin:walks.reduce((a,w)=>a+(w.min||0),0),walkKcal,otherKcal,kcal:walkKcal+otherKcal,
-      hours:sb?hourly(sb):null,src:sb?'hc':steps?'manual':null,at:stepsLog[date]?.at||null,kg};
+      hours,src:sb?'hc':steps?'manual':null,at:stepsLog[date]?.at||null,kg};
     moveCache.current[date]={k:ck,v};return v;
   }
   // One line per walk for the coach
@@ -4833,7 +4845,7 @@ Reply ONLY with valid JSON (no markdown):
         <div className="x-card" style={{display:'flex',flexDirection:'column',gap:10}}>
           <div style={{display:'flex',alignItems:'baseline',gap:8}}><h2 className="x-h2" style={{flex:1,margin:0}}>By the hour</h2>
             <span className="x-sub" style={{fontSize:12.5}}>{selTxt||(mv.hours?'Tap a bar':'')}</span></div>
-          {mv.hours?<HourChart key={date} hours={mv.hours} walks={mv.walks.filter(w=>w.src==='hc')} now={nowH} sel={sel} onSel={h=>set({sel:h})}/>
+          {mv.hours?<HourChart key={date} hours={mv.hours} walks={mv.walks.filter(w=>w.src==='hc'||w.src==='gps')} now={nowH} sel={sel} onSel={h=>set({sel:h})}/>
             :<div className="x-sub" style={{padding:'18px 4px',lineHeight:1.5}}>{native&&!hcOn?'Connect Health Connect to see your steps hour by hour, and walks will show up by themselves.':
               date<calAddDays(TODAY,-29)?'Hour-by-hour steps are kept for the last 30 days.':'No hour-by-hour steps for this day.'}</div>}
           {mv.hours&&<div style={{display:'flex',gap:14,flexWrap:'wrap',fontSize:12,fontWeight:700,color:'var(--fg2)'}}>

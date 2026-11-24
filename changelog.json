@@ -14,6 +14,9 @@
     },
     {
       "text": "Fixed: when GPS barely moved during a walk (indoors or a weak signal), the walk got a tiny distance, and the coach then said you were “shuffling or standing around”. Now, if the GPS distance would mean steps of just a few centimetres, the distance, pace and stride come from your steps × step length instead (marked ≈ with a note on the walk), and the coach is told the GPS failed, so it trusts your steps and cadence. This also fixes walks you’ve already recorded."
+    },
+    {
+      "text": "Steps by the hour now include the walks you record. Health Connect often gets a walk’s steps late (or not at all), so a recorded walk could show as 0 steps in its hour; now each hour shows whichever is higher, Health Connect’s count or the walk’s own steps in that hour, and recorded walks are highlighted in mint like the others."
     }
   ],
   "releases": [
