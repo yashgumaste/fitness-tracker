@@ -2025,7 +2025,7 @@ function App(){
     if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)return;
     // the tilt is a small weight on a spring: scrolling pulls it over, it lags, and when you stop it swings back a
     // little past flat and settles, like cloth with some weight (same numbers as the Cloth Scroll Lab defaults)
-    const C={amt:1.4,sens:1.6,spring:0.10,wobble:0.45};
+    const C={amt:3.0,sens:4.0,spring:0.31,wobble:0.45};   // Yash's tuning in the Cloth Scroll Lab
     let tx=null,lastY=window.scrollY,lastT=performance.now(),v=0,ang=0,vel=0,raf=0;
     const tick=()=>{raf=0;const W=window.innerWidth,side=tx==null?0:tx>W/2?-1:1;
       const target=Math.max(-C.amt,Math.min(C.amt,v*C.sens))*side;

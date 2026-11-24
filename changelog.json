@@ -5,6 +5,9 @@
     },
     {
       "text": "Motion starts where you tap: switching tabs or opening a page from the island at the bottom spreads the new screen up from that button, a page opened from a pill at the top comes down from it, and Back gathers it back into the spot it came from. Everything moves slow-fast-slow with a little spring at the end. Chips and island buttons change shape when pressed, every tap gives a light buzz, and scrolling has a subtle cloth-like feel: the side away from your thumb trails a touch behind and settles when you stop."
+    },
+    {
+      "text": "Scrolling feels like weighted cloth: as you scroll, the side away from your thumb trails behind (up to 3°), and when you stop it swings back a little past flat and settles. Tuned on the Cloth Scroll Lab test page."
     }
   ],
   "releases": [
