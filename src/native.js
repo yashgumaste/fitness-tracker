@@ -66,7 +66,7 @@
   async function geminiKey(){if(gemKeyCache===undefined)gemKeyCache=await kv.get('gemini_key');return gemKeyCache||(hasFreeKey()?FREE_GEMINI_KEY:null);}
   const GEMINI={fast:'gemini-flash-lite-latest',smart:'gemini-flash-latest'};
 
-  async function askGemini(prompt,maxTokens,kind,json){
+  async function askGemini(prompt,maxTokens,kind,json,search){
     const key=await geminiKey();
     if(!key)throw new Error('The free AI is not set up in this build — add a Gemini key or switch to Claude in Settings → AI');
     // Google's free models are sometimes overloaded (503 "high demand"): wait a moment and try again, then use the
@@ -78,8 +78,11 @@
     const send=(thinking,room)=>fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{method:'POST',
       headers:{'content-type':'application/json','x-goog-api-key':key},
       body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],
+        // search: let the model look things up on Google (a race's date, distance, route); JSON mode can't be
+        // combined with it on every model, so the reply's JSON is picked out of the text instead
+        ...(search?{tools:[{google_search:{}}]}:{}),
         // room for the model's own reasoning plus the answer (its thinking counts against the same budget)
-        generationConfig:{maxOutputTokens:room||maxTokens*3+1024,...(json?{responseMimeType:'application/json'}:{}),...(thinking?{thinkingConfig:thinking}:{})}})});
+        generationConfig:{maxOutputTokens:room||maxTokens*3+1024,...(json&&!search?{responseMimeType:'application/json'}:{}),...(thinking?{thinkingConfig:thinking}:{})}})});
     // ask with as little thinking as this model allows (models differ in which setting they accept)
     const sendLeast=async room=>{let x=await send({thinkingBudget:0},room);if(x.status===400)x=await send({thinkingLevel:'minimal'},room);if(x.status===400)x=await send(null,room);return x;};
     let r;
@@ -106,15 +109,18 @@
     return text;
   }
 
-  async function ask(prompt,maxTokens,kind,json){
-    if(provider()==='gemini')return askGemini(prompt,maxTokens,kind,json);
+  // opts.search: allow a web search first (finding a race's details)
+  async function ask(prompt,maxTokens,kind,json,opts={}){
+    const search=!!opts.search;
+    if(provider()==='gemini')return askGemini(prompt,maxTokens,kind,json,search);
     const key=await apiKey();
     if(!key)throw new Error('Add your Claude API key in Settings → AI, or switch to the free AI');
     const tier=(JSON.parse(localStorage.getItem('lm-ai-models')||'{}'))[kind]||(kind==='fast'?'fast':'smart');
     const M=MODELS[tier]||MODELS.smart;
     const send=async(withExtra,room)=>{
       const body={model:M.id,max_tokens:room||maxTokens,messages:[{role:'user',content:prompt}],
-        ...(json?{system:'You are a nutrition data API. Reply with only the JSON the user asks for: no words, notes or markdown before or after it.'}:{}),...(withExtra?M.extra:{})};
+        ...(json?{system:`You are a ${search?'':'nutrition '}data API. Reply with only the JSON the user asks for: no words, notes or markdown before or after it.`}:{}),
+        ...(search?{tools:[{type:'web_search_20250305',name:'web_search',max_uses:5}]}:{}),...(withExtra?M.extra:{})};
       return fetch('https://api.anthropic.com/v1/messages',{method:'POST',
         headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
         body:JSON.stringify(body)});
@@ -142,6 +148,7 @@
         if(r2.status===400){const t=await r2.clone().text();if(/thinking|effort|output_config/i.test(t))r2=await send(false,Math.min(8192,maxTokens*2));}
         if(r2.ok){d=await r2.json();if(d.usage)recordUsage(M.id,d.usage);}}catch(_){}
     }
+    if(search){const tx=(d.content||[]).filter(c=>c.type==='text').map(c=>c.text||'');const last=tx.filter(t=>/[\[{]/.test(t)).pop();if(last)return last.trim();}
     return(d.content||[]).map(c=>c.text||'').join('').trim();
   }
   function usage(){

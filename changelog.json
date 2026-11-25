@@ -14,6 +14,9 @@
     },
     {
       "text": "Coach’s tips now come on time. A tip that names a time (“Eat by 8:30 PM”) arrives ahead of that time, not just before your usual meal; if Android holds a reminder back to save battery and it would arrive after the time it’s about, it isn’t shown; and reminders now use exact alarms, so they aren’t held back in the first place."
+    },
+    {
+      "text": "Add your upcoming race in Settings → Profile. Type its name and tap Look it up: the date, distances, start time, cutoff and route are found on the web (check them, or fill them in yourself), with the route drawn on a map. From then on the app plans around it: the coach’s tips follow the taper, carb-up days, the day before, race day and recovery; on those days your calorie target drops the deficit and carbs go up; heavy leg workouts and sprints ease off in race week; and you get race reminders (carb-up mornings, a kit check and early night the evening before, breakfast and warm-up on race morning, a recovery nudge after), while brisk-walk nudges pause. Home counts down the last 30 days."
     }
   ],
   "releases": [

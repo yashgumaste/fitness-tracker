@@ -1342,15 +1342,15 @@ function getWeekNum(s){const a=new Date(PLAN_START+'T00:00:00'),b=new Date(s+'T0
 function daysBetween(a,b){return Math.round((new Date(b).setHours(0,0,0,0)-new Date(a).setHours(0,0,0,0))/86400000);}
 
 // AI runs through the Claude API with your own key (see native.js). 'fast' = meal maths, 'smart' = coaching.
-async function callAI(prompt,maxTokens=400,kind='smart',json=false){
+async function callAI(prompt,maxTokens=400,kind='smart',json=false,opts){
   const clean=t=>(t||'').replace(/```json|```/g,'').trim();
-  const t=clean(await window.LMNative.ask(prompt,maxTokens,kind,json));
+  const t=clean(await window.LMNative.ask(prompt,maxTokens,kind,json,opts));
   if(!json)return t;
   // pull the JSON out even if the model wrapped it in a sentence; ask once more if there is none
   const pick=s=>{const i=s.search(/[\[{]/);if(i<0)return null;const j=s.lastIndexOf(s[i]==='{'?'}':']');if(j<i)return null;
     const c=s.slice(i,j+1);try{JSON.parse(c);return c;}catch(_){return null;}};
   let c=pick(t);if(c)return c;
-  c=pick(clean(await window.LMNative.ask(prompt+'\n\nYour previous reply was not valid JSON. Reply with ONLY the JSON — no words before or after it.',maxTokens,kind,json)));
+  c=pick(clean(await window.LMNative.ask(prompt+'\n\nYour previous reply was not valid JSON. Reply with ONLY the JSON — no words before or after it.',maxTokens,kind,json,opts)));
   if(c)return c;
   throw new Error('The AI’s reply was cut off or not in the right format — try again');
 }
@@ -1376,7 +1376,44 @@ function buildSchedule(){
 }
 const SCHEDULE=buildSchedule();
 
+/* ── Your upcoming race (Settings → Profile). Set each render from prefs.race; small pure helpers so they port. ──
+   race: {name, date:'YYYY-MM-DD', start:'HH:MM', km, timed, cutoffMin, how:'walk'|'run'|'mix', goalMin, place, course} */
+let RACE=null;
+const raceKmLabel=km=>Math.abs(km-42.2)<0.3?'Full marathon':Math.abs(km-21.1)<0.3?'Half marathon':Math.abs(km-10)<0.05?'10K':Math.abs(km-5)<0.05?'5K':(+km).toFixed(km%1?1:0)+' km';
+// days of taper before the race, and of carb-loading (the last 1–3 days), by distance
+const raceTaperDays=km=>km>=30?14:km>=15?7:km>=8?4:2;
+const raceLoadDays=km=>km>=30?3:km>=15?2:0;
+/** Where a day sits around the race: build · taper · load · eve · race · recover · after (null with no race). */
+function racePhase(day,r=RACE){
+  if(!r||!r.date||!(+r.km>0))return null;
+  const d=daysBetween(day,r.date);     // days until the race (negative: after it)
+  if(d===0)return 'race';
+  if(d<0)return d>=-3?'recover':'after';
+  if(d===1)return 'eve';
+  if(d<=raceLoadDays(+r.km))return 'load';
+  if(d<=raceTaperDays(+r.km))return 'taper';
+  return 'build';
+}
+// the race's start, as a time on its day (ms)
+const raceStartMs=(r=RACE)=>r&&r.date?new Date(r.date+'T'+(r.start||'06:00')+':00').getTime():null;
+// the workout plan around the race: lighter legs while tapering, rest the day before and on the day, then recover
+function raceDayInfo(ds,base){
+  const ph=racePhase(ds);if(!ph||ph==='build'||ph==='after')return null;
+  const d=daysBetween(ds,RACE.date);
+  if(ph==='race')return{type:'rest',label:'Race day 🏁',icon:'🏁',race:true};
+  if(ph==='eve')return{type:'rest',label:'Rest: race tomorrow',icon:'😴',race:true};
+  if(ph==='recover')return d>=-2?{type:'rest',label:'Recover from the race',icon:'🛌',race:true}:{type:'run_easy',label:'Easy walk: recovery',icon:'🚶',race:true};
+  // taper and carb-load days: no heavy legs, no all-out sprints in the last few days
+  if(base.type==='lower'||base.type==='full_core')return{type:'upper',label:'Upper body (taper)',icon:'💪',race:true};
+  if(base.type==='run_tempo'&&d<=4)return{type:'run_easy',label:'Easy walk + a few strides (taper)',icon:'🏃',race:true};
+  return null;
+}
+
 function getDayInfo(ds){
+  const base=getDayInfoBase(ds);
+  return (RACE&&raceDayInfo(ds,base))||base;
+}
+function getDayInfoBase(ds){
   if(SCHEDULE[ds])return SCHEDULE[ds];
   const dow=getDOW(ds);
   if(dow===0)return{type:'full_core',  label:'Full Body + Core',     icon:'🔥'};
@@ -2086,7 +2123,9 @@ function App(){
   const [updChecking,setUpdChecking]=useState(false);
   const [instSrc,setInstSrc]=useState(null);   // which app installed / last updated this one
 
-  const [dl,setDl]=useState(null);   // in-app download: {state:'downloading'|'done'|'failed', pct}
+  const [dl,setDl]=useState(null);
+  const [raceDraft,setRaceDraft]=useState(null);   // the race being added or edited (Settings → Profile)
+  const [raceBusy,setRaceBusy]=useState(null);     // what the race lookup is doing right now   // in-app download: {state:'downloading'|'done'|'failed', pct}
   const dlTimer=useRef(null);
   const [setupStep,setSetupStep]=useState(0);
   const [setupDraft,setSetupDraft]=useState({});
@@ -2384,7 +2423,20 @@ function App(){
   {const G={...DEFAULT_GOALS,...(prefs.goals||{})};
     GOALS.calories.min=+G.calMin;GOALS.calories.max=+G.calMax;GOALS.protein.target=+G.protein;
     WALK_GOAL.day=+G.steps;WALK_GOAL.steps=+G.walkSteps;WALK_GOAL.km=+G.walkKm;WALK_GOAL.min=+G.walkMin;WATER_GOAL.ml=+G.water||3000;
-    KM_PER_STEP=WALK_GOAL.km/WALK_GOAL.steps;}
+    KM_PER_STEP=WALK_GOAL.km/WALK_GOAL.steps;
+    // the race changes today's targets: no calorie deficit while carb-loading, on race day and the 2 days after;
+    // more carbs (a bit less fat) on the carb-load days; fewer steps the day before and while recovering
+    RACE=prefs.race&&prefs.race.date&&+prefs.race.km>0?prefs.race:null;MACRO_T.carbs=200;MACRO_T.fat=70;
+    const rph=racePhase(TODAY),rd=RACE?daysBetween(TODAY,RACE.date):0;
+    if(rph==='load'||rph==='eve'||rph==='race'||(rph==='recover'&&rd>=-2)){
+      const w=+bodyMeasure.weightKg||0,mt=suggestTargets({weightKg:w,heightCm:bodyMeasure.heightCm,age:bodyMeasure.age,gender:profile.gender,goal:'maintain',activity:profile.activity});
+      const lift=rph==='load'||rph==='eve'?150:0;
+      if(w&&+bodyMeasure.heightCm){GOALS.calories.min=Math.max(GOALS.calories.min,mt.calMin);GOALS.calories.max=Math.max(GOALS.calories.max,mt.calMax+lift);}
+      else{GOALS.calories.min+=300;GOALS.calories.max+=300+lift;}
+      if(rph!=='recover'&&w){const g=RACE.how==='walk'?5:+RACE.km>=30?7:6;
+        MACRO_T.carbs=Math.min(Math.round(w*g/5)*5,Math.round(GOALS.calories.max*0.65/4/5)*5);MACRO_T.fat=55;}
+    }
+    if(rph==='eve'||(rph==='recover'&&rd>=-2))WALK_GOAL.day=Math.min(WALK_GOAL.day,6000);}
   const todayDiet=dietGrouped[TODAY]||[];
   // Always derive macros from items[] when available, filtering AI summary rows
   const isSummaryName=n=>/^(total|sub.?total|grand.?total|sum|overall)$/i.test((n||'').trim());
@@ -2423,8 +2475,8 @@ function App(){
     while(safety<90){
       safety++;
       const s=localDate(check);
-      const info=SCHEDULE[s];
-      if(!info)break;
+      if(!SCHEDULE[s])break;
+      const info=getDayInfo(s);   // race rest days count as rest
       if(info.type==='rest'){streak++;check.setDate(check.getDate()-1);continue;}
       if(fitLogs[s]&&fitLogs[s]._dayComplete){streak++;check.setDate(check.getDate()-1);}
       else break;
@@ -2985,7 +3037,7 @@ function App(){
 USER CONTEXT:
 - Goal: ${{lose:'Fat loss',maintain:'Maintain weight, get fitter',gain:'Build muscle'}[profile.goal]||'Fat loss'}${currentBF?`, ${currentBF}% → ${BF_GOAL[0]}-${BF_GOAL[1]}% body fat`:''}${bmiNow?`, BMI ${bmiNow}`:''}${profile.targetKg?`, goal weight ${profile.targetKg} kg`:targetWeightAt18?`, ${targetWeightAt24}-${targetWeightAt18} kg target`:''}${profile.gender?`, ${profile.gender==='female'?'woman':profile.gender==='male'?'man':'adult'}`:''}${bodySaved?`, age ${bodyMeasure.age}`:''}${latestWeight?`, weight ${latestWeight.w} kg`:''}
 - Daily targets: ${GOALS.calories.min}-${GOALS.calories.max} kcal, ${GOALS.protein.target} g protein, ${fmtN(WALK_GOAL.day)} steps, ${fmtL(WATER_GOAL.ml)} water, sleep 7-9 h
-- Indian diet (rotis, dal, sabji, dahi, paneer, etc.)
+- Indian diet (rotis, dal, sabji, dahi, paneer, etc.)${raceCtx(date,...(wantPlan?[planDay]:[]))?'\n'+raceCtx(date,...(wantPlan?[planDay]:[])):''}
 - Week ${weekNum} of 12-week plan (Phase ${phase}: ${phase===1?'Foundation — learning movements':phase===2?'Progression — adding weight':'Strength — pushing limits'})
 
 EVERYTHING LOGGED THAT DAY, in time order (meals with macros, drinks, walks, workout, sleep, weigh-in, feelings) and totals:
@@ -3136,7 +3188,7 @@ USER PROFILE:
 - Target weight: ${profile.targetKg?profile.targetKg+' kg':targetWeightAt18?targetWeightAt18+'–'+targetWeightAt24+' kg':'not set'} | Start: ${startW||'?'} kg | Current: ${curW||'?'} kg
 - Primary focus: reduce waist circumference (currently ${bodyMeasure.waistCm}cm) — visceral/abdominal fat
 - Daily targets: ${GOALS.calories.min}–${GOALS.calories.max} kcal, ≥${GOALS.protein.target}g protein, ${fmtN(WALK_GOAL.day)} steps. Prioritize compound lifts + cardio for fat loss
-- Program week: ${weekNum} (${totalDays} days since start)
+- Program week: ${weekNum} (${totalDays} days since start)${raceCtx(TODAY,calAddDays(TODAY,1))?'\n'+raceCtx(TODAY,calAddDays(TODAY,1)):''}
 - Total sessions completed: ${fitSessions}
 - Diet follows Indian food patterns (roti, dal, sabji, dahi, paneer, eggs etc.)
 ${illnessFoodRule(TODAY)}
@@ -3233,6 +3285,20 @@ Reply ONLY with valid JSON (no markdown):
   const bmiH=bodySaved&&+bodyMeasure.heightCm?+bodyMeasure.heightCm:0;   // BMI needs your height
   const latestWeight=(()=>{const e=Object.entries(weightLog).filter(([,v])=>v).sort((a,b)=>a[0].localeCompare(b[0]));return e.length?{date:e[e.length-1][0],w:parseFloat(e[e.length-1][1])}:null;})();
   const bmiNow=bmiH?bmiOf(latestWeight?.w||+bodyMeasure.weightKg,bmiH):null;
+  // what the coach is told about the race: the facts, and what each phase calls for
+  const RACE_GUIDE={
+    build:'Build steadily: consistent daily walks, one longer walk a week (no jumps of more than ~10% a week), keep strength work.',
+    taper:'TAPER: cut walking/running volume by 30–50% (keep walks short and easy), one or two short stretches at race pace, no heavy leg strength, nothing new, sleep 8 h. Normal eating, but not a big calorie deficit.',
+    load:'CARB-LOAD: eat at maintenance, NOT in a deficit. Carbs up (rice, poha, upma, idli, chapati, potato, banana, curd rice), a little less fat and fibre, familiar foods only, extra water with a pinch of salt. Easy 15–20 min walk at most.',
+    eve:'DAY BEFORE THE RACE: rest or a 15-min easy walk only. Familiar, low-fibre, carb-rich meals (no new, spicy, fried or heavy food), dinner early (by ~7:30 PM), sip water through the day, lay out kit, early night.',
+    race:'RACE DAY: breakfast 2.5–3 h before the start (familiar, low-fibre: poha/idli/toast with banana and a little peanut butter), 300–500 ml water then sips; during the race water at aid stations and, after the first hour, something with carbs (gel/banana/chikki) every 45 min; afterwards protein + carbs within an hour, then rest.',
+    recover:'RECOVERY after the race: easy short walks only (no hard sessions for 3–7 days), eat at maintenance with extra protein and fluids, sleep, gentle stretching; watch for sharp or one-sided pain.'};
+  const raceCtx=(...days)=>{
+    if(!RACE)return '';const r=RACE,dl=daysBetween(TODAY,r.date);if(dl<-7)return '';
+    const fact=`- Race: ${r.name||'a race'}, ${raceKmLabel(+r.km)} (${+r.km} km) on ${dateLong(r.date)}${r.start?` at ${fmt12(r.start)}`:''}${r.place?`, ${r.place}`:''}; ${r.timed&&r.cutoffMin?`timed, cutoff ${fmtHM(r.cutoffMin)} (needs ${(r.cutoffMin/r.km).toFixed(1)} min/km or faster)`:r.timed?'timed':'untimed'}; they plan to ${r.how==='run'?'run':r.how==='mix'?'run-walk':'walk'} it${r.goalMin?`, goal ${fmtHM(r.goalMin)} (${(r.goalMin/r.km).toFixed(1)} min/km)`:''}. ${dl>0?dl+' days to go':dl===0?'It is today':'It was '+(-dl)+' days ago'}.`;
+    const ph=[...new Set(days.map(d=>racePhase(d)).filter(Boolean))];
+    return fact+'\n'+days.map(d=>{const p=racePhase(d);return p&&RACE_GUIDE[p]?`- ${d}: race phase "${p}". ${RACE_GUIDE[p]}`:'';}).filter(Boolean).join('\n')+(ph.length?'\n- Every tip and tomorrow’s plan must fit the race phase above (it overrides the usual fat-loss deficit and workout plan on those days).':'');
+  };
   const fmtN=n=>Math.round(n||0).toLocaleString('en-IN');
   const dayLabel=k=>k===TODAY?'Today':k===calAddDays(TODAY,-1)?'Yesterday':new Date(k+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
   const KIND={meal:['var(--amber-c)','var(--amber)'],walk:['var(--mint-c)','var(--mint)'],rec:['var(--mint)','#00391f'],workout:['var(--pri-c)','var(--pri)'],weight:['var(--violet-c)','var(--violet)'],feel:['var(--pink-c)','var(--pink)'],sleep:['var(--night-c)','var(--night)'],water:['var(--sky-c)','var(--sky)']};
@@ -3857,7 +3923,7 @@ Reply ONLY with valid JSON (no markdown):
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[storageReady,waterCfg.on,waterCfg.start,waterCfg.end,waterCfg.every,lastDrink]);
   // ── Logging reminders: a good-morning sleep check-in and a nudge after your usual meal times ──
-  const logCfg={on:true,sleep:true,Breakfast:true,Lunch:true,Snack:true,Dinner:true,bedtime:true,coach:true,walk:true,after:45,lead:60,...(prefs.logrem||{})};
+  const logCfg={on:true,sleep:true,Breakfast:true,Lunch:true,Snack:true,Dinner:true,bedtime:true,coach:true,walk:true,race:true,after:45,lead:60,...(prefs.logrem||{})};
   // when you usually start a morning walk (before 11 AM) and an evening one (after 3 PM), from the last 3 weeks
   const walkTimesRef=useRef({k:'',v:null});
   // when lunch was eaten that day (minutes after midnight), from the earliest lunch logged
@@ -4023,6 +4089,32 @@ Reply ONLY with valid JSON (no markdown):
   // The coach's plan, as reminders 15 minutes before the usual time of each thing: what to eat before a meal,
   // the morning brisk walk (and a second one if the coach asked for it), a good habit to repeat.
   // After dinner on a day with no review yet: a nudge to get one, so tomorrow's reminders can be planned.
+  // Race reminders: carb-up mornings, the evening before (kit, early night), race morning (breakfast, warm-up),
+  // the morning after (recovery). They keep their own times (race mornings start before the usual 5:30 floor)
+  // and go stale 15 min after the moment they're about.
+  function raceNudges(day,ph,dl,ms,we,U,plan,now,ok,due,mealAt,wake,n){
+    const out=[],r=RACE,st=hm2m(r.start||'06:00'),wakeR=st-180,brk=st-150,km=+r.km;
+    const push=(min,tag,icon,title,body,byMin)=>{const at=ms(min),until=ms(byMin??min+15);
+      if(ok(at,Math.max(15*60000,until-at))&&!(due&&now>until))out.push({at,kind:'nudge',tag:day+'-race'+tag,open:'home',icon,day,title,body,until});};
+    const t12=m=>fmt12(m2hm(((m%1440)+1440)%1440));
+    if(ph==='load'&&!(plan&&plan.Breakfast))
+      push(Math.max(wake+15,mealAt('Breakfast')),'load','meal',`Carb-up day 🍚 ${dl} days to the race`,
+        `No calorie deficit today: eat to maintenance with more carbs (rice, poha, idli, chapati, potato, banana), a bit less fried food and fibre, and extra water with a pinch of salt.`,(we?U.Lunch.we:U.Lunch.wd));
+    if(ph==='eve'){
+      // lights out ~7.5 h before the race-morning alarm, but not before 8:30 PM or after 10:30 PM
+      const lights=Math.max(20*60+30,Math.min(22*60+30,wakeR+1440-450));
+      push(19*60+15,'kit','star',`Race tomorrow${n?', '+n:''} 🏁 Kit check`,
+        `Lay it all out tonight: bib and pins, shoes, socks, race T-shirt, cap, ${km>=15?'gels or banana, ':''}water bottle, charged phone and earphones. Set an alarm for ${t12(wakeR)}.`,lights);
+      push(lights-30,'sleep','star','Early night 😴',`Lights out by ${t12(lights)}: you’re up at ${t12(wakeR)} for the ${t12(st)} start. Can’t sleep? Resting in bed still helps.`,lights+60);
+    }
+    if(ph==='race'){
+      push(wakeR,'wake','meal',`Race day${n?', '+n:''}! 🏁`,`Breakfast by ${t12(brk)}: something you know, low in fibre (poha, idli or toast with banana), with 300–500 ml water. Aim to reach the start 45 min early.`,brk+30);
+      push(st-40,'warm','walk','Warm up 🔥',`5 easy minutes of walking, a few leg swings, last sips of water. Start slower than feels right: the first km should feel easy.`,st);
+    }
+    if(ph==='recover'&&dl===-1)
+      push(wake+60,'rec','walk','Recovery day 🛌',`Just an easy 15–20 min walk today, extra protein and water, and an early night. Stiff and sore is normal; sharp or one-sided pain isn’t: rest it.`,wake+12*60);
+    return out;
+  }
   function planNudges(day,U,ms,we,logged,now,ok,due){
     const out=[],plan=planFor(day),n=(profile.name||'').trim().split(/\s+/)[0]||'';
     // byMin: the time the tip is about (the meal, or a time the tip itself names); once that's 15 min gone the
@@ -4050,7 +4142,11 @@ Reply ONLY with valid JSON (no markdown):
           :h.at==='morning'?(W.am!=null?early(W.am):wake+30):h.at==='evening'?(W.pm!=null?early(W.pm):18*60):null;
         if(at!=null)add(at,'keep'+i,'home','star',pickBy(day+i,[`Keep it going${n?', '+n:''} ⭐`,'Same again today? ⭐','Your streak is calling ⭐']),h.text);});
     }
-    if(logCfg.walk){
+    // around the race: its own reminders, and no brisk-walk nudges the day before, on the day or while recovering
+    const rph=racePhase(day),rdl=RACE?daysBetween(day,RACE.date):null;
+    if(logCfg.race&&rph)out.push(...raceNudges(day,rph,rdl,ms,we,U,plan,now,ok,due,mealAt,wake,n));
+    const restLegs=rph==='eve'||rph==='race'||(rph==='recover'&&rdl>=-2);
+    if(logCfg.walk&&!restLegs){
       // morning brisk walk: at your usual time, if you usually walk in the morning (or the coach planned one)
       const amAt=W.am!=null?earlyW(W.am):plan&&plan.walk_morning?wake+45:null;
       if(amAt!=null&&!walked('am'))add(amAt,'walkAM','walk','walk',pickBy(day+'am',[`Brisk walk o’clock${n?', '+n:''} 🚶`,'Shoes on, morning walk time 👟','Your morning walk is waiting 🚶']),
@@ -4082,7 +4178,7 @@ Reply ONLY with valid JSON (no markdown):
   const pickBy=(seed,a)=>a[[...String(seed)].reduce((x,c)=>x*31+c.charCodeAt(0)>>>0,7)%a.length];
   const logSig=JSON.stringify([logCfg,TODAY,dietEntries.length,dietEntries.map(e=>e.mealType+e.timestamp).join().length,Object.keys(sleepLog).length,sleepLog[TODAY]?.wake,profile.name,
     fitLogs[TODAY]?._dayComplete,Math.round(moveDay(TODAY).steps/1000),Object.keys(tracks).length,
-    Object.entries(prefs.coach||{}).map(([d,r])=>d+(r&&r._at)).join(),moveDay(TODAY).walks.length]);
+    Object.entries(prefs.coach||{}).map(([d,r])=>d+(r&&r._at)).join(),moveDay(TODAY).walks.length,RACE&&[RACE.date,RACE.start,RACE.km]]);
   useEffect(()=>{
     if(!storageReady||!window.LMNative?.planLogs)return;
     let gone=false;
@@ -4975,7 +5071,7 @@ Reply ONLY with valid JSON (no markdown):
     return(
       <div>
         {head(isT?'Today':new Date(day+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long'}),
-          isT?`${greet}${profile.name?', '+profile.name:''}`:dateLong(day),
+          isT?`${greet}${profile.name?', '+profile.name:''}${(()=>{const dl=RACE?daysBetween(TODAY,RACE.date):-1;return dl>1&&dl<=30?` · 🏁 race in ${dl} days`:dl===1?' · 🏁 race tomorrow':dl===0?' · 🏁 race day!':'';})()}`:dateLong(day),
           !isT&&<button className="x-btn sm tonal" onClick={()=>setHomeDay(null)}>Today</button>)}
         <div className="x-days" role="tablist" aria-label="Pick a day">
           {week.map(d=>{const mm=macrosOf(d);const dt=new Date(d+'T00:00:00');const on=d===day;
@@ -5624,8 +5720,9 @@ Reply ONLY with valid JSON (no markdown):
           <div className="x-list">
             {[['coach','🧠','Coach’s plan','After you ask the coach to review a day: a food tip before each usual meal, a cheer for a habit worth repeating, and after dinner a nudge to get the review if you haven’t'],
               ['walk','🚶','Brisk walk',(()=>{const W=usualWalks();const second=W.lunchOff!=null?`a walk ${W.lunchOff<10?'right':`about ${W.lunchOff} min`} after lunch`:W.pm!=null?`your usual ${fmt12(m2hm(W.pm))} walk`:'a walk after lunch';
-                return W.am!=null?`Before your usual ${fmt12(m2hm(W.am))} morning walk, plus ${second} when the coach asks for one`:`Once you’ve walked in the morning a few times, before your usual time. Plus ${second} when the coach asks for one`;})()]]
-              .map(([k,em,l,sub])=>{const nextK=items.find(x=>x.kind==='nudge'&&(k==='walk'?x.open==='walk':x.open!=='walk'));
+                return W.am!=null?`Before your usual ${fmt12(m2hm(W.am))} morning walk, plus ${second} when the coach asks for one`:`Once you’ve walked in the morning a few times, before your usual time. Plus ${second} when the coach asks for one`;})()],
+              ...(RACE?[['race','🏁','Race',`For ${RACE.name||'your race'}: carb-up mornings, a kit check and early night the evening before, breakfast and warm-up on race morning, a recovery nudge the day after. Brisk-walk nudges pause from the day before until 2 days after.`]]:[])]
+              .map(([k,em,l,sub])=>{const nextK=items.find(x=>x.kind==='nudge'&&(k==='race'?/-race/.test(x.tag):k==='walk'?x.open==='walk'&&!/-race/.test(x.tag):x.open!=='walk'&&!/-race/.test(x.tag)));
               return(<React.Fragment key={k}><button className="x-item" onClick={()=>setL({[k]:!c[k]})} style={{minHeight:64}}>
                 <span style={{fontSize:24,width:34,textAlign:'center'}}>{em}</span>
                 <span style={{flex:1,minWidth:0}}><span className="t" style={{display:'block'}}>{l}</span><span className="s" style={{display:'block'}}>{sub}</span>
@@ -5729,7 +5826,8 @@ Reply ONLY with valid JSON (no markdown):
     const prov=window.LMNative?.provider?.()||'gemini';
     const hcOn=(hcState.read||[]).length||(hcState.write||[]).length;
     const PAGES=[
-      ['profile','👤','Profile',profile.name?`${profile.name}${profile.gender?' · '+({male:'man',female:'woman',other:'—'}[profile.gender]):''}`:'Name, gender, age','violet'],
+      ['profile','👤','Profile',[profile.name?`${profile.name}${profile.gender?' · '+({male:'man',female:'woman',other:'—'}[profile.gender]):''}`:'Name, gender, age',
+        RACE&&daysBetween(TODAY,RACE.date)>=0&&`🏁 ${RACE.name||raceKmLabel(RACE.km)} in ${daysBetween(TODAY,RACE.date)} days`].filter(Boolean).join(' · '),'violet'],
       ['body','📏','Body',currentBF?`${currentBF}% body fat`:'Height, weight, measurements','pink'],
       ['goals','🎯','Goals',`${fmtN(G.calMin)}–${fmtN(G.calMax)} kcal · ${G.protein} g protein · ${G.steps/1000}k steps`,'amber'],
       ['ai','✨','AI',prov==='claude'?'Claude (your key)':'Free (Gemini)','pri'],
@@ -6856,8 +6954,130 @@ Reply ONLY with valid JSON (no markdown):
         <b className="x-num" style={{fontSize:24,minWidth:40,textAlign:'center'}}>{profile.age||'—'}</b>
         <button className="x-ibtn tonal" aria-label="Older" onClick={()=>{const a=Math.min(99,(profile.age||28)+1);setProfile({age:a});setBodyMeasure(b=>({...b,age:a}));}} style={{width:44,height:44,borderRadius:16,fontSize:22,fontWeight:800}}>+</button>
       </div>
+      {renderRaceSection()}
       <button className="x-btn tonal" onClick={()=>startSetup('welcome')}>🔁 Run the setup again</button>
     </div>);
+  }
+
+  /* ── Upcoming race: type its name and the AI looks it up on the web (date, distances, start, cutoff, route),
+     or fill it in yourself. The coach, today's targets, the workout plan and reminders all follow it. ── */
+  const RACE_KM=[['5','5K'],['10','10K'],['21.1','Half'],['42.2','Full']];
+  const raceToDraft=r=>{const c=r&&r.cutoffMin,g=r&&r.goalMin;
+    return{name:r?.name||'',date:r?.date||'',start:r?.start||'06:00',km:r?.km?String(r.km):'',timed:r?r.timed!==false:true,
+      cutH:c?String(Math.floor(c/60)):'',cutM:c?String(c%60):'',goalH:g?String(Math.floor(g/60)):'',goalM:g?String(g%60):'',
+      how:r?.how||'walk',place:r?.place||'',course:r?.course||null,url:r?.url||null,events:null,note:null};};
+  const raceFromDraft=d=>{const km=+d.km,cut=(+d.cutH||0)*60+(+d.cutM||0),goal=(+d.goalH||0)*60+(+d.goalM||0);
+    return{name:d.name.trim(),date:d.date,start:d.start||'06:00',km:+km.toFixed(2),timed:!!d.timed,cutoffMin:d.timed&&cut>0?cut:null,
+      how:d.how,goalMin:goal>0?goal:null,place:d.place.trim(),course:d.course||null,url:d.url||null};};
+  const pickRaceEvent=ev=>setRaceDraft(d=>({...d,km:ev.km?String(ev.km):d.km,start:/^\d{1,2}:\d{2}$/.test(ev.start||'')?ev.start.padStart(5,'0'):d.start,
+    timed:ev.cutoff_min!=null?true:d.timed,cutH:ev.cutoff_min?String(Math.floor(ev.cutoff_min/60)):d.cutH,cutM:ev.cutoff_min?String(ev.cutoff_min%60):d.cutM}));
+  async function findRace(){
+    const name=(raceDraft?.name||'').trim();if(name.length<3){showToast('Type the race’s name first','var(--warn)');return;}
+    setRaceBusy('Looking it up on the web…');
+    try{
+      const raw=await callAI(`Look up this running event on the web: "${name}". Today is ${TODAY}. Find its next edition on or after today (if you only find past editions, set found to false and say so in note).
+Reply with ONLY this JSON (no words around it):
+{"found":true,"name":"official event name","date":"YYYY-MM-DD or null","city":"city","place":"start/finish venue and city","events":[{"label":"Half Marathon","km":21.1,"start":"HH:MM in 24 h or null","cutoff_min":number or null}],"course":"one or two plain sentences on where the longest route goes (roads, loops, climbs) or null","landmarks":["up to 10 roads or landmarks along the longest route, in race order from the start to the finish, each specific enough to find on a map"],"url":"the official page or null","note":"anything uncertain, or null"}
+Only facts you actually found; use null when unsure; never guess times, cutoffs or dates.`,1400,'smart',true,{search:true});
+      const j=JSON.parse(raw);
+      if(!j||j.found===false){setRaceDraft(d=>({...d,note:j&&j.note?j.note:'Couldn’t find an upcoming edition. Fill in the details yourself.'}));setRaceBusy(null);return;}
+      const evs=(Array.isArray(j.events)?j.events:[]).filter(e=>+e.km>0).map(e=>({label:String(e.label||raceKmLabel(+e.km)),km:+(+e.km).toFixed(2),start:e.start||null,cutoff_min:+e.cutoff_min>0?Math.round(+e.cutoff_min):null}));
+      setRaceDraft(d=>{let nd={...d,name:j.name||d.name,date:/^\d{4}-\d{2}-\d{2}$/.test(j.date||'')?j.date:d.date,place:j.place||d.place,url:j.url||null,note:j.note||null,events:evs.length>1?evs:null,
+        course:j.course?{desc:String(j.course)}:d.course};
+        const one=evs.length===1?evs[0]:evs.find(e=>Math.abs(e.km-(+d.km))<0.3);
+        if(one){nd={...nd,km:String(one.km),start:/^\d{1,2}:\d{2}$/.test(one.start||'')?one.start.padStart(5,'0'):nd.start,
+          ...(one.cutoff_min?{timed:true,cutH:String(Math.floor(one.cutoff_min/60)),cutM:String(one.cutoff_min%60)}:{})};}
+        return nd;});
+      const lm=(Array.isArray(j.landmarks)?j.landmarks:[]).map(String).filter(Boolean);
+      if(lm.length>=2){setRaceBusy('Finding the route on the map…');
+        const rt=await raceRoute(lm,j.city).catch(()=>null);
+        if(rt&&rt.pts.length>1)setRaceDraft(d=>({...d,course:{...(d.course||{}),pts:rt.pts,km:rt.km,routed:rt.routed}}));}
+    }catch(e){showToast(e.message||'Couldn’t look it up','var(--err)');}
+    setRaceBusy(null);
+  }
+  function saveRace(){
+    const r=raceFromDraft(raceDraft);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(r.date)){showToast('Add the race date','var(--warn)');return;}
+    if(!(r.km>0)){showToast('Pick the distance','var(--warn)');return;}
+    setPrefs(p=>({...p,race:r}));setRaceDraft(null);showToast('Race saved: the coach and reminders will plan around it','var(--ok)');
+  }
+  function renderRaceSection(){
+    const r=prefs.race&&prefs.race.date?prefs.race:null,d=raceDraft;
+    if(!d){
+      if(!r)return(<><div className="x-eyebrow" style={{margin:'6px 2px 0'}}>Upcoming race</div>
+        <button className="x-card" onClick={()=>setRaceDraft(raceToDraft(null))} aria-label="Add a race" style={{display:'flex',gap:14,alignItems:'center',textAlign:'left'}}>
+          <Shape kind="cookie9" size={48} fill="var(--amber-c)" font={22}>🏁</Shape>
+          <span style={{flex:1}}><b style={{display:'block',fontSize:16}}>Add a race</b><span className="x-sub">Its name is enough: the date, distance, start and route get looked up. The coach, your targets, workouts and reminders then plan around it.</span></span>
+        </button></>);
+      const dl=daysBetween(TODAY,r.date),ph=racePhase(TODAY,r);
+      const PH={build:'Building up',taper:'Taper: lighter workouts, no heavy legs',load:'Carb-up days: eat to maintenance, more carbs',eve:'Race tomorrow: rest, early dinner, early night',race:'Race day! 🏁',recover:'Recovering: easy walks, extra protein',after:'Done'};
+      return(<><div className="x-eyebrow" style={{margin:'6px 2px 0'}}>{dl<0?'Your last race':'Upcoming race'}</div>
+        <div className="x-card" style={{display:'flex',flexDirection:'column',gap:12}} data-race="">
+          <div style={{display:'flex',gap:12,alignItems:'center'}}>
+            <Shape kind="cookie9" size={52} fill="var(--amber)" color="var(--on-amber, #000)" font={dl>=0&&dl<100?20:22}><b className="x-num">{dl>0&&dl<100?dl:'🏁'}</b></Shape>
+            <span style={{flex:1,minWidth:0}}>
+              <b style={{display:'block',fontSize:17,lineHeight:1.25}}>{r.name||raceKmLabel(r.km)}</b>
+              <span className="x-sub">{dl>1?`${dl} days to go`:dl===1?'Tomorrow':dl===0?'Today':`${-dl} days ago`} · {PH[ph]}</span>
+            </span>
+          </div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+            <span className="x-tag">{raceKmLabel(r.km)}{/K$|km$/.test(raceKmLabel(r.km))?'':` · ${r.km} km`}</span>
+            <span className="x-tag">{new Date(r.date+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})} · {fmt12(r.start||'06:00')}</span>
+            <span className="x-tag">{r.timed?(r.cutoffMin?`Cutoff ${fmtHM(r.cutoffMin)}`:'Timed'):'Untimed'}</span>
+            <span className="x-tag">{{walk:'🚶 Walking it',run:'🏃 Running it',mix:'🏃🚶 Run-walk'}[r.how]||'🚶 Walking it'}</span>
+            {r.goalMin&&<span className="x-tag">Goal {fmtHM(r.goalMin)}</span>}
+            {r.place&&<span className="x-tag">📍 {r.place}</span>}
+          </div>
+          {r.timed&&r.cutoffMin&&<div className="x-sub">To finish inside the cutoff you need {fmtPace(r.cutoffMin/r.km)} min/km on average{r.goalMin?`; your goal is ${fmtPace(r.goalMin/r.km)} min/km`:''}.</div>}
+          {r.course&&r.course.desc&&<div className="x-sub">{r.course.desc}</div>}
+          {r.course&&r.course.pts&&r.course.pts.length>1&&<>
+            <RouteMap pts={r.course.pts.map(p=>[0,p[0],p[1]])} height={210} dark={!isLight} round={22}/>
+            <div className="x-sub" style={{fontSize:12}}>Approximate route{r.course.km?` (${r.course.km} km)`:''}, pieced together from the places the course passes{r.url?'; check the official map':''}.</div></>}
+          <div style={{display:'flex',gap:8}}>
+            <button className="x-btn tonal sm" onClick={()=>setRaceDraft(raceToDraft(r))}>Edit</button>
+            {r.url&&<button className="x-btn tonal sm" onClick={()=>window.LMNative?.openUrl?window.LMNative.openUrl(r.url):window.open(r.url,'_blank')}>Race website</button>}
+            <span style={{flex:1}}/>
+            <button className="x-btn sm" style={{background:'var(--s3)',color:'var(--fg)'}} onClick={()=>{setPrefs(p=>{const n={...p};delete n.race;return n;});showToast('Race removed','var(--ok)');}}>Remove</button>
+          </div>
+          {dl<0&&<button className="x-btn tonal" onClick={()=>setRaceDraft(raceToDraft(null))}>🏁 Add your next race</button>}
+        </div></>);
+    }
+    const set=o=>setRaceDraft(x=>({...x,...o})),num=(v,max)=>v.replace(/[^0-9]/g,'').slice(0,max);
+    const kmOn=RACE_KM.find(([k])=>Math.abs(+k-(+d.km))<0.05);
+    return(<><div className="x-eyebrow" style={{margin:'6px 2px 0'}}>{r?'Edit race':'Add a race'}</div>
+      <div className="x-card" style={{display:'flex',flexDirection:'column',gap:12}} data-race-edit="">
+        <label className="x-lab">Race name<input className="x-field" value={d.name} placeholder="e.g. Thane Half Marathon 2026" onChange={e=>set({name:e.target.value.slice(0,80)})}/></label>
+        <button className="x-btn tonal" disabled={!!raceBusy} onClick={findRace}>{raceBusy?'⏳ '+raceBusy:'🔎 Look it up'}</button>
+        {d.note&&<div className="x-sub" style={{color:'var(--amber)'}}>{d.note}</div>}
+        {d.events&&<><div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Which one are you doing?</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>{d.events.map((ev,i)=><button key={i} className={'x-chip'+(Math.abs(ev.km-(+d.km))<0.05?' on':'')} onClick={()=>pickRaceEvent(ev)}>
+            {ev.label}{ev.start?' · '+fmt12(ev.start.padStart(5,'0')):''}</button>)}</div></>}
+        <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Distance</div>
+        <Seg items={RACE_KM} value={kmOn?kmOn[0]:''} onChange={v=>set({km:v})}/>
+        <label className="x-lab">Or in km<input className="x-field" inputMode="decimal" value={d.km} placeholder="21.1" onChange={e=>set({km:e.target.value.replace(/[^0-9.]/g,'').slice(0,5)})}/></label>
+        <div style={{display:'flex',gap:10}}>
+          <label className="x-lab" style={{flex:1}}>Date<input type="date" className="x-field" value={d.date} min={TODAY} onChange={e=>set({date:e.target.value})}/></label>
+          <label className="x-lab" style={{flex:1}}>Start<input type="time" className="x-field" value={d.start} onChange={e=>e.target.value&&set({start:e.target.value})}/></label>
+        </div>
+        <Seg items={[['t','⏱ Timed'],['u','Untimed']]} value={d.timed?'t':'u'} onChange={v=>set({timed:v==='t'})}/>
+        {d.timed&&<div style={{display:'flex',gap:10,alignItems:'flex-end'}}>
+          <label className="x-lab" style={{flex:1}}>Cutoff hrs<input className="x-field" inputMode="numeric" value={d.cutH} placeholder="3" onChange={e=>set({cutH:num(e.target.value,2)})}/></label>
+          <label className="x-lab" style={{flex:1}}>mins<input className="x-field" inputMode="numeric" value={d.cutM} placeholder="30" onChange={e=>set({cutM:num(e.target.value,2)})}/></label>
+        </div>}
+        <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>You’ll</div>
+        <Seg items={[['walk','🚶 Walk'],['run','🏃 Run'],['mix','Run-walk']]} value={d.how} onChange={v=>set({how:v})}/>
+        <div style={{display:'flex',gap:10,alignItems:'flex-end'}}>
+          <label className="x-lab" style={{flex:1}}>Goal hrs (optional)<input className="x-field" inputMode="numeric" value={d.goalH} placeholder="—" onChange={e=>set({goalH:num(e.target.value,2)})}/></label>
+          <label className="x-lab" style={{flex:1}}>mins<input className="x-field" inputMode="numeric" value={d.goalM} placeholder="—" onChange={e=>set({goalM:num(e.target.value,2)})}/></label>
+        </div>
+        <label className="x-lab">Start place<input className="x-field" value={d.place} placeholder="Venue, city" onChange={e=>set({place:e.target.value.slice(0,80)})}/></label>
+        {d.course&&d.course.desc&&<div className="x-sub">{d.course.desc}</div>}
+        {d.course&&d.course.pts&&d.course.pts.length>1&&<RouteMap pts={d.course.pts.map(p=>[0,p[0],p[1]])} height={190} dark={!isLight} round={20}/>}
+        <div style={{display:'flex',gap:8}}>
+          <button className="x-btn" style={{flex:1}} onClick={saveRace} disabled={!!raceBusy}>Save race</button>
+          <button className="x-btn tonal" onClick={()=>{setRaceDraft(null);setRaceBusy(null);}}>Cancel</button>
+        </div>
+      </div></>);
   }
 
   // First launch (or after an update that added setup): open it once storage has loaded
@@ -7111,6 +7331,28 @@ function Shape({kind='cookie9',size=44,fill='var(--s3)',color,children,style,fon
 }
 
 // Wavy linear progress (M3 Expressive): wavy active track + flat remaining track
+// A race course from the places along it (what the AI found on the web): each is looked up on OpenStreetMap
+// (Nominatim, one a second as its rules ask), then a walking route through them (OSRM's foot router).
+// Returns {pts:[[lat,lon]…], km, found, tried} or null. An approximation: good for the shape, not to the metre.
+async function raceRoute(places,city){
+  const get=async u=>{const r=await fetch(u,{headers:{accept:'application/json'}});if(!r.ok)throw new Error('map lookup '+r.status);return r.json();};
+  const pts=[];let tried=0;
+  for(const q0 of (places||[]).slice(0,10)){const q=city&&!String(q0).toLowerCase().includes(String(city).toLowerCase())?q0+', '+city:q0;tried++;
+    try{const j=await get('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q='+encodeURIComponent(q));
+      if(j&&j[0]){const p=[+j[0].lat,+j[0].lon];const L=pts[pts.length-1];if(!L||distM(L,p)>60)pts.push(p);}}catch(_){}
+    await new Promise(r=>setTimeout(r,1100));}
+  if(pts.length<2)return pts.length?{pts,km:0,found:pts.length,tried}:null;
+  // drop a place that's far off the rest (a same-named spot in another city)
+  const c=[pts.reduce((a,p)=>a+p[0],0)/pts.length,pts.reduce((a,p)=>a+p[1],0)/pts.length];
+  const near=pts.filter(p=>distM(p,c)<40000);if(near.length<2)return null;
+  try{const j=await get('https://routing.openstreetmap.de/routed-foot/route/v1/foot/'+near.map(p=>p[1].toFixed(6)+','+p[0].toFixed(6)).join(';')+'?overview=full&geometries=geojson');
+    const rt=j&&j.routes&&j.routes[0];
+    if(rt&&rt.geometry&&rt.geometry.coordinates.length>1){let g=rt.geometry.coordinates.map(([lo,la])=>[+la.toFixed(5),+lo.toFixed(5)]);
+      const step=Math.ceil(g.length/600);if(step>1)g=g.filter((_,i)=>i%step===0||i===g.length-1);
+      return{pts:g,km:+(rt.distance/1000).toFixed(1),found:near.length,tried,routed:true};}}catch(_){}
+  let km=0;for(let i=1;i<near.length;i++)km+=distM(near[i-1],near[i])/1000;
+  return{pts:near,km:+km.toFixed(1),found:near.length,tried,routed:false};
+}
 // A route on an OpenStreetMap background (needs internet for the map; the route always shows).
 // Fits the whole route; while recording it follows you.
 function lonX(lon,z){return 256*2**z*(lon+180)/360;}

@@ -394,6 +394,51 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   await step('Tabs grow out of what you tapped',async()=>{await tab(0);await W(300);await p.click('.x-card.pri.sa');await W(900);await expect('Today');
     if(await p.evaluate(()=>[...document.querySelectorAll('*')].some(e=>e.style&&e.style.viewTransitionName==='lm-hero')))throw new Error('a hero name was left behind');
     await tab(0);await W(600);});
+  await step('Race: look it up, save it, and the app plans around it',async()=>{
+    await p.evaluate(()=>{const f0=window.fetch;window.__geoN=0;
+      window.fetch=async(u,o)=>{u=String(u);const body=o&&o.body?String(o.body):'';
+        if(/nominatim/.test(u)){window.__geoN++;const k=window.__geoN;return{ok:true,status:200,json:async()=>[{lat:String(19.20+k*0.01),lon:String(72.97+k*0.005)}]};}
+        if(/routing\.openstreetmap/.test(u))return{ok:true,status:200,json:async()=>({routes:[{distance:21300,geometry:{coordinates:[[72.975,19.21],[72.978,19.215],[72.98,19.22],[72.985,19.23]]}}]})};
+        if(/Look up this running event/.test(body)){window.__raceSearch=/google_search/.test(body);
+          const t=JSON.stringify({found:true,name:'Thane Lakes Half Marathon 2026',date:'2026-11-10',city:'Thane',place:'Upvan Lake, Thane',
+            events:[{label:'Half Marathon',km:21.1,start:'05:45',cutoff_min:210},{label:'10K Run',km:10,start:'06:30',cutoff_min:null}],
+            course:'Starts at Upvan Lake, out along Pokhran Road 2 and back.',landmarks:['Upvan Lake','Pokhran Road 2','Hiranandani Estate'],url:'https://example.com/race',note:null});
+          return{ok:true,status:200,clone(){return this;},text:async()=>t,json:async()=>({candidates:[{content:{parts:[{text:t}]}}],usageMetadata:{promptTokenCount:10,candidatesTokenCount:10}})};}
+        return f0(u,o);};});
+    await p.evaluate(()=>{window.__planned=null;window.LMNative.planLogs=async items=>{window.__planned=items;return{ok:true,count:items.length,next:items[0]||null};};});
+    await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Profile');await W(400);
+    await p.click('[aria-label="Add a race"]');await W(300);
+    await p.fill('[data-race-edit] input.x-field','thane lakes half');await click('[data-race-edit] button','Look it up');
+    for(let i=0;i<40&&await has('Finding the route');i++)await W(300);
+    for(let i=0;i<20&&!(await has('Which one are you doing'));i++)await W(300);
+    if(!(await p.evaluate(()=>window.__raceSearch)))throw new Error('the race lookup did not search the web');
+    await click('[data-race-edit] .x-chip','Half Marathon');await W(200);
+    const dr=await p.evaluate(()=>[...document.querySelectorAll('[data-race-edit] input')].map(i=>i.value));
+    if(!dr.includes('2026-11-10')||!dr.includes('05:45')||!dr.includes('21.1')||!dr.includes('3')||!dr.includes('30'))throw new Error('draft not filled: '+dr.join(' | '));
+    if(!(await p.$('[data-race-edit] [aria-label="Route map"]')))throw new Error('no course map');
+    await click('[data-race-edit] button','Save race');await W(500);
+    await expect('Half marathon');await expect('Cutoff 3 hrs 30 mins');await expect('Tomorrow');await expect('Race tomorrow: rest');
+    // the race is tomorrow (test clock: 9 Nov): reminders, workouts, targets and the coach follow
+    await tab(0);await W(1800);await expect('race tomorrow');
+    // at 5 PM the evening's kit check and early night are still to come
+    const tNow=await p.evaluate(()=>Date.now());await p.clock.setFixedTime(new Date('2026-11-09T17:00:00+05:30'));
+    await p.evaluate(()=>{window.__planned=null;window.dispatchEvent(new Event('lm-resume'));});await W(800);
+    const items=await p.evaluate(()=>window.__planned||[]);await p.clock.setFixedTime(tNow);const tags=items.filter(x=>x.kind==='nudge').map(x=>x.tag);
+    for(const t of ['2026-11-09-racekit','2026-11-09-racesleep','2026-11-10-racewake','2026-11-10-racewarm'])if(!tags.includes(t))throw new Error('missing race reminder '+t+'; got '+tags.join(', '));
+    if(tags.some(t=>/walkAM|walkPM/.test(t)))throw new Error('brisk-walk nudges should pause around the race: '+tags.join(', '));
+    const wake=items.find(x=>x.tag==='2026-11-10-racewake');const wt=await p.evaluate(a=>{const d=new Date(a);return d.getHours()*60+d.getMinutes();},wake.at);
+    if(wt!==2*60+45)throw new Error('race-morning reminder should be 3 h before the 5:45 start, got '+wt);
+    if(await has('/ 200 g'))throw new Error('carbs target should go up on the day before the race');
+    await tab(2);await W(400);await click('.x-seg button','Today');await W(300);await expect('Rest: race tomorrow');
+    await tab(0);await p.evaluate(()=>window.__lmLogOpen('coach'));await W(1500);
+    const tc=await p.evaluate(()=>Date.now());await p.clock.setFixedTime(tc+60000);
+    await p.click('[aria-label="Get a fresh review"]').catch(()=>{});await W(2800);
+    if(!(await p.evaluate(()=>(window.__aiBodies||[]).some(b=>/race phase \\"eve\\"/.test(b)&&/Thane Lakes Half Marathon/.test(b)))))throw new Error('the coach was not told about the race');
+    await p.click('[aria-label="Back"]').catch(()=>{});await W(500);
+    // remove it again so the rest of the checks see a normal day
+    await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Profile');await W(300);
+    await click('[data-race] button','Remove');await W(300);await expect('Add a race');
+    await p.click('[aria-label="Back to settings"]');await W();});
   await step('Saved to storage',async()=>{await W(1200);const ok=await p.evaluate(()=>Object.keys(localStorage).some(k=>k.startsWith('fs:')));if(!ok)throw new Error('nothing was saved');});
 
   await b.close();
