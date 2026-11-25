@@ -373,6 +373,21 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const wave=()=>p.evaluate(()=>{const x=[...document.querySelectorAll('.x-card svg[data-flow] path')].find(e=>e.closest('.x-card').innerText.includes('Downloading'));return x&&x.getAttribute('d');});
     const w1=await wave();await W(300);const w2=await wave();if(!w1||w1===w2)throw new Error('the download wave is not moving '+String(w1).slice(0,80));
     await p.click('[aria-label="Back to settings"]');});
+  await step('BMI',async()=>{await tab(3);await W(400);await expect('BMI · ');await expect('Healthy weight for your height');
+    await tab(0);await W(400);if(!(await p.evaluate(()=>[...document.querySelectorAll('.x-stat')].some(e=>/Weight/.test(e.textContent)&&/BMI \d/.test(e.textContent))))){
+      // the weight tile shows BMI only on a day with a weigh-in
+      if(await p.evaluate(()=>[...document.querySelectorAll('.x-stat')].some(e=>/Weight\d/.test(e.textContent))))throw new Error('weight tile has no BMI');}});
+  await step('Batched step counts don’t spike stride or cadence',async()=>{
+    // 15 min at 1.3 m/s and 110 steps a minute, a fix every 2 s; the phone holds the count back from 7 to 9 min
+    const r=await p.evaluate(()=>{const pts=[];for(let t=0;t<=900;t+=2){const real=Math.round(t/60*110);
+        pts.push([t,18.52+t*1.3/111000,73.85,560,5,(t>=420&&t<540)?Math.round(420/60*110):real]);}
+      pts.forEach(q=>{q[4]=q[5];q.length=5;});
+      const tr=window.__lmTrackStats(pts).trend;return{cad:tr.map(x=>x.cad).filter(x=>x!=null),st:tr.map(x=>x.stride).filter(x=>x!=null)};});
+    if(Math.min(...r.cad)<95||Math.max(...r.cad)>125)throw new Error('cadence '+r.cad.join(','));
+    if(Math.max(...r.st)>85||Math.min(...r.st)<60)throw new Error('stride '+r.st.join(','));});
+  await step('Tabs grow out of what you tapped',async()=>{await tab(0);await W(300);await p.click('.x-card.pri.sa');await W(900);await expect('Today');
+    if(await p.evaluate(()=>[...document.querySelectorAll('*')].some(e=>e.style&&e.style.viewTransitionName==='lm-hero')))throw new Error('a hero name was left behind');
+    await tab(0);await W(600);});
   await step('Saved to storage',async()=>{await W(1200);const ok=await p.evaluate(()=>Object.keys(localStorage).some(k=>k.startsWith('fs:')));if(!ok)throw new Error('nothing was saved');});
 
   await b.close();

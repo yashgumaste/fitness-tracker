@@ -1096,11 +1096,26 @@ function cleanTrack(pts){
   return{pts:p,cut:Math.max(0,len(pts)-len(p))};
 }
 if(typeof window!=='undefined')window.__lmCleanTrack=p=>cleanTrack(p);   // for the tests
+// The phone's step count can arrive in batches (Samsung holds it back for a minute or more, more so with the screen
+// off): fixes keep the old count until the batch lands, then it jumps, which showed as a dip in steps a minute and
+// a spike in stride. Spread each jump evenly back to when the previous count first appeared, so the charts follow
+// what you did rather than when the phone reported it. A real stop isn't smeared: the count changes again with
+// your first step, so the spread only covers that one step.
+function smoothSteps(pts){
+  const S=pts.map(p=>p[4]==null?null:+p[4]);let a=-1;
+  for(let i=0;i<S.length;i++){if(S[i]==null)continue;
+    if(a<0||S[i]!==S[a]){
+      if(a>=0){const t0=pts[a][0],t1=pts[i][0],v0=S[a],v1=S[i];
+        if(t1>t0&&v1>v0)for(let j=a+1;j<i;j++)if(S[j]!=null)S[j]=v0+(v1-v0)*(pts[j][0]-t0)/(t1-t0);}
+      a=i;}}
+  return S;
+}
+if(typeof window!=='undefined')window.__lmTrackStats=(p,a)=>trackStats(p,a);   // for the tests
 function trackStats(pts,altSrc){
   const out={trend:[],dist:0,splits:[],gain:0,loss:0,profile:[],speed:[],maxKmh:0,hasAlt:false,maxAlt:null,minAlt:null,movingSec:0,climbSec:0,
     steepUp:0,steepDown:0,kcalPerKg:0,jogs:[],jogSec:0,jogM:0};
   if(!pts||pts.length<2)return out;
-  const baro=altSrc==='baro',win=baro?2:6,band=baro?1.5:4;
+  const baro=altSrc==='baro',win=baro?2:6,band=baro?1.5:4,S=smoothSteps(pts);
   const raw=pts.map(p=>p[3]);out.hasAlt=raw.filter(a=>a!=null).length>pts.length*.6;
   const alt=baro?raw:gpsHeight(pts);
   // smooth altitude before counting climb
@@ -1148,19 +1163,19 @@ function trackStats(pts,altSrc){
       while(k<i&&T[i]-T[k+1]>=60)k++;
       const mv=T[i]-T[k],el=pts[i][0]-pts[k][0],m=D[i]-D[k];
       if(mv<45||el>mv*1.5+10)continue;
-      const kmh=m/mv*3.6,steps=pts[i][4]!=null&&pts[k][4]!=null?pts[i][4]-pts[k][4]:null;
+      const kmh=m/mv*3.6,steps=S[i]!=null&&S[k]!=null?S[i]-S[k]:null;
       out.trend.push({x:Math.round(T[i]/60)+' min',kmh:+kmh.toFixed(1),pace:kmh>=1.5?3600/kmh:null,
-        cad:steps!=null&&steps>0?Math.round(steps/(el/60)):null,stride:steps!=null&&steps>=20&&m>=10?Math.round(m*100/steps):null});}}
+        cad:steps!=null&&steps>0?Math.round(steps/(el/60)):null,stride:steps!=null&&steps>=20&&m>=10&&m*100/steps<=220?Math.round(m*100/steps):null});}}
   // short jogs inside a walk: 20-s stretches at 140+ steps/min, or 7.5+ km/h with a jogging rhythm; gaps under 15 s merge
   {const jog=pts.map((p,i)=>{let k=i;while(k>0&&p[0]-pts[k-1][0]<=20)k--;const dt=p[0]-pts[k][0];if(dt<8||T[i]-T[k]<dt*0.8)return false;
-      const kmh=(D[i]-D[k])/dt*3.6,cad=p[4]!=null&&pts[k][4]!=null?(p[4]-pts[k][4])/(dt/60):null;
+      const kmh=(D[i]-D[k])/dt*3.6,cad=S[i]!=null&&S[k]!=null?(S[i]-S[k])/(dt/60):null;
       return (cad!=null&&cad>=140)||(kmh>=7.5&&kmh<20&&(cad==null||cad>=115));});
     let a=-1;const segs=[];
     for(let i=0;i<=pts.length;i++){if(i<pts.length&&jog[i]){if(a<0)a=i;}else if(a>=0){segs.push([a,i-1]);a=-1;}}
     const merged=[];segs.forEach(sg=>{const l=merged[merged.length-1];if(l&&pts[sg[0]][0]-pts[l[1]][0]<15)l[1]=sg[1];else merged.push([...sg]);});
     merged.forEach(([i0,i1])=>{let k=i0;while(k>0&&pts[i0][0]-pts[k-1][0]<=10)k--;i0=k;   // the window looks back: start a little earlier
       const sec=pts[i1][0]-pts[i0][0],m=D[i1]-D[i0];if(sec<15||m<40)return;
-      const cad=pts[i1][4]!=null&&pts[i0][4]!=null?Math.round((pts[i1][4]-pts[i0][4])/(sec/60)):null;
+      const cad=S[i1]!=null&&S[i0]!=null?Math.round((S[i1]-S[i0])/(sec/60)):null;
       out.jogs.push({i0,i1,at:pts[i0][0],sec,m,kmh:m/sec*3.6,cad});out.jogSec+=sec;out.jogM+=m;});}
   return out;
 }
@@ -1186,6 +1201,10 @@ const fmtSpan=(a,b)=>{const A=fmtClock(a),B=fmtClock(b);const ap=A.slice(-2)===B
 
 // US Navy body fat formula for men
 // US Navy tape method, metric form (all measurements in cm)
+// BMI: weight ÷ height² (kg/m²), with the WHO bands
+const bmiOf=(kg,cm)=>kg>0&&cm>0?+(kg/((cm/100)**2)).toFixed(1):null;
+const BMI_BANDS=[[18.5,'Underweight','var(--sky)'],[25,'Healthy','var(--mint)'],[30,'Overweight','var(--amber)'],[Infinity,'Obese','var(--err)']];
+const bmiBand=b=>BMI_BANDS.find(x=>b<x[0]);
 function calcNavyBF({heightCm,neckCm,waistCm,hipCm},gender){
   if(!heightCm||!neckCm||!waistCm||waistCm<=neckCm) return null;
   let bf;
@@ -1990,7 +2009,10 @@ function App(){
     if(!d.startViewTransition||!(window.ReactDOM&&ReactDOM.flushSync)||d.hidden||(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)){update();return;}
     // grow out of what was tapped, unless a full-screen page (which already carries the name) is up
     const busy=d.querySelector('[style*="view-transition-name: lm-hero"]');
-    const tp=lastTap.current,fresh=tp&&Date.now()-tp.t<1500,hero=!busy&&kind==='open'&&fresh&&tp.el&&tp.el.isConnected?tp.el:null;
+    const tp=lastTap.current,fresh=tp&&Date.now()-tp.t<1500,hero=!busy&&(kind==='open'||kind==='tab')&&fresh&&tp.el&&tp.el.isConnected?tp.el:null;
+    // a tab opened from a card (Fuel, Train) or from the island grows out of what you tapped, like a page does:
+    // the new tab's content takes the name for the second half of the morph
+    const tabHero=hero&&kind==='tab';
     // where the motion starts: the point you tapped (the island at the bottom, a pill at the top…); Back goes home
     // to where its page came from
     const W=window.innerWidth,Hh=window.innerHeight;
@@ -2000,15 +2022,17 @@ function App(){
     const o=back&&back.x!=null?{x:back.x,y:back.y0}:at;
     root.style.setProperty('--tx',o.x+'px');root.style.setProperty('--ty',o.y+'px');
     root.style.setProperty('--tr',Math.ceil(Math.hypot(Math.max(o.x,W-o.x),Math.max(o.y,Hh-o.y))+8)+'px');
-    root.dataset.vt=hero?kind:kind==='open'?'grow':kind;if(hero)hero.style.viewTransitionName='lm-hero';
-    try{const t=d.startViewTransition(()=>{if(hero)hero.style.viewTransitionName='';ReactDOM.flushSync(update);
+    const vt=tabHero?'open':hero?kind:kind==='open'?'grow':kind;root.dataset.vt=vt;if(hero)hero.style.viewTransitionName='lm-hero';
+    try{let tabEl=null;
+    const t=d.startViewTransition(()=>{if(hero)hero.style.viewTransitionName='';ReactDOM.flushSync(update);
+        if(tabHero){tabEl=d.querySelector('[data-tabroot]');if(tabEl&&tabEl.offsetParent!==null)tabEl.style.viewTransitionName='lm-hero';else tabEl=null;}
         if(back){window.scrollTo(0,back.y);
           // Back: the page shrinks into the same card it grew out of (found again by its label and text)
           const el=back.key&&[...d.querySelectorAll('button,[role=button]')].find(e=>heroKey(e)===back.key&&!e.closest('[style*="view-transition-name: lm-hero"]'));
           if(el){el.style.viewTransitionName='lm-hero';t.finished.catch(()=>{}).finally(()=>{el.style.viewTransitionName='';});}}});
       // a newer transition can cut this one short: that's fine, the update has still run
       t.ready.catch(()=>{});t.updateCallbackDone.catch(()=>{});
-      t.finished.catch(()=>{}).finally(()=>{if(root.dataset.vt===kind||root.dataset.vt==='grow')delete root.dataset.vt;});}
+      t.finished.catch(()=>{}).finally(()=>{if(tabEl)tabEl.style.viewTransitionName='';if(root.dataset.vt===vt)delete root.dataset.vt;});}
     catch(e){if(hero)hero.style.viewTransitionName='';update();}
   }
   // a small thing growing into a bigger one in place (a pill into its card), named lm-pop
@@ -2958,7 +2982,7 @@ function App(){
       const prompt=`You are a health coach reviewing one whole day (${date}${isT?`, today; it is now ${fmtTime(Date.now())} and the day is not over`:''}): food, walks, workout, sleep, water and how they felt. Be specific, direct and practical; name actual foods and numbers. Only mention things that were actually logged.
 
 USER CONTEXT:
-- Goal: ${{lose:'Fat loss',maintain:'Maintain weight, get fitter',gain:'Build muscle'}[profile.goal]||'Fat loss'}${currentBF?`, ${currentBF}% → ${BF_GOAL[0]}-${BF_GOAL[1]}% body fat`:''}${profile.targetKg?`, goal weight ${profile.targetKg} kg`:targetWeightAt18?`, ${targetWeightAt24}-${targetWeightAt18} kg target`:''}${profile.gender?`, ${profile.gender==='female'?'woman':profile.gender==='male'?'man':'adult'}`:''}${bodySaved?`, age ${bodyMeasure.age}`:''}${latestWeight?`, weight ${latestWeight.w} kg`:''}
+- Goal: ${{lose:'Fat loss',maintain:'Maintain weight, get fitter',gain:'Build muscle'}[profile.goal]||'Fat loss'}${currentBF?`, ${currentBF}% → ${BF_GOAL[0]}-${BF_GOAL[1]}% body fat`:''}${bmiNow?`, BMI ${bmiNow}`:''}${profile.targetKg?`, goal weight ${profile.targetKg} kg`:targetWeightAt18?`, ${targetWeightAt24}-${targetWeightAt18} kg target`:''}${profile.gender?`, ${profile.gender==='female'?'woman':profile.gender==='male'?'man':'adult'}`:''}${bodySaved?`, age ${bodyMeasure.age}`:''}${latestWeight?`, weight ${latestWeight.w} kg`:''}
 - Daily targets: ${GOALS.calories.min}-${GOALS.calories.max} kcal, ${GOALS.protein.target} g protein, ${fmtN(WALK_GOAL.day)} steps, ${fmtL(WATER_GOAL.ml)} water, sleep 7-9 h
 - Indian diet (rotis, dal, sabji, dahi, paneer, etc.)
 - Week ${weekNum} of 12-week plan (Phase ${phase}: ${phase===1?'Foundation — learning movements':phase===2?'Progression — adding weight':'Strength — pushing limits'})
@@ -3107,7 +3131,7 @@ ${wantPlan?'"keep" has 0-2 items: only habits that really were good that day. If
       const prompt=`You are a blunt, expert personal trainer and nutritionist. Give honest, accurate coaching based only on the data provided.
 
 USER PROFILE:
-- Goal: ${{lose:'Fat loss',maintain:'Maintain weight, get fitter',gain:'Build muscle'}[profile.goal]||'Fat loss'}${currentBF?` from ${currentBF}% → ${BF_GOAL[0]}-${BF_GOAL[1]}% body fat`:''}
+- Goal: ${{lose:'Fat loss',maintain:'Maintain weight, get fitter',gain:'Build muscle'}[profile.goal]||'Fat loss'}${currentBF?` from ${currentBF}% → ${BF_GOAL[0]}-${BF_GOAL[1]}% body fat`:''}${bmiNow?`, BMI ${bmiNow}`:''}
 - Target weight: ${profile.targetKg?profile.targetKg+' kg':targetWeightAt18?targetWeightAt18+'–'+targetWeightAt24+' kg':'not set'} | Start: ${startW||'?'} kg | Current: ${curW||'?'} kg
 - Primary focus: reduce waist circumference (currently ${bodyMeasure.waistCm}cm) — visceral/abdominal fat
 - Daily targets: ${GOALS.calories.min}–${GOALS.calories.max} kcal, ≥${GOALS.protein.target}g protein, ${fmtN(WALK_GOAL.day)} steps. Prioritize compound lifts + cardio for fat loss
@@ -3205,7 +3229,9 @@ Reply ONLY with valid JSON (no markdown):
      EXPRESSIVE SHELL — Home · Timeline · Sheets · Settings · Dock
   ═══════════════════════════════════════════════════════ */
 
+  const bmiH=bodySaved&&+bodyMeasure.heightCm?+bodyMeasure.heightCm:0;   // BMI needs your height
   const latestWeight=(()=>{const e=Object.entries(weightLog).filter(([,v])=>v).sort((a,b)=>a[0].localeCompare(b[0]));return e.length?{date:e[e.length-1][0],w:parseFloat(e[e.length-1][1])}:null;})();
+  const bmiNow=bmiH?bmiOf(latestWeight?.w||+bodyMeasure.weightKg,bmiH):null;
   const fmtN=n=>Math.round(n||0).toLocaleString('en-IN');
   const dayLabel=k=>k===TODAY?'Today':k===calAddDays(TODAY,-1)?'Yesterday':new Date(k+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
   const KIND={meal:['var(--amber-c)','var(--amber)'],walk:['var(--mint-c)','var(--mint)'],rec:['var(--mint)','#00391f'],workout:['var(--pri-c)','var(--pri)'],weight:['var(--violet-c)','var(--violet)'],feel:['var(--pink-c)','var(--pink)'],sleep:['var(--night-c)','var(--night)'],water:['var(--sky-c)','var(--sky)']};
@@ -4979,7 +5005,7 @@ Reply ONLY with valid JSON (no markdown):
             <button className="x-stat" onClick={()=>openSleep(day)} style={{border:'none',textAlign:'left',color:'var(--fg)'}}>
               <small>Sleep</small><b style={{color:m&&(m<420||m>570)?'var(--amber)':'var(--night)'}}>{m?(m/60).toFixed(1)+' h':'—'}</b><i>{m?`${q?q[1]+' '+q[2]:fmt12(sl.bed)+' → '+fmt12(sl.wake)}`:'tap to log'}</i></button>);})()}
             <button className="x-stat" onClick={()=>openWeight(day)} style={{border:'none',textAlign:'left',color:'var(--fg)'}}>
-              <small>Weight</small><b style={{color:'var(--violet)'}}>{weightLog[day]||'—'}</b><i>{weightLog[day]?'kg':'tap to log'}</i></button>
+              <small>Weight</small><b style={{color:'var(--violet)'}}>{weightLog[day]||'—'}</b><i>{weightLog[day]?'kg'+(bmiH?` · BMI ${bmiOf(parseFloat(weightLog[day]),bmiH)}`:''):'tap to log'}</i></button>
             <button className="x-stat" onClick={()=>setTab('progress')} style={{border:'none',textAlign:'left',color:'var(--fg)'}}>
               <small>Body fat</small><b style={{color:'var(--pink)'}}>{bf?bf+'%':'—'}</b><i>{bf?`goal ${BF_GOAL[0]}–${BF_GOAL[1]}%`:'add measurements'}</i></button>
             <button className="x-stat" onClick={()=>openFeel(day)} style={{border:'none',textAlign:'left',color:'var(--fg)'}}>
@@ -5386,7 +5412,7 @@ Reply ONLY with valid JSON (no markdown):
           </div>)}
 
         <div className="x-sec"><h2 className="x-h2">Body</h2><button className="x-btn sm tonal" onClick={openBody}>Edit</button></div>
-        {!currentBF&&pagePill({id:'bodyfat',tone:'setup',icon:'📏',text:'Add measurements for body fat',tap:openBody})}
+        {!currentBF&&pagePill({id:'bodyfat',tone:'setup',icon:'📏',text:bmiH?'Add measurements for body fat':'Add your height and measurements for BMI and body fat',tap:openBody})}
         {!profile.targetKg&&pagePill({id:'goalkg',tone:'setup',icon:'🎯',text:'Set a goal weight',tap:()=>goSettings('goals')})}
         {currentBF&&<button className="x-card sb" onClick={openBody} style={{display:'flex',flexDirection:'column',gap:12}}>
           <div style={{display:'flex',alignItems:'baseline',gap:8}}>
@@ -5407,6 +5433,21 @@ Reply ONLY with valid JSON (no markdown):
             <span className="x-tag">Neck {(bodyMeasure.neckCm/2.54).toFixed(1)}″</span>
           </div>
         </button>}
+
+        {bmiNow!=null&&(()=>{const b=bmiBand(bmiNow),bx=v=>Math.max(0,Math.min(100,(v-15)/25*100)),m2=(bmiH/100)**2;   // gauge 15–40
+          return(<button className="x-card sc" onClick={openBody} aria-label="BMI" style={{display:'flex',flexDirection:'column',gap:12,textAlign:'left'}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap'}}>
+            <span className="x-num" style={{fontSize:52,color:b[2]}}>{bmiNow}</span>
+            <span style={{fontWeight:750,color:'var(--fg2)'}}>BMI · {b[1]}</span>
+          </div>
+          <div style={{position:'relative',height:22}}>
+            <div style={{position:'absolute',left:0,right:0,top:7,height:8,borderRadius:4,background:'var(--s4)'}}/>
+            <div style={{position:'absolute',left:bx(18.5)+'%',width:(bx(25)-bx(18.5))+'%',top:7,height:8,borderRadius:4,background:'var(--mint)'}}/>
+            <div style={{position:'absolute',left:`calc(${bx(bmiNow)}% - 11px)`,top:0}}><Shape kind="cookie9" size={22} fill="var(--fg)"/></div>
+          </div>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:11,fontWeight:700,color:'var(--fg3)',marginTop:-6}}><span>15</span><span style={{color:'var(--mint)'}}>healthy 18.5–24.9</span><span>40</span></div>
+          <div className="x-sub" style={{fontSize:12.5}}>Healthy weight for your height ({Math.round(bmiH)} cm): {(18.5*m2).toFixed(1)}–{(24.9*m2).toFixed(1)} kg. BMI can’t tell muscle from fat{currentBF?', so your body fat % is the better guide':''}.</div>
+        </button>);})()}
 
         <div className="x-grid2">
           <div className="x-stat" style={{borderRadius:'32px 14px 14px 14px'}}><small>Streak</small><b style={{color:'var(--amber)'}}>{streak} d</b><i>workouts in a row</i></div>
@@ -5707,7 +5748,7 @@ Reply ONLY with valid JSON (no markdown):
       {!bodySaved&&pagePill({id:'measure',tone:'setup',icon:'📏',text:'Add your measurements',tap:openBody})}
           <button className="x-card sa" onClick={openBody} style={{display:'flex',flexDirection:'column',gap:12}}>
             <div className="x-grid3">
-              {[['Body fat',currentBF?currentBF+'%':'—','var(--pink)'],['Lean',leanMassKg?leanMassKg.toFixed(1)+' kg':'—','var(--mint)'],['Weight',(latestWeight?.w||bm.weightKg)+' kg','var(--violet)'],
+              {[['Body fat',currentBF?currentBF+'%':'—','var(--pink)'],['Lean',leanMassKg?leanMassKg.toFixed(1)+' kg':'—','var(--mint)'],['Weight',(latestWeight?.w||bm.weightKg)+' kg','var(--violet)'],['BMI',bmiNow!=null?String(bmiNow):'—',bmiNow!=null?bmiBand(bmiNow)[2]:null],
                 ['Height',bodySaved?Math.round(bm.heightCm)+' cm':'—'],['Waist',bodySaved?(+bm.waistCm).toFixed(1)+' cm':'—'],['Neck',bodySaved?(+bm.neckCm).toFixed(1)+' cm':'—']].map(([l,v,c])=>(
                 <div key={l}><div style={{fontSize:12,fontWeight:700,color:'var(--fg3)'}}>{l}</div><div className="x-num" style={{fontSize:18,color:c||'var(--fg)',marginTop:4}}>{v}</div></div>))}
             </div>
@@ -6887,7 +6928,7 @@ Reply ONLY with valid JSON (no markdown):
       {overlayEl&&<div className="page-pad" data-cloth={recOpen?undefined:''} style={{flex:1,display:'flex',flexDirection:'column',viewTransitionName:'lm-hero'}}>
         {pillsNow.length>0&&<div style={{height:46,flexShrink:0}} aria-hidden="true"/>}
         {overlayEl}</div>}
-      <div style={{display:sheet||setupOpen||overlayEl?'none':'flex',flexDirection:'column',flex:1}}>
+      <div data-tabroot="" style={{display:sheet||setupOpen||overlayEl?'none':'flex',flexDirection:'column',flex:1}}>
       {tab==='diet'&&<div>{head('Food',dateLong(TODAY))}<div style={{padding:'0 16px 12px'}}><Seg items={[['today','Today'],['history','History']]} value={pillPreview?.dietView||dietView} onChange={setDietView}/></div></div>}
       {tab==='fitness'&&<div>{head('Fitness',fitView==='day'?'Plan · walks · workout':'Your history')}<div style={{padding:'0 16px 12px'}}><Seg items={[['day','Today'],['calendar','History']]} value={pillPreview?.fitView||fitView} onChange={setFitView}/></div></div>}
       {tab==='progress'&&head('Progress','Body, trends and weekly review')}
