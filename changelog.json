@@ -1,5 +1,9 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "Cadence no longer gets stuck at 0 while you walk. Some phones (Samsung among them) hold back or stop sending the step-by-step signal while still counting steps, so the app now times steps by when they actually happened, falls back to the step count when that signal goes quiet, and won't show 0 while GPS has you walking."
+    }
+  ],
   "releases": [
     {
       "version": "1.45",

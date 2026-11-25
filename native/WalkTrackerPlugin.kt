@@ -138,7 +138,7 @@ object WalkState {
         kind = k; state = "recording"; start = System.currentTimeMillis()
         movingBase = SystemClock.elapsedRealtime(); movingAcc = 0
         distanceM = 0.0; stepsBase = -1; stepsNow = -1; stepsPaused = 0
-        points.clear(); last = null; lastFix = 0; gainM = 0.0; refAlt = Double.NaN; det.clear(); cnt.clear(); satsUsed = 0; satsSeen = 0
+        points.clear(); last = null; lastFix = 0; gainM = 0.0; refAlt = Double.NaN; det.clear(); cnt.clear(); cntRise = 0L; satsUsed = 0; satsSeen = 0
     }
 
     fun onPressure(hPa: Float) {
@@ -152,31 +152,47 @@ object WalkState {
 
     // live cadence: when the latest steps happened. The step detector fires once a step, straight away;
     // the step counter can arrive in batches a few seconds late, so it's only the fallback.
+    // Some phones (Samsung among them) hold step-detector events back and hand them over in a batch, or stop
+    // sending them while the counter keeps counting: so steps are timed by when they happened (the event's own
+    // time), and when the detector goes quiet but the counter is still going up, the counter decides.
     private val det = ArrayDeque<Long>()          // elapsed ms of each detected step (last 10 s)
-    private val cnt = ArrayDeque<LongArray>()     // [elapsed ms, counter value] (last 15 s)
-    @Synchronized fun onStepDetected() {
-        if (state != "recording") return
-        val t = SystemClock.elapsedRealtime(); det.addLast(t)
-        while (det.isNotEmpty() && t - det.first() > 10000) det.removeFirst()
+    private val cnt = ArrayDeque<LongArray>()     // [elapsed ms, counter value] (last 20 s)
+    private var cntRise = 0L                      // when the counter last went up
+    /** A sensor event's time in elapsed ms; its arrival time if the phone's sensor clock is on another base. */
+    fun eventMs(tsNanos: Long): Long {
+        val now = SystemClock.elapsedRealtime(); val t = tsNanos / 1_000_000
+        return if (t in (now - 60_000)..(now + 1000)) minOf(t, now) else now
     }
-    /** Steps a minute over the last ~4 seconds; 0 once steps stop; null if it can't tell yet. */
+    @Synchronized fun onStepDetected(t: Long = SystemClock.elapsedRealtime()) {
+        if (state != "recording") return
+        if (det.isEmpty() || t >= det.last()) det.addLast(t)
+        val now = SystemClock.elapsedRealtime()
+        while (det.isNotEmpty() && now - det.first() > 10000) det.removeFirst()
+    }
+    /** Steps a minute over the last few seconds; 0 once steps stop; null if it can't tell yet. */
     @Synchronized fun liveSpm(): Double? {
         val now = SystemClock.elapsedRealtime()
-        if (det.isNotEmpty()) {
-            if (now - det.last() > 2500) return 0.0
-            val w = det.filter { now - it <= 4000 }
-            return if (w.size >= 4 && w.last() > w.first()) (w.size - 1) * 60000.0 / (w.last() - w.first()) else null
+        // 1. step detector, while it's keeping up
+        if (det.isNotEmpty() && now - det.last() <= 2500) {
+            val w = det.filter { det.last() - it <= 4000 }
+            if (w.size >= 4 && w.last() > w.first()) return (w.size - 1) * 60000.0 / (w.last() - w.first())
         }
-        if (cnt.size >= 2) {
-            val last = cnt.last(); val first = cnt.firstOrNull { now - it[0] <= 8000 } ?: return null
-            return if (last[0] - first[0] >= 3000) (last[1] - first[1]) * 60000.0 / (last[0] - first[0]) else null
+        // 2. step counter, while it's still going up (it may come in batches every few seconds)
+        if (cnt.size >= 2 && now - cntRise <= 12000) {
+            val last = cnt.last(); val first = cnt.firstOrNull { last[0] - it[0] <= 12000 && last[0] - it[0] >= 3000 }
+            if (first != null && last[1] > first[1]) return (last[1] - first[1]) * 60000.0 / (last[0] - first[0])
+            return null
         }
-        return null
+        // 3. neither has new steps: standing still (once we've seen steps at all)
+        return if (det.isNotEmpty() || cntRise > 0) 0.0 else null
     }
 
     @Synchronized fun onSteps(v: Long) {
         val t = SystemClock.elapsedRealtime()
-        if (state == "recording") { cnt.addLast(longArrayOf(t, v)); while (cnt.isNotEmpty() && t - cnt.first()[0] > 15000) cnt.removeFirst() }
+        if (state == "recording") {
+            if (cnt.isNotEmpty() && v > cnt.last()[1]) cntRise = t
+            cnt.addLast(longArrayOf(t, v)); while (cnt.isNotEmpty() && t - cnt.first()[0] > 20000) cnt.removeFirst()
+        }
         if (stepsBase < 0) stepsBase = v
         if (state == "paused" && stepsNow >= 0) stepsPaused += maxOf(0, v - stepsNow)
         stepsNow = v
@@ -326,7 +342,7 @@ class WalkService : Service(), LocationListener, SensorEventListener {
     override fun onSensorChanged(e: SensorEvent) {
         when (e.sensor.type) {
             Sensor.TYPE_PRESSURE -> WalkState.onPressure(e.values[0])
-            Sensor.TYPE_STEP_DETECTOR -> WalkState.onStepDetected()
+            Sensor.TYPE_STEP_DETECTOR -> WalkState.onStepDetected(WalkState.eventMs(e.timestamp))
             else -> WalkState.onSteps(e.values[0].toLong())
         }
     }

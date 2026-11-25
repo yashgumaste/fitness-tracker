@@ -157,6 +157,11 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await W(1500);if(await cadCol()!==toRgb)throw new Error('cadence should turn amber after 3 s above average: '+await cadCol()+' vs '+toRgb);
     await p.evaluate(()=>{window.LMNative.walk._spm=100;});await W(1500);
     if(await has('Jogged'))throw new Error('jog pill should go when you slow down');if(await cadCol()===toRgb)throw new Error('cadence should go back to normal');
+    // the step sensor goes quiet (0) while GPS still has you walking: cadence comes from the step count, not 0
+    await p.evaluate(()=>{const w=window.LMNative.walk,L=w._pts[w._pts.length-1],now=Date.now();w._spm=0;   // fresh fixes: walking ~4.7 km/h, 110 steps a minute
+      for(let k=15;k>=0;k--)w._pts.push([now-k*2000,L[1]+(15-k+1)*0.0000235,L[2],L[3],5,null,L[6]+Math.round((15-k+1)*3.67)]);});await W(1500);
+    {const c=await p.evaluate(()=>document.querySelector('[data-rec-big=cadence] .x-num').textContent.trim());if(c==='0')throw new Error('cadence stuck at 0 while walking');}
+    await p.evaluate(()=>{window.LMNative.walk._spm=100;});await W(500);
     // leave the recording screen: a pinned pill at the top shows it's still going, and opens it again
     await p.evaluate(()=>{const b=[...document.querySelectorAll('button')].find(b=>/^Back/.test(b.getAttribute('aria-label')||''));b&&b.click();});await W(1200);
     const pill=await p.$('[aria-label="Open the recording"]');if(!pill)throw new Error('no recording pill after leaving the recording screen');
