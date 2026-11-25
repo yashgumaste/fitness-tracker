@@ -667,12 +667,12 @@ input.m3-input{border-radius:999px;}
 ::view-transition-new(lm-hero){height:100%;object-fit:cover;animation:lm-vt-in .24s var(--m-effects) .05s both}
 :root[data-vt=open]::view-transition-old(root){animation:lm-vt-recede .35s var(--m-effects) both}
 :root[data-vt=open]::view-transition-new(root){animation:lm-vt-in .35s var(--m-effects) both}
-/* Motion starts where you tapped (--tx, --ty): a tab or a page opened from the island spreads up from the bottom,
+/* Motion starts where you tapped (--tx, --ty): a tab or a page opened from the island springs open from the bottom,
    one opened from a pill comes down from the top; Back gathers it back into that spot. Springy and slow-fast-slow. */
-:root[data-vt=back]::view-transition-old(root){z-index:2;transform-origin:var(--tx) var(--ty);animation:lm-vt-gather .42s var(--m-emph) both}
+:root[data-vt=back]::view-transition-old(root){z-index:2;transform-origin:var(--tx) var(--ty);animation:lm-vt-gather .32s var(--m-emph) both}
 :root[data-vt=back]::view-transition-new(root){animation:lm-vt-settle .45s var(--m-effects) both}
 :root[data-vt=tab]::view-transition-old(root),:root[data-vt=grow]::view-transition-old(root){transform-origin:var(--tx) var(--ty);animation:lm-vt-recede .5s var(--m-emph) both}
-:root[data-vt=tab]::view-transition-new(root),:root[data-vt=grow]::view-transition-new(root){transform-origin:var(--tx) var(--ty);animation:lm-vt-spread .55s var(--m-spatial) both}
+:root[data-vt=tab]::view-transition-new(root),:root[data-vt=grow]::view-transition-new(root){transform-origin:var(--tx) var(--ty);animation:lm-vt-spread .45s var(--m-spatial) both}
 :root[data-vt=sheet]::view-transition-new(root){animation:lm-vt-rise .42s var(--m-spatial) both}
 :root[data-vt=sheet]::view-transition-old(root){animation:lm-vt-fade-out .2s linear both}
 :root[data-vt=unsheet]::view-transition-old(root){animation:lm-vt-sink .3s var(--m-emph) both;z-index:2}
@@ -694,12 +694,13 @@ input.m3-input{border-radius:999px;}
 @keyframes lm-pop-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-18px) scale(.8,.35)}}
 :root[data-vt=pop]::view-transition-old(root),:root[data-vt=pop]::view-transition-new(root){animation:none}
 @keyframes lm-vt-recede{to{opacity:.35;transform:scale(.93)}}
-@keyframes lm-vt-spread{from{clip-path:circle(24px at var(--tx) var(--ty));transform:scale(.9)}to{clip-path:circle(var(--tr) at var(--tx) var(--ty));transform:none}}
-@keyframes lm-vt-gather{from{clip-path:circle(var(--tr) at var(--tx) var(--ty))}to{clip-path:circle(20px at var(--tx) var(--ty));transform:scale(.88);opacity:.2}}
+/* no circle: when there's no card to grow out of, the page springs open from the tap point, like the card morph */
+@keyframes lm-vt-spread{from{transform:scale(.8);opacity:0;border-radius:28px}30%{opacity:1}to{transform:none;opacity:1}}
+@keyframes lm-vt-gather{to{transform:scale(.82);opacity:0}}
 @keyframes lm-vt-settle{from{opacity:.5;transform:scale(.96)}}
 /* full-screen pages carry their own name (lm-hero): when there's no card to grow out of, they spread from the tap too */
-:root[data-vt=grow]::view-transition-new(lm-hero):only-child{transform-origin:var(--tx) var(--ty);animation:lm-vt-spread .55s var(--m-spatial) both}
-:root[data-vt=back]::view-transition-old(lm-hero):only-child,:root[data-vt=tab]::view-transition-old(lm-hero):only-child{transform-origin:var(--tx) var(--ty);animation:lm-vt-gather .42s var(--m-emph) both}
+:root[data-vt=grow]::view-transition-new(lm-hero):only-child{transform-origin:var(--tx) var(--ty);animation:lm-vt-spread .45s var(--m-spatial) both}
+:root[data-vt=back]::view-transition-old(lm-hero):only-child,:root[data-vt=tab]::view-transition-old(lm-hero):only-child{transform-origin:var(--tx) var(--ty);animation:lm-vt-gather .32s var(--m-emph) both}
 /* something appearing or going in the page (the jogging pill): grows open on a spring, shrinks away smoothly */
 .lm-show{display:grid;grid-template-rows:1fr;animation:lm-show-in .5s var(--m-spatial) both}
 .lm-show.out{animation:lm-show-out .38s var(--m-emph) both}
