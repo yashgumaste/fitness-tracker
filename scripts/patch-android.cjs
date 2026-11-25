@@ -11,6 +11,10 @@ for(const perm of ['android.permission.POST_NOTIFICATIONS','android.permission.V
   'android.permission.ACCESS_FINE_LOCATION','android.permission.ACCESS_COARSE_LOCATION','android.permission.FOREGROUND_SERVICE','android.permission.FOREGROUND_SERVICE_LOCATION']){
   if(!m.includes(perm))m=m.replace('</manifest>',`    <uses-permission android:name="${perm}" />\n</manifest>`);
 }
+// Exact alarms, so reminders come on time (without them Android may hold an alarm back by an hour to save battery):
+// USE_EXACT_ALARM is granted on install on Android 13+; SCHEDULE_EXACT_ALARM covers Android 12
+if(!m.includes('android.permission.USE_EXACT_ALARM'))m=m.replace('</manifest>','    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n</manifest>');
+if(!m.includes('android.permission.SCHEDULE_EXACT_ALARM'))m=m.replace('</manifest>','    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />\n</manifest>');
 if(!m.includes('android.hardware.sensor.stepcounter'))m=m.replace('</manifest>','    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />\n</manifest>');
 if(!/windowSoftInputMode/.test(m))m=m.replace(/<activity\b/,'<activity\n            android:windowSoftInputMode="adjustResize"');
 if(!/android:allowBackup/.test(m))m=m.replace(/<application\b/,'<application\n        android:allowBackup="true"');

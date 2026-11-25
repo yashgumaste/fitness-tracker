@@ -4025,19 +4025,26 @@ Reply ONLY with valid JSON (no markdown):
   // After dinner on a day with no review yet: a nudge to get one, so tomorrow's reminders can be planned.
   function planNudges(day,U,ms,we,logged,now,ok,due){
     const out=[],plan=planFor(day),n=(profile.name||'').trim().split(/\s+/)[0]||'';
-    const add=(min,tag,open,icon,title,body)=>{const at=ms(Math.min(23*60,Math.max(5*60+30,min)));
-      if(ok(at,tag==='walkAM'||tag==='walkPM'?2*3600000:3*3600000)&&body)out.push({at,kind:'nudge',tag:day+'-'+tag,open,icon,day,title,body:String(body).trim()});};
+    // byMin: the time the tip is about (the meal, or a time the tip itself names); once that's 15 min gone the
+    // reminder is stale, so it carries `until` and the phone drops it if it's late (an alarm held back by
+    // battery saving) and the in-app pill stops showing it
+    const add=(min,tag,open,icon,title,body,byMin)=>{const at=ms(Math.min(23*60,Math.max(5*60+30,min)));
+      const until=byMin!=null?Math.max(at+10*60000,ms(byMin+15)):null;
+      if(ok(at,tag==='walkAM'||tag==='walkPM'?2*3600000:3*3600000)&&body&&!(due&&until&&now>until))
+        out.push({at,kind:'nudge',tag:day+'-'+tag,open,icon,day,title,body:String(body).trim(),...(until?{until}:{})});};
     // the coach's nudges come this long before the usual time (Settings: 30 min – 2 h), so there's time to plan;
     // never before you're usually up
     const lead=remOff('coach'),wLead=remOff('walk'),wake=we?U.sleep.we:U.sleep.wd,early=m=>Math.max(wake,m-lead),earlyW=m=>Math.max(wake,m-wLead);
-    const mealAt=mt=>early(we?U[mt].we:U[mt].wd);
+    const mealMin=mt=>we?U[mt].we:U[mt].wd,mealAt=mt=>early(mealMin(mt));
     const mv=day===TODAY?moveDay(day):null;
     const walked=when=>mv?mv.walks.some(w=>w.start!=null&&(when==='am'?w.start<11*60:w.start>=11*60)):false;
     const W=usualWalks();
     const EM={Breakfast:'🍳',Lunch:'🍛',Snack:'🍎',Dinner:'🍽️'};
     if(logCfg.coach&&plan){
       MEAL_TYPES.forEach((mt,i)=>{if(!plan[mt]||MEAL_TYPES.slice(i).some(x=>logged.has(x)))return;
-        add(mealAt(mt),mt,'home','meal',`Coach’s ${mt.toLowerCase()} tip ${EM[mt]}`,plan[mt]);});
+        // a tip that names its own time ("Eat by 8:30 PM") comes ahead of that time, not only before your usual meal
+        const by=Math.min(mealMin(mt),tipMin(plan[mt])??Infinity);
+        add(early(by),mt,'home','meal',`Coach’s ${mt.toLowerCase()} tip ${EM[mt]}`,plan[mt],by);});
       (Array.isArray(plan.keep)?plan.keep:[]).slice(0,2).forEach((h,i)=>{if(!h||!h.text)return;
         const at=MEAL_TYPES.includes(h.at)?(MEAL_TYPES.slice(MEAL_TYPES.indexOf(h.at)).some(x=>logged.has(x))?null:mealAt(h.at))
           :h.at==='morning'?(W.am!=null?early(W.am):wake+30):h.at==='evening'?(W.pm!=null?early(W.pm):18*60):null;
@@ -4068,6 +4075,10 @@ Reply ONLY with valid JSON (no markdown):
     return out;
   }
   const fmtLead=m=>m<60?m+' min':m%60?Math.floor(m/60)+' h '+(m%60):(m/60)+' h';
+  // the time a coach's tip names, in minutes after midnight: "Eat by 8:30 PM", "before 1 pm", "at 7.45am"
+  const tipMin=t=>{const m=/\b(?:by|before|at|around|till|until|latest)\s+(\d{1,2})(?:[:.](\d{2}))?\s*([ap])\.?\s?m\b/i.exec(String(t||''));
+    if(!m||+m[1]>12||+(m[2]||0)>59)return null;return (+m[1]%12+(m[3].toLowerCase()==='p'?12:0))*60+(+m[2]||0);};
+  if(typeof window!=='undefined')window.__lmTipMin=tipMin;
   const pickBy=(seed,a)=>a[[...String(seed)].reduce((x,c)=>x*31+c.charCodeAt(0)>>>0,7)%a.length];
   const logSig=JSON.stringify([logCfg,TODAY,dietEntries.length,dietEntries.map(e=>e.mealType+e.timestamp).join().length,Object.keys(sleepLog).length,sleepLog[TODAY]?.wake,profile.name,
     fitLogs[TODAY]?._dayComplete,Math.round(moveDay(TODAY).steps/1000),Object.keys(tracks).length,

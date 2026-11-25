@@ -11,6 +11,9 @@
     },
     {
       "text": "Tapping the Fuel or Train card, or a tab on the bottom island, now opens the page by growing it out of what you tapped, the same bouncy way the Move and Burned cards already did, instead of a circle spreading across the screen. The circle is gone everywhere: pages that don’t come from a card now spring open from where you tapped, and Back springs them shut, quicker than before."
+    },
+    {
+      "text": "Coach’s tips now come on time. A tip that names a time (“Eat by 8:30 PM”) arrives ahead of that time, not just before your usual meal; if Android holds a reminder back to save battery and it would arrive after the time it’s about, it isn’t shown; and reminders now use exact alarms, so they aren’t held back in the first place."
     }
   ],
   "releases": [

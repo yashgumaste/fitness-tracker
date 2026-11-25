@@ -160,6 +160,7 @@ object Logs {
         }
         due ?: return
         if (now - due.optLong("at") > 3 * 3600_000L) return     // phone was off for hours: too late to ask
+        if (stale(due, now)) return                              // a tip about a time that's already gone
         post(c, due)
     }
 
@@ -245,10 +246,13 @@ object Logs {
         setExact(am, at, pi)
     }
 
+    /** A reminder with `until` (a coach's tip about a meal or a time) isn't worth showing after it. */
+    fun stale(o: JSONObject, now: Long = System.currentTimeMillis()): Boolean = o.optLong("until", 0L).let { it > 0 && now > it }
+
     fun fireSnooze(c: Context) {
         val s = prefs(c).getString("snooze", null) ?: return
         prefs(c).edit().remove("snooze").apply()
-        try { val o = JSONObject(s); if (fresh(o)) post(c, o) } catch (e: Exception) { }
+        try { val o = JSONObject(s); if (fresh(o) && !stale(o)) post(c, o) } catch (e: Exception) { }
     }
 }
 
