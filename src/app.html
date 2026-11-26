@@ -967,12 +967,17 @@ function WaterGlass({pct=0,size=60,color='var(--sky)',glass='var(--on-sky-c)',dr
 const SLEEP_KEY='lm-sleep-v1';   // {wakeDate:{bed:'HH:MM',wake:'HH:MM',q:1-5,wakes:n}} — keyed by the morning you woke up
 const SLEEP_Q=[[1,'😫','Awful'],[2,'😕','Poor'],[3,'😐','Okay'],[4,'🙂','Good'],[5,'😴','Great']];
 const sleepMin=s=>s&&s.bed&&s.wake?walkMinutes(s.bed,s.wake):0;
+// naps that day: sleepLog[date].naps = [{from:'HH:MM',to:'HH:MM'}] (the day's entry also holds the night before it)
+const napsOf=s=>s&&Array.isArray(s.naps)?s.naps.filter(n=>n&&n.from&&n.to):[];
+const napMin=s=>napsOf(s).reduce((a,n)=>a+walkMinutes(n.from,n.to),0);
 // a length of time in minutes, in words: "7 hrs 30 mins", "45 mins", "1 hr"
 const fmtHM=m=>{m=Math.max(0,Math.round(m));const h=Math.floor(m/60),mi=m%60;
   return [h?`${h} ${h===1?'hr':'hrs'}`:null,mi||!h?`${mi} ${mi===1?'min':'mins'}`:null].filter(Boolean).join(' ');};
-function sleepText(s){if(!s||!sleepMin(s))return '';const q=SLEEP_Q.find(x=>x[0]===s.q);
+function sleepText(s){const nm=napMin(s);if(!s||(!sleepMin(s)&&!nm))return '';const q=SLEEP_Q.find(x=>x[0]===s.q);
   const t=(hm)=>{const [h,mi]=hm.split(':').map(Number);return `${h%12||12}:${String(mi).padStart(2,'0')} ${h>=12?'PM':'AM'}`;};
-  return `${fmtHM(sleepMin(s))} (bed ${t(s.bed)} → up ${t(s.wake)})${q?`, felt ${q[2].toLowerCase()}`:''}${s.wakes?`, woke ${s.wakes}× in the night`:''}`;}
+  const naps=napsOf(s),nt=nm?`napped ${fmtHM(nm)} in the day (${naps.map(n=>t(n.from)+'–'+t(n.to)).join(', ')})`:'';
+  if(!sleepMin(s))return 'night not logged; '+nt;
+  return `${fmtHM(sleepMin(s))} (bed ${t(s.bed)} → up ${t(s.wake)})${q?`, felt ${q[2].toLowerCase()}`:''}${s.wakes?`, woke ${s.wakes}× in the night`:''}${nt?'; '+nt:''}`;}
 const PREFS_KEY='lm-prefs-v1';   // {accent, goals:{calMin,calMax,protein,steps,walkSteps,walkKm,walkMin}}
 const DEFAULT_GOALS={calMin:1700,calMax:1850,protein:100,steps:10000,walkSteps:3400,walkKm:2,walkMin:30,water:3000};
 const ACCENTS=[['#00FFFF','Cyan'],['#00E5B0','Teal'],['#5CF2A6','Mint'],['#B6F36A','Lime'],['#FFE04A','Lemon'],['#FFC247','Amber'],
@@ -3194,7 +3199,7 @@ USER PROFILE:
 - Diet follows Indian food patterns (roti, dal, sabji, dahi, paneer, eggs etc.)
 ${illnessFoodRule(TODAY)}
 
-SLEEP, LAST 7 NIGHTS (goal 7–9 h): ${Array.from({length:7},(_,i)=>calAddDays(TODAY,i-6)).map(k=>sleepLog[k]&&sleepMin(sleepLog[k])?`${k}: ${sleepText(sleepLog[k])}`:null).filter(Boolean).join('; ')||'not logged'}
+SLEEP, LAST 7 NIGHTS (goal 7–9 h): ${Array.from({length:7},(_,i)=>calAddDays(TODAY,i-6)).map(k=>sleepLog[k]&&(sleepMin(sleepLog[k])||napMin(sleepLog[k]))?`${k}: ${sleepText(sleepLog[k])}`:null).filter(Boolean).join('; ')||'not logged'}
 WATER, LAST 7 DAYS (goal ${fmtL(WATER_GOAL.ml)}/day): ${Array.from({length:7},(_,i)=>calAddDays(TODAY,i-6)).map(k=>waterMl(k)?`${k}: ${fmtL(waterMl(k))}`:null).filter(Boolean).join('; ')||'not logged'}
 
 WEEKLY SCHEDULE (IMPORTANT — do NOT treat rest days as missed workouts):
@@ -3302,7 +3307,7 @@ Reply ONLY with valid JSON (no markdown):
   };
   const fmtN=n=>Math.round(n||0).toLocaleString('en-IN');
   const dayLabel=k=>k===TODAY?'Today':k===calAddDays(TODAY,-1)?'Yesterday':new Date(k+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
-  const KIND={meal:['var(--amber-c)','var(--amber)'],walk:['var(--mint-c)','var(--mint)'],rec:['var(--mint)','#00391f'],workout:['var(--pri-c)','var(--pri)'],weight:['var(--violet-c)','var(--violet)'],feel:['var(--pink-c)','var(--pink)'],sleep:['var(--night-c)','var(--night)'],water:['var(--sky-c)','var(--sky)']};
+  const KIND={meal:['var(--amber-c)','var(--amber)'],walk:['var(--mint-c)','var(--mint)'],rec:['var(--mint)','#00391f'],workout:['var(--pri-c)','var(--pri)'],weight:['var(--violet-c)','var(--violet)'],feel:['var(--pink-c)','var(--pink)'],sleep:['var(--night-c)','var(--night)'],nap:['var(--night-c)','var(--night)'],water:['var(--sky-c)','var(--sky)']};
 
   // Everything about a day's movement: walks found in the phone's steps + walks you added, all steps, distance and calories
   const moveCache=useRef({});
@@ -3679,6 +3684,7 @@ Reply ONLY with valid JSON (no markdown):
     }
     {const sl=sleepLog[day];const m=sleepMin(sl);if(m){const q=SLEEP_Q.find(x=>x[0]===sl.q);
       items.push({kind:'sleep',id:'sl',ts:at(sl.wake),emoji:'😴',title:`Slept ${fmtHM(m)}`,meta:`${fmt12(sl.bed)} → ${fmt12(sl.wake)}${q?` · ${q[1]} ${q[2]}`:''}${sl.wakes?` · woke ${sl.wakes}×`:''}`});}}
+    napsOf(sleepLog[day]).forEach((n,i)=>items.push({kind:'nap',id:'nap'+i,idx:i,ts:at(n.from),emoji:'💤',title:`Nap · ${fmtHM(walkMinutes(n.from,n.to))}`,meta:`${fmt12(n.from)} → ${fmt12(n.to)}`}));
     {// each drink sits at the time it was logged; drinks within 45 min of each other share one row
       const ws=[...(waterLog[day]||[])].sort((a,b)=>a.ts-b.ts);let run=0,grp=null;
       ws.forEach(x=>{run+=+x.ml||0;
@@ -3819,7 +3825,7 @@ Reply ONLY with valid JSON (no markdown):
   ═══════════════════════════════════════════════════════════════ */
   const dateNice=k=>new Date(k+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
   const dateLong=k=>new Date(k+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
-  const SHAPE_OF={meal:'cookie9',walk:'sunny',rec:'sunny',workout:'cookie6',weight:'cookie4',feel:'flower',sleep:'clover',water:'cookie12'};
+  const SHAPE_OF={meal:'cookie9',walk:'sunny',rec:'sunny',workout:'cookie6',weight:'cookie4',feel:'flower',sleep:'clover',nap:'clover',water:'cookie12'};
   // ── Calories burned in a day ──
   // Resting (Mifflin–St Jeor BMR; today only up to now), walks and everyday steps (moveDay: what moving adds on
   // top of resting), the workout (sets ≈ 1.5 min at ~4 MET, timed cardio ≈ 6 MET, resting not counted twice)
@@ -3883,7 +3889,7 @@ Reply ONLY with valid JSON (no markdown):
         out.push(`${t} · Workout, ${info?.label||'session'} (${fl._dayComplete?'complete':'in progress'}): ${[...exs,...cus].join('; ')||'nothing ticked yet'}${kcal?`, ~${kcal} kcal`:''}${fl._note?`. Note: "${fl._note}"`:''}`);}
       else if(it.kind==='water')out.push(`${t} · Water ${fmtL(it.ml)}${it.n>1?` (${it.n} drinks)`:''}, ${fmtL(it.run)} so far`);
       else if(it.kind==='feel')out.push(`${t} · Feeling: ${symptomText(it.entry,day)}`);
-      else out.push(`${t} · ${it.kind==='sleep'?'Sleep: ':it.kind==='weight'?'Weight: ':''}${it.title}${it.meta&&it.kind!=='weight'?' ('+it.meta+')':''}`);
+      else out.push(`${t} · ${it.kind==='sleep'?'Sleep: ':it.kind==='nap'?'':it.kind==='weight'?'Weight: ':''}${it.title}${it.meta&&it.kind!=='weight'?' ('+it.meta+')':''}`);
     });
     if(!out.length)return 'Nothing logged';
     const m=macrosOf(day),fl=fitLogs[day]||{},{sug}=daySug(day);
@@ -4381,6 +4387,10 @@ Reply ONLY with valid JSON (no markdown):
   const addMin=(hm,n)=>{const [h,m]=hm.split(':').map(Number);const t=((h*60+m+n)%1440+1440)%1440;return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');};
   const openSteps=date=>openSheet('steps',{date},{v:walkLog[date]?.dayTotal||''});
   const openWeight=date=>openSheet('weight',{date},{v:weightLog[date]?String(weightLog[date]):''});
+  // a nap: when you fell asleep and woke; today it defaults to a 30-min nap ending now
+  const openNap=(date,idx)=>{const n=idx!=null?napsOf(sleepLog[date])[idx]:null;
+    const nowM=Math.round((new Date().getHours()*60+new Date().getMinutes())/5)*5,to=date===TODAY?Math.max(30,nowM):15*60;
+    openSheet('nap',{date,idx:n?idx:null},{from:n?n.from:m2hm(to-30),to:n?n.to:m2hm(to),open:null});};
   const openSleep=date=>{const sl=sleepLog[date]||{};openSheet('sleep',{date},{bed:sl.bed||'23:00',wake:sl.wake||'06:30',q:sl.q||0,wakes:sl.wakes||0,open:null});};
   const openFeel=(date,focus)=>openSheet('feel',{date},{open:focus||null});
   const goWorkout=date=>{closeSheet();setTab('fitness');setFitView('day');setSelectedDate(date||TODAY);setNoteText((fitLogs[date||TODAY]?._note)||'');};
@@ -4396,6 +4406,7 @@ Reply ONLY with valid JSON (no markdown):
     else if(it.kind==='weight')openWeight(day);
     else if(it.kind==='feel')openFeel(day,it.entry.id);
     else if(it.kind==='sleep')openSleep(day);
+    else if(it.kind==='nap')openNap(day,it.idx);
     else if(it.kind==='water')openSheet('water',{date:day},{amt:300});
     else goWorkout(day);
   }
@@ -5215,7 +5226,7 @@ Reply ONLY with valid JSON (no markdown):
           <div className="x-grid2">
             {(()=>{const sl=sleepLog[day];const m=sleepMin(sl);const q=SLEEP_Q.find(x=>x[0]===sl?.q);return(
             <button className="x-stat" onClick={()=>openSleep(day)} style={{border:'none',textAlign:'left',color:'var(--fg)'}}>
-              <small>Sleep</small><b style={{color:m&&(m<420||m>570)?'var(--amber)':'var(--night)'}}>{m?(m/60).toFixed(1)+' h':'—'}</b><i>{m?`${q?q[1]+' '+q[2]:fmt12(sl.bed)+' → '+fmt12(sl.wake)}`:'tap to log'}</i></button>);})()}
+              <small>Sleep</small><b style={{color:m&&(m<420||m>570)?'var(--amber)':'var(--night)'}}>{m?(m/60).toFixed(1)+' h':'—'}</b><i>{[m?`${q?q[1]+' '+q[2]:fmt12(sl.bed)+' → '+fmt12(sl.wake)}`:napMin(sl)?null:'tap to log',napMin(sl)?`💤 ${fmtHM(napMin(sl))} nap${napsOf(sl).length>1?'s':''}`:null].filter(Boolean).join(' · ')}</i></button>);})()}
             <button className="x-stat" onClick={()=>openWeight(day)} style={{border:'none',textAlign:'left',color:'var(--fg)'}}>
               <small>Weight</small><b style={{color:'var(--violet)'}}>{weightLog[day]||'—'}</b><i>{weightLog[day]?'kg'+(bmiH?` · BMI ${bmiOf(parseFloat(weightLog[day]),bmiH)}`:''):'tap to log'}</i></button>
             <button className="x-stat" onClick={()=>setTab('progress')} style={{border:'none',textAlign:'left',color:'var(--fg)'}}>
@@ -5647,7 +5658,7 @@ Reply ONLY with valid JSON (no markdown):
         </button>}
 
         {bmiNow!=null&&(()=>{const b=bmiBand(bmiNow),bx=v=>Math.max(0,Math.min(100,(v-15)/25*100)),m2=(bmiH/100)**2;   // gauge 15–40
-          return(<button className="x-card sc" onClick={openBody} aria-label="BMI" style={{display:'flex',flexDirection:'column',gap:12,textAlign:'left'}}>
+          return(<button className="x-card sc" onClick={()=>openBody('bmi')} aria-label="BMI" style={{display:'flex',flexDirection:'column',gap:12,textAlign:'left'}}>
           <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap'}}>
             <span className="x-num" style={{fontSize:52,color:b[2]}}>{bmiNow}</span>
             <span style={{fontWeight:750,color:'var(--fg2)'}}>BMI · {b[1]}</span>
@@ -6176,9 +6187,10 @@ Reply ONLY with valid JSON (no markdown):
       </div>);
   }
 
-  function openBody(){
+  // from: 'bmi' when opened from the BMI card (the sheet then leads with BMI, not body fat)
+  function openBody(from){
     const bm=bodyMeasure;const ti=bm.heightCm/2.54;
-    openSheet('body',{},{age:String(bm.age),w:String(latestWeight?.w||bm.weightKg),wU:'kg',h:String(bm.heightCm),hU:'cm',ft:String(Math.floor(ti/12)),inch:String(Math.round(ti%12)),
+    openSheet('body',{from:typeof from==='string'?from:null},{age:String(bm.age),w:String(latestWeight?.w||bm.weightKg),wU:'kg',h:String(bm.heightCm),hU:'cm',ft:String(Math.floor(ti/12)),inch:String(Math.round(ti%12)),
       neck:String(bm.neckCm),nU:'cm',waist:String(bm.waistCm),waU:'cm',hip:bm.hipCm?String(bm.hipCm):''});
   }
 
@@ -6261,7 +6273,7 @@ Reply ONLY with valid JSON (no markdown):
     if(s.type==='log'){
       title='Log';sub='What would you like to add?';
       const opts=[['🍽️','Food','AI works out the macros','pri',()=>openFood(TODAY,null)],['💧','Water','Glass, bottle or custom','sky',()=>openSheet('water',{date:TODAY},{amt:300})],
-        ['▶️','Start a walk','Record route, pace and steps','mint',()=>startRecording('walk')],['🥾','Start a hike','Route, climb, height and pace','mint',()=>startRecording('hike')],['🚶','Add a walk','Times, steps, distance','mint',()=>openWalk(TODAY)],['😴','Sleep','Last night','night',()=>openSleep(TODAY)],
+        ['▶️','Start a walk','Record route, pace and steps','mint',()=>startRecording('walk')],['🥾','Start a hike','Route, climb, height and pace','mint',()=>startRecording('hike')],['🚶','Add a walk','Times, steps, distance','mint',()=>openWalk(TODAY)],['😴','Sleep','Last night','night',()=>openSleep(TODAY)],['💤','Nap','During the day','night',()=>openNap(TODAY)],
         ['⚖️','Weight','Today’s weigh-in','violet',()=>openWeight(TODAY)],['😶','Feeling','Symptoms & energy','pink',()=>openFeel(TODAY)],
         ['🏋️','Workout','Today’s plan','amber',()=>goWorkout(TODAY)],['📱','Phone steps','Whole-day total','',()=>openSteps(TODAY)]];
       body=<div className="x-grid2">{opts.map(([em,l,sb,c,fn],i)=>(
@@ -6505,7 +6517,7 @@ Reply ONLY with valid JSON (no markdown):
       foot=<button className="x-btn" onClick={close}>Done</button>;
     }
     else if(s.type==='sleep'){
-      const date=s.date;const has=sleepLog[date];
+      const date=s.date;const has=sleepMin(sleepLog[date]);
       const m=walkMinutes(d.bed,d.wake);
       title='Sleep';sub=`Night before ${dateLong(date)}`;
       lead=<Shape kind="clover" size={52} fill="var(--night-c)" color="var(--on-sky-c)" font={24}>😴</Shape>;
@@ -6518,7 +6530,7 @@ Reply ONLY with valid JSON (no markdown):
           <span className="x-chip" style={{background:'var(--s4)'}}>{d.open===k?'Done':'Change'}</span>
         </button>);
       const save=()=>{if(!m){showToast('Bedtime and wake-up time are the same','var(--warn)');return;}
-        setSleepLog(p=>({...p,[date]:{bed:d.bed,wake:d.wake,q:d.q||0,wakes:d.wakes||0}}));showToast(`Sleep logged · ${fmtHM(m)}`,'var(--ok)');close();};
+        setSleepLog(p=>({...p,[date]:{...(p[date]||{}),bed:d.bed,wake:d.wake,q:d.q||0,wakes:d.wakes||0}}));showToast(`Sleep logged · ${fmtHM(m)}`,'var(--ok)');close();};
       body=<>
         <div className="x-card sa" style={{background:'var(--night-c)',color:'var(--on-sky-c)',display:'flex',flexDirection:'column',gap:12,marginBottom:12}}>
           <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap'}}>
@@ -6546,8 +6558,48 @@ Reply ONLY with valid JSON (no markdown):
           <b className="x-num" style={{fontSize:26,minWidth:30,textAlign:'center'}}>{d.wakes||0}</b>
           <button className="x-ibtn tonal" aria-label="More times" onClick={()=>set({wakes:Math.min(20,(d.wakes||0)+1)})} style={{width:44,height:44,borderRadius:16,fontSize:22,fontWeight:800}}>+</button>
         </div>
+        <button className="x-item" onClick={()=>openNap(date)} style={{marginTop:8,borderRadius:24,background:'var(--s2)',border:'none',textAlign:'left',color:'var(--fg)',width:'100%'}}>
+          <span style={{fontSize:22}}>💤</span><span style={{flex:1}}><span className="t" style={{display:'block'}}>Naps on {dateNice(date)}</span>
+            <span className="s">{napMin(sleepLog[date])?`${fmtHM(napMin(sleepLog[date]))} · ${napsOf(sleepLog[date]).map(n=>fmt12(n.from)).join(', ')}`:'Took a nap? Add it'}</span></span>
+          <span className="x-chip" style={{background:'var(--s4)'}}>+ Nap</span></button>
       </>;
-      foot=<>{has&&delBtn('Delete',()=>{setSleepLog(p=>{const n={...p};delete n[date];return n;});close();})}<button className="x-btn" onClick={save}>Save sleep</button></>;
+      foot=<>{has&&delBtn('Delete',()=>{setSleepLog(p=>{const n={...p},naps=napsOf(p[date]);if(naps.length)n[date]={naps};else delete n[date];return n;});close();})}<button className="x-btn" onClick={save}>Save sleep</button></>;
+    }
+    else if(s.type==='nap'){
+      const date=s.date,idx=s.idx,m=walkMinutes(d.from,d.to),others=napsOf(sleepLog[date]).map((n,i)=>({...n,i})).filter(n=>n.i!==idx);
+      title=idx!=null?'Edit nap':'Nap';sub=dateLong(date);
+      lead=<Shape kind="clover" size={52} fill="var(--night-c)" color="var(--on-sky-c)" font={24}>💤</Shape>;
+      const row=(k,lab,emoji)=>(
+        <button className="x-item" onClick={()=>set({open:d.open===k?null:k})} style={{borderRadius:24,background:d.open===k?'var(--s3)':'var(--s2)'}}>
+          <Shape kind="cookie12" size={44} fill="var(--night-c)" color="var(--on-sky-c)" font={20}>{emoji}</Shape>
+          <span style={{flex:1,minWidth:0}}><span className="s" style={{display:'block',margin:0}}>{lab}</span>
+            <span style={{fontFamily:'var(--font-ui)',fontStretch:'120%',fontWeight:850,fontSize:22}}>{fmt12(d[k])}</span></span>
+          <span className="x-chip" style={{background:'var(--s4)'}}>{d.open===k?'Done':'Change'}</span>
+        </button>);
+      const save=()=>{if(m<5||m>240){showToast(m<5?'A nap needs at least 5 mins':'Over 4 hrs: log it as sleep instead','var(--warn)');return;}
+        setSleepLog(p=>{const cur=p[date]||{},naps=[...napsOf(cur)];const n={from:d.from,to:d.to};if(idx!=null)naps[idx]=n;else naps.push(n);
+          naps.sort((a,b)=>hm2m(a.from)-hm2m(b.from));return{...p,[date]:{...cur,naps}};});
+        showToast(`Nap logged · ${fmtHM(m)}`,'var(--ok)');close();};
+      body=<>
+        <div className="x-card sa" style={{background:'var(--night-c)',color:'var(--on-sky-c)',display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap',marginBottom:12}}>
+          <span className="x-num" style={{fontSize:46,color:'var(--fg)'}}>{fmtHM(m)}</span>
+          <span className="x-tag" style={{marginLeft:'auto',background:'var(--bg)',color:m>=10&&m<=30?'var(--mint)':m<=90?'var(--fg2)':'var(--amber)'}}>{m<10?'Very short':m<=30?'Power nap ✓':m<=90?'Full sleep cycle':'Long: may affect tonight'}</span>
+        </div>
+        <div className="x-eyebrow" style={{margin:'2px 2px 8px'}}>How long</div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
+          {[20,30,45,60,90].map(n=><button key={n} className={'x-chip'+(m===n?' on':'')} onClick={()=>set({to:m2hm((hm2m(d.from)+n)%1440)})}>{fmtHM(n)}</button>)}
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {row('from','Fell asleep','💤')}
+          {d.open==='from'&&<TimePicker value={d.from} onChange={v=>set({from:v,to:m2hm((hm2m(v)+Math.max(5,m))%1440)})} quick={[['1 PM','13:00'],['1:30 PM','13:30'],['2 PM','14:00'],['2:30 PM','14:30'],['3 PM','15:00']]}/>}
+          {row('to','Woke up','☀️')}
+          {d.open==='to'&&<TimePicker value={d.to} onChange={v=>set({to:v})} quick={[['1:30 PM','13:30'],['2 PM','14:00'],['2:30 PM','14:30'],['3 PM','15:00'],['3:30 PM','15:30']]}/>}
+        </div>
+        {others.length>0&&<div className="x-sub" style={{marginTop:12}}>Also that day: {others.map(n=>`${fmt12(n.from)} → ${fmt12(n.to)}`).join(', ')}</div>}
+      </>;
+      foot=<>{idx!=null&&delBtn('Delete',()=>{setSleepLog(p=>{const cur=p[date]||{},naps=napsOf(cur).filter((_,i)=>i!==idx),n={...p};
+          const rest={...cur,naps};if(!naps.length)delete rest.naps;if(Object.keys(rest).length)n[date]=rest;else delete n[date];return n;});close();})}
+        <button className="x-btn" onClick={save}>Save nap</button></>;
     }
     else if(s.type==='steps'){
       const date=s.date;const has=walkLog[date]?.dayTotal;
@@ -6659,14 +6711,19 @@ Reply ONLY with valid JSON (no markdown):
       const hip=d.waU==='in'?num(d.hip)*2.54:num(d.hip);
       const bfPrev=ok?calcNavyBF({heightCm:cm,neckCm:neck,waistCm:waist,hipCm:hip},profile.gender):null;
       const conv=(field,uField,a,b,f)=>{const v=num(d[field]);set({[uField]:d[uField]===a?b:a,[field]:isNaN(v)?d[field]:String(+(d[uField]===a?v*f:v/f).toFixed(1))});};
-      title='Body measurements';sub='Body fat uses the US Navy method';
+      const fromBmi=s.from==='bmi',bmiPrev=kg>0&&cm>0?bmiOf(kg,cm):null,bmiB=bmiPrev!=null?bmiBand(bmiPrev):null;
+      title='Body measurements';sub=fromBmi?'BMI is your weight ÷ your height²':'Body fat uses the US Navy method';
       lead=<Shape kind="cookie12" size={52} fill="var(--pink-c)" font={24}>📏</Shape>;
       const unitBtn=(uField,a,b,field,f)=><button className="x-unit" onClick={()=>conv(field,uField,a,b,f)}>{d[uField]}</button>;
       body=<>
+        {fromBmi?<div className="x-card sa" style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:14,background:'var(--s2)'}}>
+          <span className="x-num" style={{fontSize:44,color:bmiB?bmiB[2]:'var(--fg)'}}>{bmiPrev??'—'}</span><span style={{fontWeight:750}}>BMI{bmiB?' · '+bmiB[1]:''}</span>
+          {bmiPrev!=null&&bmiNow!=null&&bmiPrev!==bmiNow&&<span className="x-tag" style={{marginLeft:'auto',background:'var(--bg)',color:bmiPrev<bmiNow?'var(--mint)':'var(--amber)'}}>{bmiPrev<bmiNow?'':'+'}{(bmiPrev-bmiNow).toFixed(1)}</span>}
+        </div>:
         <div className="x-card pink sa" style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:14}}>
           <span className="x-num" style={{fontSize:44,color:'var(--fg)'}}>{bfPrev||'—'}</span><span style={{fontWeight:750}}>% body fat</span>
           {bfPrev&&currentBF&&bfPrev!==currentBF&&<span className="x-tag" style={{marginLeft:'auto',background:'var(--bg)',color:bfPrev<currentBF?'var(--mint)':'var(--amber)'}}>{bfPrev<currentBF?'':'+'}{(bfPrev-currentBF).toFixed(1)}</span>}
-        </div>
+        </div>}
         <div className="x-grid2">
           <label className="x-lab">Age<input type="text" inputMode="numeric" className="x-field" value={d.age} onChange={e=>set({age:e.target.value.replace(/[^0-9]/g,'')})}/></label>
           <label className="x-lab">Weight<span style={{display:'flex',gap:4}}><input type="text" inputMode="decimal" className="x-field" value={d.w} onChange={e=>set({w:e.target.value})}/>{unitBtn('wU','kg','lbs','w',2.205)}</span></label>
@@ -6992,6 +7049,8 @@ Reply ONLY with valid JSON (no markdown):
       if(hcT.weight&&can('Weight'))Object.entries(weightLog).forEach(([dk,v])=>{if(dk<since||!(+v>0))return;recs.push({type:'Weight',id:'weight-'+dk,time:new Date(dk+'T08:00:00').getTime(),kg:+v});});
       if(hcT.sleep&&can('SleepSession'))Object.entries(sleepLog).forEach(([dk,sl])=>{if(dk<since)return;const mn=sleepMin(sl);if(!mn)return;
         const wake=new Date(dk+'T'+sl.wake+':00').getTime();recs.push({type:'SleepSession',id:'sleep-'+dk,start:wake-mn*60000,end:wake,title:'Sleep'});});
+      if(hcT.sleep&&can('SleepSession'))Object.entries(sleepLog).forEach(([dk,sl])=>{if(dk<since)return;napsOf(sl).forEach((n,i)=>{const a=new Date(dk+'T'+n.from+':00').getTime(),mn=walkMinutes(n.from,n.to);
+        if(mn>0)recs.push({type:'SleepSession',id:'nap-'+dk+'-'+i,start:a,end:a+mn*60000,title:'Nap'});});});
       let synced={};try{synced=JSON.parse(localStorage.getItem('lm-hc-synced')||'{}');}catch(_){}
       const ver=Date.now(),want={},put=[];
       const hash=x=>{let h=5381;for(let i=0;i<x.length;i++)h=(h*33^x.charCodeAt(i))>>>0;return h.toString(36)+'.'+x.length;};

@@ -387,6 +387,11 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const w1=await wave();await W(300);const w2=await wave();if(!w1||w1===w2)throw new Error('the download wave is not moving '+String(w1).slice(0,80));
     await p.click('[aria-label="Back to settings"]');});
   await step('BMI',async()=>{await tab(3);await W(400);await expect('BMI · ');await expect('Healthy weight for your height');
+    // tapped from the BMI card, the measurements sheet leads with BMI, not body fat
+    await p.click('[aria-label="BMI"]');await W(500);
+    const top=await p.evaluate(()=>document.querySelector('.x-sheet').innerText);
+    if(/% body fat/.test(top)||!/BMI · /.test(top))throw new Error('BMI sheet should show BMI, not body fat: '+top.slice(0,160));
+    await p.click('.x-sheet [aria-label="Close"]').catch(()=>{});await p.keyboard.press('Escape').catch(()=>{});await W(500);
     await tab(0);await W(400);if(!(await p.evaluate(()=>[...document.querySelectorAll('.x-stat')].some(e=>/Weight/.test(e.textContent)&&/BMI \d/.test(e.textContent))))){
       // the weight tile shows BMI only on a day with a weigh-in
       if(await p.evaluate(()=>[...document.querySelectorAll('.x-stat')].some(e=>/Weight\d/.test(e.textContent))))throw new Error('weight tile has no BMI');}});
@@ -401,6 +406,13 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   await step('Tabs grow out of what you tapped',async()=>{await tab(0);await W(300);await p.click('.x-card.pri.sa');await W(900);await expect('Today');
     if(await p.evaluate(()=>[...document.querySelectorAll('*')].some(e=>e.style&&e.style.viewTransitionName==='lm-hero')))throw new Error('a hero name was left behind');
     await tab(0);await W(600);});
+  await step('Naps',async()=>{await tab(0);await W(300);await p.evaluate(()=>document.querySelector('.dock-add').click());await W();
+    await click('.x-sheet button','Nap');await W(300);await expect('During the day').catch(()=>{});
+    await click('.x-sheet .x-chip','45 mins');await W(200);await expect('Full sleep cycle');await click('.x-sheet-foot button','Save nap');await W(600);
+    await expect('45 mins nap');
+    // the night's sleep keeps the nap when it's saved, and the nap shows in the sleep sheet
+    await p.evaluate(()=>{const b=[...document.querySelectorAll('.x-stat')].find(e=>/Sleep/.test(e.textContent));b.click();});await W(400);
+    await expect('Naps on');await click('.x-sheet-foot button','Save sleep');await W(600);await expect('45 mins nap');});
   await step('Walk training: plans and cues',async()=>{
     const r=await p.evaluate(()=>{const P=window.__lmTrainPlan,N=window.__lmTrainNow,base={cad:108,kmh:5.2,stride:0.75,min:30};
       const jog=P({slot:'morning',indoor:false,ateMin:null,base,prog:{reps:4,jogSec:90}});
