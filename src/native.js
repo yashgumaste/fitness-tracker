@@ -269,6 +269,7 @@
       return WT.start({kind:kind||'walk'});
     },
     pause:()=>WT.pause(),resume:()=>WT.resume(),
+    allowSteps:()=>WT?WT.allowSteps().catch(()=>({granted:false})):Promise.resolve({granted:false}),
     status:from=>WT?WT.status({from:from||0}):Promise.resolve({state:'idle'}),
     stop:()=>WT.stop(),discard:()=>WT.discard()
   };

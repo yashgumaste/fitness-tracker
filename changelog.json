@@ -1,5 +1,9 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "Steps no longer stay stuck at “—” during a walk. If the phone’s step sensor goes quiet, the app restarts it and meanwhile counts your steps from the phone’s motion (shown with ≈ and “Steps from motion”), so steps, cadence and stride keep working; once the sensor is back, nothing is counted twice. If step counting isn’t allowed, an “Allow step counting” button on the walk screen asks for it. Cadence no longer shows 0 when there’s no step count at all."
+    }
+  ],
   "releases": [
     {
       "version": "1.49",

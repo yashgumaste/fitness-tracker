@@ -4597,7 +4597,7 @@ Reply ONLY with valid JSON (no markdown):
     const M={
       time:['Time',null,'',r.start?`Started ${clockStr(r.start)}`:''],
       distance:['Distance',e+km.toFixed(2),'km',est?'from steps':''],
-      steps:['Steps',r.steps?fmtN(r.steps):'—','steps',''],
+      steps:['Steps',r.steps?(r.stepSrc==='motion'?'≈':'')+fmtN(r.steps):'—','steps',r.stepSrc==='motion'?'counted from motion':''],
       // pace, speed and cadence: what you're doing right now in big, the average underneath;
       // when there's no "now" (paused, standing, GPS just starting) the average shows in big, marked as such
       ...(()=>{const nk=running&&now.kmh>0.5?now.kmh:null,nc=running&&now.cad!=null?now.cad:null,hasP=isFinite(pace);
@@ -4633,6 +4633,10 @@ Reply ONLY with valid JSON (no markdown):
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
           <span className="x-tag" aria-label="Time now" style={{background:'var(--s3)',color:'var(--fg)'}}>🕐 Now {clockStr(clock)}</span>
           <span className="x-tag" style={{background:r.gps==='ok'?'var(--mint-c)':'var(--amber-c)',color:r.gps==='ok'?'var(--on-mint-c)':'var(--on-amber-c)'}}>{gpsTxt}</span>
+          {/* steps need the Physical activity permission; without it (or with no step sensor) they're counted from motion */}
+          {r.stepIssue==='permission'&&<button className="x-tag" style={{background:'var(--amber-c)',color:'var(--on-amber-c)',border:'none',font:'inherit',fontWeight:750}}
+            onClick={async()=>{const q=await W.allowSteps();showToast(q&&q.granted?'Steps allowed: counting from the step sensor':'Steps stay counted from motion. Allow Physical activity in the app’s settings for the step sensor','var(--ok)');}}>👟 Allow step counting</button>}
+          {r.stepIssue!=='permission'&&r.stepSrc==='motion'&&<span className="x-tag" style={{background:'var(--amber-c)',color:'var(--on-amber-c)'}}>👟 Steps from motion</span>}
         </div>
         <Presence show={!!jog}>{jog&&<div role="status" aria-label={`Jogging for ${fmtDur((Date.now()-jog.t)/1000)}, ${jogM<1000?Math.round(jogM)+' metres':(jogM/1000).toFixed(2)+' kilometres'}`}
           style={{background:'var(--amber)',color:'#2B1D00',borderRadius:999,padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'center',gap:7,
@@ -7421,7 +7425,7 @@ function recNow(pts,spm){
     if(cad===0&&kmh!=null&&kmh>=2.5)cad=null;
     if(cad==null){   // phone without a step detector: the step counter over the last 30 s
       let i=pts.length-1;while(i>0&&L[0]-pts[i-1][0]<=30000)i--;const F=pts[i],dt=(L[0]-F[0])/1000;
-      if(dt>=10&&L[6]!=null&&F[6]!=null)cad=Math.round((L[6]-F[6])/(dt/60));}
+      if(dt>=10&&L[6]!=null&&F[6]!=null&&L[6]>0)cad=Math.round((L[6]-F[6])/(dt/60));}   // 0 steps so far: no step count at all
   }
   if(cad==null&&kmh==null)return{};
   // stop: steps a minute decide when the step sensor is there (it drops within ~3 s); without it, speed

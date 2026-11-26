@@ -93,6 +93,18 @@ class WalkTrackerPlugin : Plugin() {
         call.resolve(WalkState.status(0))
     }
 
+    /** Ask for the Physical activity permission during a walk (steps), then start the step sensors. */
+    @PluginMethod fun allowSteps(call: PluginCall) {
+        if (Build.VERSION.SDK_INT < 29 || getPermissionState("activity") == PermissionState.GRANTED) { afterAllowSteps(call); return }
+        requestPermissionForAlias("activity", call, "afterAllowSteps")
+    }
+    @PermissionCallback
+    private fun afterAllowSteps(call: PluginCall) {
+        val ok = Build.VERSION.SDK_INT < 29 || ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
+        if (ok && WalkState.state != "idle") context.startService(Intent(context, WalkService::class.java).putExtra("refresh", true).putExtra("steps", true))
+        call.resolve(JSObject().put("granted", ok))
+    }
+
     @PluginMethod fun pause(call: PluginCall) { WalkState.pause(); WalkService.refresh(context); call.resolve(WalkState.status(Int.MAX_VALUE)) }
     @PluginMethod fun resume(call: PluginCall) { WalkState.resume(); WalkService.refresh(context); call.resolve(WalkState.status(Int.MAX_VALUE)) }
 
@@ -134,11 +146,22 @@ object WalkState {
     @Volatile var satsUsed = 0; @Volatile var satsSeen = 0   // while finding GPS: satellites in the fix / in view
     private var last: Location? = null
 
+    // Where steps come from: the phone's step counter, else its step detector, else our own step counting from the
+    // motion sensor (accelerometer). Some phones' step sensors go quiet (no events until they're restarted, or no
+    // permission): steps then sat at "—" for a whole walk. The service re-arms them, and counts from motion meanwhile.
+    @Volatile var stepPerm = true; @Volatile var hasCounter = false; @Volatile var hasDetector = false
+    @Volatile var lastHw = 0L                // elapsed ms of the last event from the phone's step sensors
+    private var detTotal = 0L                // steps from the step detector while recording
+    private var accTotal = 0L                // steps counted from motion while the step sensors were quiet
+    @Volatile var accOn = false
+    private var accGapStart = 0L; private var hwAtGap = 0L
+
     @Synchronized fun reset(k: String) {
         kind = k; state = "recording"; start = System.currentTimeMillis()
         movingBase = SystemClock.elapsedRealtime(); movingAcc = 0
         distanceM = 0.0; stepsBase = -1; stepsNow = -1; stepsPaused = 0
         points.clear(); last = null; lastFix = 0; gainM = 0.0; refAlt = Double.NaN; det.clear(); cnt.clear(); cntRise = 0L; satsUsed = 0; satsSeen = 0
+        lastHw = SystemClock.elapsedRealtime(); detTotal = 0; accTotal = 0; accOn = false; accRhythm = false; accPend.clear(); accLast = 0L
     }
 
     fun onPressure(hPa: Float) {
@@ -147,8 +170,42 @@ object WalkState {
     }
     fun movingMs(): Long = movingAcc + if (state == "recording") SystemClock.elapsedRealtime() - movingBase else 0
     @Synchronized fun pause() { if (state != "recording") return; movingAcc = movingMs(); state = "paused"; last = null }
-    @Synchronized fun resume() { if (state != "paused") return; movingBase = SystemClock.elapsedRealtime(); state = "recording" }
-    fun steps(): Long = if (stepsBase < 0 || stepsNow < 0) 0 else maxOf(0, stepsNow - stepsBase - stepsPaused)
+    @Synchronized fun resume() { if (state != "paused") return; movingBase = SystemClock.elapsedRealtime(); lastHw = movingBase; state = "recording" }
+    private fun hwSteps(): Long = maxOf(if (stepsBase < 0 || stepsNow < 0) 0 else maxOf(0, stepsNow - stepsBase - stepsPaused), detTotal)
+    fun steps(): Long = hwSteps() + accTotal
+    fun stepSrc(): String = if (accOn && accTotal > accGapStart) "motion" else if (stepsNow >= 0) "counter" else if (detTotal > 0) "detector" else if (accTotal > 0) "motion" else "none"
+
+    /** The step sensors have gone quiet: count from motion until they're back. */
+    @Synchronized fun beginMotion() { if (accOn) return; accOn = true; accGapStart = accTotal; hwAtGap = hwSteps(); accS = Double.NaN; accBase = Double.NaN; accUp = false; accRhythm = false; accPend.clear() }
+    /** They're back: if they caught up on the steps in between (a late batch), drop ours so nothing counts twice. */
+    @Synchronized fun endMotion() {
+        if (!accOn) return; accOn = false
+        val hw = hwSteps() - hwAtGap; val acc = accTotal - accGapStart
+        if (acc > 0 && hw >= acc / 2) accTotal = accGapStart
+    }
+    // a simple pedometer: smoothed acceleration against its slow average; a step is a rise above an adaptive
+    // threshold and back; counting starts once 4 steps keep a walking rhythm (0.25–2 s apart), so a jolt isn't one
+    private var accS = Double.NaN; private var accBase = Double.NaN; private var accUp = false
+    private var accPeak = 0.0; private var accAmp = 2.0; private var accLast = 0L; private var accRhythm = false
+    private val accPend = ArrayList<Long>()
+    @Synchronized fun onAccel(x: Float, y: Float, z: Float, tNs: Long) {
+        if (state != "recording" || !accOn) return
+        val m = Math.sqrt((x * x + y * y + z * z).toDouble()); val t = eventMs(tNs)
+        accS = if (accS.isNaN()) m else accS + 0.25 * (m - accS)
+        accBase = if (accBase.isNaN()) m else accBase + 0.02 * (m - accBase)
+        val d = accS - accBase; val thr = maxOf(0.6, accAmp * 0.45)
+        if (!accUp) { if (d > thr) { accUp = true; accPeak = d }; return }
+        if (d > accPeak) accPeak = d
+        if (d > thr * 0.3) return
+        accUp = false; accAmp = accAmp * 0.8 + accPeak * 0.2
+        val gap = t - accLast
+        if (accLast != 0L && gap < 250) return
+        accLast = t
+        if (accRhythm && gap <= 2000) { accTotal++; onStepDetected(t, false); return }
+        if (gap > 2000) { accPend.clear(); accRhythm = false }
+        accPend.add(t)
+        if (accPend.size >= 4) { accTotal += accPend.size; for (p in accPend) onStepDetected(p, false); accPend.clear(); accRhythm = true }
+    }
 
     // live cadence: when the latest steps happened. The step detector fires once a step, straight away;
     // the step counter can arrive in batches a few seconds late, so it's only the fallback.
@@ -163,8 +220,9 @@ object WalkState {
         val now = SystemClock.elapsedRealtime(); val t = tsNanos / 1_000_000
         return if (t in (now - 60_000)..(now + 1000)) minOf(t, now) else now
     }
-    @Synchronized fun onStepDetected(t: Long = SystemClock.elapsedRealtime()) {
+    @Synchronized fun onStepDetected(t: Long = SystemClock.elapsedRealtime(), hw: Boolean = true) {
         if (state != "recording") return
+        if (hw) { detTotal++; lastHw = SystemClock.elapsedRealtime() }
         if (det.isEmpty() || t >= det.last()) det.addLast(t)
         val now = SystemClock.elapsedRealtime()
         while (det.isNotEmpty() && now - det.first() > 10000) det.removeFirst()
@@ -189,6 +247,7 @@ object WalkState {
 
     @Synchronized fun onSteps(v: Long) {
         val t = SystemClock.elapsedRealtime()
+        if (state == "recording" && v != stepsNow) lastHw = t
         if (state == "recording") {
             if (cnt.isNotEmpty() && v > cnt.last()[1]) cntRise = t
             cnt.addLast(longArrayOf(t, v)); while (cnt.isNotEmpty() && t - cnt.first()[0] > 20000) cnt.removeFirst()
@@ -237,6 +296,8 @@ object WalkState {
         o.put("alt", if (points.isEmpty() || points[points.size - 1][3].isNaN()) JSONObject.NULL else points[points.size - 1][3])
         o.put("baro", !baro.isNaN())
         o.put("spm", liveSpm() ?: JSONObject.NULL)
+        o.put("stepSrc", stepSrc())
+        o.put("stepIssue", if (!stepPerm) "permission" else if (!hasCounter && !hasDetector) "nosensor" else JSONObject.NULL)
         o.put("sats", JSArray().put(satsUsed).put(satsSeen))
         val a = JSArray()
         for (i in maxOf(0, from) until points.size) {
@@ -298,15 +359,11 @@ class WalkService : Service(), LocationListener, SensorEventListener {
                 if (Build.VERSION.SDK_INT >= 24 && gnss != null) lm.registerGnssStatusCallback(gnss as GnssStatus.Callback, handler)
             } catch (e: SecurityException) { } catch (e: IllegalArgumentException) { }
             val sm = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-            if (Build.VERSION.SDK_INT < 29 || ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED) {
-                sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
-                // one event a step, with no delay: lets the screen show "Jogging" within a few seconds
-                sm.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST) }
-            }
+            armSteps(sm)
             // air pressure gives a much steadier height than GPS, for climb on hikes (most phones have the sensor)
             sm.getDefaultSensor(Sensor.TYPE_PRESSURE)?.let { sm.registerListener(this, it, 1_000_000) }
             handler.removeCallbacks(tick); handler.post(tick)
-        } else update()
+        } else { if (i.getBooleanExtra("steps", false)) armSteps(getSystemService(Context.SENSOR_SERVICE) as SensorManager); update() }
         return START_STICKY
     }
 
@@ -330,8 +387,34 @@ class WalkService : Service(), LocationListener, SensorEventListener {
             .build()
     }
 
+    /** (Re)start the phone's step sensors. Re-registering wakes up ones that have gone quiet on some phones. */
+    private fun armSteps(sm: SensorManager) {
+        WalkState.stepPerm = Build.VERSION.SDK_INT < 29 || ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
+        val c = sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER); val d = sm.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
+        WalkState.hasCounter = c != null; WalkState.hasDetector = d != null
+        if (!WalkState.stepPerm) return
+        c?.let { sm.unregisterListener(this, it); sm.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+        // one event a step, with no delay: lets the screen show "Jogging" within a few seconds
+        d?.let { sm.unregisterListener(this, it); sm.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST) }
+    }
+    private var lastRearm = 0L
+    /** No step events for 20 s while recording: re-arm the step sensors (once a minute at most) and count from
+     *  motion meanwhile; once they deliver again, stop counting from motion. */
+    private fun stepWatch() {
+        if (WalkState.state != "recording") return
+        val sm = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val now = SystemClock.elapsedRealtime(); val quiet = now - WalkState.lastHw
+        if (quiet > 20_000) {
+            if (!WalkState.accOn) sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { WalkState.beginMotion(); sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+            if (now - lastRearm > 60_000) { lastRearm = now; armSteps(sm) }
+        } else if (quiet < 6000 && WalkState.accOn) {
+            WalkState.endMotion(); sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sm.unregisterListener(this, it) }
+        }
+    }
+
     private fun update() {
         if (WalkState.state == "idle") { stopSelf(); return }
+        try { stepWatch() } catch (e: Exception) { }
         try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTE_ID, note()) } catch (e: Exception) { }
     }
 
@@ -343,7 +426,9 @@ class WalkService : Service(), LocationListener, SensorEventListener {
         when (e.sensor.type) {
             Sensor.TYPE_PRESSURE -> WalkState.onPressure(e.values[0])
             Sensor.TYPE_STEP_DETECTOR -> WalkState.onStepDetected(WalkState.eventMs(e.timestamp))
-            else -> WalkState.onSteps(e.values[0].toLong())
+            Sensor.TYPE_ACCELEROMETER -> WalkState.onAccel(e.values[0], e.values[1], e.values[2], e.timestamp)
+            Sensor.TYPE_STEP_COUNTER -> WalkState.onSteps(e.values[0].toLong())
+            else -> {}
         }
     }
     override fun onAccuracyChanged(s: Sensor?, a: Int) {}

@@ -126,7 +126,8 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
       async start(){this._st='recording';this._t0=Date.now()-25*60000;const c=[18.5204,73.8567];
         this._pts=Array.from({length:120},(_,i)=>{const a=i/120*2*Math.PI;return[this._t0+i*12500,c[0]+0.004*Math.sin(a),c[1]+0.006*Math.cos(a)+i*0.00003,560+10*Math.sin(a*2),5,null,i*27];});return this.status(0);},
       async status(from){if(this._noGps)return{state:this._st,start:this._t0,movingMs:5*60000,distanceM:0,steps:600,spm:120,gps:'searching',accuracy:0,count:0,sats:[3,11],from:from||0,points:[]};
-        return{state:this._st,start:this._t0,movingMs:25*60000,distanceM:2600,steps:3300,spm:this._spm,gps:'ok',accuracy:5,count:this._pts.length,from:from||0,points:this._pts.slice(from||0)};},
+        return{state:this._st,start:this._t0,movingMs:25*60000,distanceM:2600,steps:3300,spm:this._spm,stepSrc:this._src||'counter',stepIssue:this._issue||null,gps:'ok',accuracy:5,count:this._pts.length,from:from||0,points:this._pts.slice(from||0)};},
+        allowSteps:async function(){this._issue=null;window.__allowSteps=true;return{granted:true};},
       async pause(){this._st='paused';return this.status(1e9);},async resume(){this._st='recording';return this.status(1e9);},
       async stop(){const s=await this.status(0);s.end=this._t0+26*60000;this._st='idle';return s;},async discard(){this._st='idle';}};});
     await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);
@@ -162,6 +163,11 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
       for(let k=15;k>=0;k--)w._pts.push([now-k*2000,L[1]+(15-k+1)*0.0000235,L[2],L[3],5,null,L[6]+Math.round((15-k+1)*3.67)]);});await W(1500);
     {const c=await p.evaluate(()=>document.querySelector('[data-rec-big=cadence] .x-num').textContent.trim());if(c==='0')throw new Error('cadence stuck at 0 while walking');}
     await p.evaluate(()=>{window.LMNative.walk._spm=100;});await W(500);
+    // step sensors quiet or not allowed: steps from motion, marked ≈, and a button to allow the step sensor
+    await p.evaluate(()=>{const w=window.LMNative.walk;w._src='motion';w._issue='permission';});await W(1500);
+    await click('button','Allow step counting');await W(400);if(!(await p.evaluate(()=>window.__allowSteps)))throw new Error('Allow step counting did not ask');
+    await p.evaluate(()=>{window.LMNative.walk._issue=null;});await W(1500);await expect('Steps from motion');await expect('counted from motion');
+    await p.evaluate(()=>{window.LMNative.walk._src='counter';});await W(1200);
     // leave the recording screen: a pinned pill at the top shows it's still going, and opens it again
     await p.evaluate(()=>{const b=[...document.querySelectorAll('button')].find(b=>/^Back/.test(b.getAttribute('aria-label')||''));b&&b.click();});await W(1200);
     const pill=await p.$('[aria-label="Open the recording"]');if(!pill)throw new Error('no recording pill after leaving the recording screen');
