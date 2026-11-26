@@ -201,7 +201,8 @@ if(!m.includes('LogAlarmReceiver')){
 // Home-screen widgets (native/WidgetPlugin.kt): one picture per widget, drawn at its size, so the layout is one ImageView.
 // Each kind: [class, name in the widget list, default cells w×h, smallest it can be resized to (dp), preview]
 const WIDGETS=[['StepsWidget','Steps',2,2,40,40,'steps'],['BurnWidget','Calories burned',2,2,40,40,'burn'],
-  ['FoodWidget','Calories eaten',2,2,40,40,'food'],['InOutWidget','In & out',4,2,110,110,'io']];
+  ['FoodWidget','Calories eaten',2,2,40,40,'food'],['InOutWidget','In & out',4,2,110,110,'io'],
+  ['InTodayWidget','In & out today',2,2,40,40,'today'],['EatWidget','What to eat',4,2,40,40,'eat']];
 {const res=path.join(app,'src/main/res');
   for(const d of ['layout','xml','drawable-nodpi'])fs.mkdirSync(path.join(res,d),{recursive:true});
   fs.writeFileSync(path.join(res,'layout','lm_widget.xml'),`<?xml version="1.0" encoding="utf-8"?>
@@ -224,12 +225,12 @@ const WIDGETS=[['StepsWidget','Steps',2,2,40,40,'steps'],['BurnWidget','Calories
     android:previewImage="@drawable/lm_preview_${key}"`:''} />
 `);}
   m=fs.readFileSync(mf,'utf8');
-  if(!m.includes('StepsWidget')){
-    m=m.replace('</application>',WIDGETS.map(([cls,label,,,,,key])=>`        <receiver android:name=".${cls}" android:exported="false" android:label="${label.replace('&','&amp;')}">
+  {const missing=WIDGETS.filter(([cls])=>!m.includes('.'+cls+'"'));if(missing.length){
+    m=m.replace('</application>',missing.map(([cls,label,,,,,key])=>`        <receiver android:name=".${cls}" android:exported="false" android:label="${label.replace('&','&amp;')}">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/lm_widget_${key}" />
         </receiver>
 `).join('')+'    </application>');
-    fs.writeFileSync(mf,m);}
+    fs.writeFileSync(mf,m);}}
 }
 console.log('android patched · versionCode',run);

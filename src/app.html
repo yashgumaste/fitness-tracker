@@ -4311,6 +4311,8 @@ Reply ONLY with valid JSON (no markdown):
     if(k==='w-steps'){openStepsPage(TODAY);widgetBgCheck(1);return;}
     if(k==='w-burn'){setEnergyPage({view:'day',date:TODAY,sel:null});widgetBgCheck(1);return;}
     if(k==='w-io'){setEnergyPage({view:'week',date:TODAY,sel:null});return;}
+    if(k==='w-today'){setEnergyPage({view:'day',date:TODAY,sel:null});return;}
+    if(k==='w-eat'){setTab('diet');setDietView('today');return;}
     if(k==='w-food'){setTab('diet');setDietView('today');return;}
     if(k==='sleep'){const U=usualTimes(),w=isWeekend(TODAY)?U.sleep.we:U.sleep.wd;const sl=sleepLog[TODAY]||{};
       openSheet('sleep',{date:TODAY},{bed:sl.bed||'23:00',wake:sl.wake||m2hm(w),q:sl.q||0,wakes:sl.wakes||0,open:null});}
@@ -4319,6 +4321,80 @@ Reply ONLY with valid JSON (no markdown):
     if(window.__lmLogOpenQueued){const k=window.__lmLogOpenQueued;window.__lmLogOpenQueued=null;setTimeout(()=>logOpenRef.current(k),500);}
     return()=>{window.__lmLogOpen=null;};},[storageReady]);
   /* ── Home-screen widgets: the app does the sums and hands the widgets a snapshot whenever something changes ── */
+  // ── Rest of today: what to eat for the meals still ahead so the day lands in its target. The numbers are instant;
+  // the coach's suggestions come in the background and are redone whenever a meal is logged (or a meal time passes). ──
+  const [rodBusy,setRodBusy]=useState(false);
+  const rodFail=useRef('');
+  function rodNumbers(){
+    const m=macrosOf(TODAY),eat=Math.round(m.cal),pro=Math.round(m.pro),lo=GOALS.calories.min,hi=GOALS.calories.max,mid=Math.round((lo+hi)/2);
+    const nd=new Date(),nowM=nd.getHours()*60+nd.getMinutes(),U=usualTimes(),we=isWeekend(TODAY);
+    const ents=dietGrouped[TODAY]||[],logged=new Set(ents.map(e=>e.mealType));
+    const at=t=>(we?U[t].we:U[t].wd);
+    // meals still to come: not logged yet and not long past their usual time; nothing after 10:30 PM
+    let ahead=nowM>=22*60+30?[]:MEAL_TYPES.filter(t=>!logged.has(t)&&at(t)>=nowM-75).map(t=>({meal:t,at:Math.max(at(t),nowM+10)}));
+    if(!ahead.length&&nowM<21*60&&eat<lo)ahead=[{meal:'Snack',at:nowM+30}];
+    const b=burnDay(TODAY);
+    return{eat,pro,lo,hi,left:Math.max(0,mid-eat),loLeft:Math.max(0,lo-eat),hiLeft:Math.max(0,hi-eat),over:Math.max(0,eat-hi),
+      proLeft:Math.max(0,Math.round(GOALS.protein.target-pro)),ahead,burned:b.total,nowM};
+  }
+  const rodN=storageReady?rodNumbers():null;
+  const rodSig=rodN?JSON.stringify([TODAY,(dietGrouped[TODAY]||[]).map(e=>e.mealType+Math.round(entryMacros(e).cal)).join(),rodN.lo,rodN.hi,rodN.ahead.map(a=>a.meal).join(),racePhase(TODAY),(symptomLog[TODAY]||[]).length]):'';
+  const rodCur=prefs.rod&&prefs.rod.date===TODAY?prefs.rod:null;
+  async function fetchRod(){
+    const n=rodNumbers(),sig=rodSig;if(!n.ahead.length)return;
+    setRodBusy(true);
+    try{
+      const ents=sortByMealTime(dietGrouped[TODAY]||[]),fmtE=e=>{const x=entryMacros(e);return`${e.mealType} ${fmt12(m2hm((d=>d.getHours()*60+d.getMinutes())(new Date(mealTime(e).ts))))}: ${e.food} (${Math.round(x.cal)} kcal, ${Math.round(x.pro)} g protein)`;};
+      const fav=(()=>{const c={};for(let i=1;i<=14;i++)(dietGrouped[calAddDays(TODAY,-i)]||[]).forEach(e=>{const k=String(e.food).toLowerCase().slice(0,40);c[k]=(c[k]||0)+1;});
+        return Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,15).map(([k])=>k).join('; ');})();
+      const plan=planFor(TODAY),syms=(symptomLog[TODAY]||[]).map(x=>symptomText(x,TODAY)).join(', ');
+      const prompt=`Rest of today plan. You are a practical Indian nutrition coach. It is ${fmt12(m2hm(n.nowM))} on ${dateLong(TODAY)}. Say what to eat for the rest of today so the day ends inside the calorie target with protein covered.
+EATEN SO FAR (${n.eat} kcal, ${n.pro} g protein):
+${ents.length?ents.map(fmtE).join('\n'):'nothing yet'}
+- Daily target: ${n.lo}–${n.hi} kcal (goal: ${profile.goal||'lose'} fat, keeping muscle), protein ${GOALS.protein.target} g, carbs ~${MACRO_T.carbs} g, fat ~${MACRO_T.fat} g.
+- Left to eat: about ${n.loLeft}–${n.hiLeft} kcal${n.over?` (already ${n.over} kcal over the top of the target)`:''} and ${n.proLeft} g protein.
+- Burned so far today: ${n.burned} kcal. Resting burn is ${Math.round(bmrOf(TODAY))} kcal for the whole day; never suggest ending the day below it.
+- Meals still ahead and roughly when: ${n.ahead.map(a=>`${a.meal} ~${fmt12(m2hm(a.at))}`).join(', ')}.
+- Foods they often eat: ${fav||'typical Indian home food'}.${plan?`\n- The coach's plan for today: ${Object.entries(plan).filter(([k,v])=>typeof v==='string'&&MEAL_TYPES.includes(k)).map(([k,v])=>k+': '+v).join(' | ')}`:''}${syms?`\n- Feeling today: ${syms}. Suit the food to it.`:''}${raceCtx(TODAY)?'\n'+raceCtx(TODAY):''}
+Rules: Indian home food they can actually get; specific amounts (e.g. "2 chapati, 1 katori dal, 1 katori paneer bhurji"); protein first; lighter and earlier for dinner; if they're far under target, say to eat enough rather than skip; if already over, keep the rest small and filling. Split the remaining calories sensibly over the meals ahead.
+Reply with ONLY this JSON:
+{"headline":"one short line (max 70 chars) on the rest of the day","meals":[{"meal":"Dinner","by":"8:30 PM","eat":"what and how much (max 90 chars)","kcal":450,"protein":30}],"tip":"one short practical tip (max 80 chars) or null"}`;
+      const raw=await callAI(prompt,700,'fast',true);const j=JSON.parse(raw);
+      const meals=(Array.isArray(j.meals)?j.meals:[]).filter(x=>x&&x.eat).slice(0,4).map(x=>({meal:String(x.meal||'Meal'),by:String(x.by||''),eat:String(x.eat),kcal:Math.round(+x.kcal||0),protein:Math.round(+x.protein||0)}));
+      if(!meals.length)throw new Error('no meals');
+      setPrefs(p=>({...p,rod:{date:TODAY,sig,at:Date.now(),headline:String(j.headline||'').slice(0,90),meals,tip:j.tip?String(j.tip).slice(0,100):null}}));
+    }catch(e){rodFail.current=sig;}
+    setRodBusy(false);
+  }
+  function renderRestOfDay(){
+    const n=rodN;if(!n)return null;
+    const fresh=rodCur&&rodCur.sig===rodSig,show=rodCur&&rodCur.meals&&rodCur.meals.length?rodCur:null;
+    const big=n.over?`${fmtN(n.over)} kcal over`:n.loLeft>0?`~${fmtN(n.left)} kcal more`:'You’re in range';
+    const sub=n.over?'Keep anything else small: fruit, buttermilk, salad.':n.loLeft>0?`to land in ${fmtN(n.lo)}–${fmtN(n.hi)} kcal${n.proLeft?` · ${n.proLeft} g protein to go`:' · protein done ✓'}`:`${n.hiLeft?`up to ${fmtN(n.hiLeft)} kcal more is fine`:'that’s the day done'}${n.proLeft?` · ${n.proLeft} g protein to go`:''}`;
+    return(<div className="x-card sb" data-rod="" style={{display:'flex',flexDirection:'column',gap:12}}>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <Shape kind="cookie9" size={44} fill="var(--pri-c)" color="var(--on-pri-c)" font={20}>🍽️</Shape>
+        <span style={{flex:1,minWidth:0}}><span className="x-eyebrow" style={{display:'block'}}>Rest of today</span>
+          <b style={{fontSize:22,lineHeight:1.15,color:n.over?'var(--amber)':'var(--fg)'}}>{big}</b></span>
+        {n.ahead.length>0&&<button className="x-ibtn tonal" aria-label="Refresh suggestions" disabled={rodBusy} onClick={()=>{rodFail.current='';fetchRod();}}
+          style={{width:44,height:44,borderRadius:16,opacity:rodBusy?.5:1}}>{rodBusy?'⏳':'↻'}</button>}
+      </div>
+      <div className="x-sub" style={{marginTop:-6}}>{sub}</div>
+      {!n.ahead.length?<div className="x-sub">{n.nowM>=22*60+30?'Kitchen’s closed for today. Water if you’re hungry, and an early night.':'All meals logged for today.'}</div>
+      :show?<>
+        {show.headline&&<div style={{fontWeight:780}}>{show.headline}</div>}
+        {show.meals.map((x,i)=><div key={i} style={{display:'flex',gap:12,alignItems:'flex-start',background:'var(--s2)',borderRadius:i===0?'22px 22px 8px 8px':i===show.meals.length-1?'8px 8px 22px 22px':8,padding:'12px 14px'}}>
+          <span style={{fontSize:22,lineHeight:1.2}}>{MEAL_ICONS[x.meal]||'🍽️'}</span>
+          <span style={{flex:1,minWidth:0}}><b style={{display:'block'}}>{x.meal}{x.by?<span className="x-sub" style={{fontWeight:700}}> · by {x.by}</span>:null}</b>
+            <span style={{fontSize:14.5,lineHeight:1.4}}>{x.eat}</span></span>
+          <span style={{textAlign:'right',flex:'none'}}><b className="x-num" style={{fontSize:17}}>{fmtN(x.kcal)}</b><span className="x-sub" style={{display:'block',fontSize:11.5}}>kcal · {x.protein} g</span></span>
+        </div>)}
+        {show.tip&&<div className="x-sub">💡 {show.tip}</div>}
+        <div className="x-sub" style={{fontSize:11.5}}>{fresh?`From the coach · ${fmt12(m2hm((d=>d.getHours()*60+d.getMinutes())(new Date(show.at))))}`:rodBusy?'Updating for what you just logged…':'From before your last log · tap ↻ to update'}</div>
+      </>:<div className="x-sub">{rodBusy?'⏳ Asking the coach what to eat for '+n.ahead.map(a=>a.meal.toLowerCase()).join(' and ')+'…':`Next: ${n.ahead.map(a=>`${a.meal.toLowerCase()} ~${fmt12(m2hm(a.at))}`).join(', ')}. Tap ↻ for the coach’s suggestions.`}</div>}
+    </div>);
+  }
+
   function widgetSnap(){
     const days={};
     for(let i=0;i<14;i++){const d=calAddDays(TODAY,-i),b=burnDay(d);days[d]={s:moveDay(d).steps,e:Math.round(macrosOf(d).cal),o:b.total,r:Math.round(bmrOf(d))};}
@@ -4330,7 +4406,12 @@ Reply ONLY with valid JSON (no markdown):
       lo:GOALS.calories.min,hi:GOALS.calories.max,kmStep:bodySaved&&+bodyMeasure.heightCm?bodyMeasure.heightCm*0.415/100000:KM_PER_STEP,
       kps:(mv.kg||75)*KCAL_PER_STEP_KG,restDay:Math.round(bmrOf(TODAY)),tPro:GOALS.protein.target,tCarbs:MACRO_T.carbs,tFat:MACRO_T.fat,days,
       today:{date:TODAY,steps:mv.steps,hours:mv.hours||Array(24).fill(0),walkHours,walks:mv.walks.map(w=>[w.name,+(+w.km||0).toFixed(2)]),
-        walkSteps:mv.walkSteps,walkKcal:mv.walkKcal,workout:workoutKcal(TODAY),eat:Math.round(m.cal),pro:Math.round(m.pro),carbs:Math.round(m.carbs),fat:Math.round(m.fat),meals}};
+        walkSteps:mv.walkSteps,walkKcal:mv.walkKcal,workout:workoutKcal(TODAY),eat:Math.round(m.cal),pro:Math.round(m.pro),carbs:Math.round(m.carbs),fat:Math.round(m.fat),meals,
+        // what to eat for the rest of today (the numbers always; the coach's meals when they're up to date)
+        rod:rodN?{left:rodN.left,loLeft:rodN.loLeft,over:rodN.over,pro:rodN.proLeft,done:!rodN.ahead.length,closed:rodN.nowM>=22*60+30,
+          next:rodN.ahead.map(a=>[a.meal,fmt12(m2hm(a.at))]),
+          head:rodCur&&rodCur.sig===rodSig?rodCur.headline||'':'',tip:rodCur&&rodCur.sig===rodSig?rodCur.tip||'':'',
+          meals:rodCur&&rodCur.sig===rodSig?rodCur.meals.map(x=>[x.meal,x.by,x.eat,x.kcal,x.protein]):[]}:null}};
   }
   const wgRef=useRef({t:0,last:''});
   window.__lmWidgetSnap=()=>widgetSnap();
@@ -4342,6 +4423,10 @@ Reply ONLY with valid JSON (no markdown):
   });
   // Steps and burned widgets read steps while the app is closed only if Health Connect allows it in the background:
   // explain why first, then Health Connect asks. Asked again at most once a week (once a day when opened from a widget).
+  // "What to eat" / "In & out today" widgets on the home screen keep the rest-of-today suggestions fresh
+  useEffect(()=>{const W=window.LMNative&&window.LMNative.widgets;if(!storageReady||!W||!W.available())return;
+    W.status().then(st=>{const c=(st&&st.count)||{},on=(c.eat||0)+(c.today||0)>0;
+      if(on!==!!(prefs.widgets&&prefs.widgets.eat))setPrefs(p=>({...p,widgets:{...(p.widgets||{}),eat:on}}));}).catch(()=>{});},[storageReady,TODAY]);
   const [bgAsk,setBgAsk]=useState(false);
   async function widgetBgCheck(fromWidget){
     const W=window.LMNative&&window.LMNative.widgets;if(!W||!W.available())return;
@@ -4926,6 +5011,11 @@ Reply ONLY with valid JSON (no markdown):
   // ── In & out: calories eaten vs burned, by day, week, month, quarter, year ──
   // Paired bars on one scale; longer views show the average day, so they read against the daily target.
   const [energyPage,setEnergyPage_]=useState(null);   // {view:'day'|'week'|'month'|'quarter'|'year', date, sel}
+  // redo the suggestions whenever what you've eaten (or the meals still ahead) changes, while it's shown somewhere
+  const rodShown=(tab==='diet'&&dietView==='today')||(energyPage&&energyPage.view==='day'&&energyPage.date===TODAY)||(prefs.widgets&&prefs.widgets.eat);
+  useEffect(()=>{if(!storageReady||!rodN||!rodN.ahead.length||rodBusy||!rodShown)return;
+    if(rodCur&&rodCur.sig===rodSig)return;if(rodFail.current===rodSig)return;
+    const t=setTimeout(fetchRod,2500);return()=>clearTimeout(t);},[rodSig,rodShown,storageReady]);
   const setEnergyPage=vtSet('energyPage',setEnergyPage_,(a,b)=>!a&&b?'open':a&&!b?'back':null);
   function renderEnergyPage(){
     const ep=energyPage,v=ep.view,set=f=>setEnergyPage(p=>({...p,...f})),lo=GOALS.calories.min,hi=GOALS.calories.max;
@@ -4975,6 +5065,7 @@ Reply ONLY with valid JSON (no markdown):
       body=<>
         {navRow(isT?'Today':dateLong(d),()=>set({date:calAddDays(d,-1)}),()=>set({date:calAddDays(d,1)}),d<TODAY)}
         {balance(x.inK,x.outK,1)}
+        {isT&&renderRestOfDay()}
         {renderEaten(d)}
         {renderBurn(d,null)}
         <div className="x-sub" style={{fontSize:12.5,lineHeight:1.5,padding:'0 4px'}}>
@@ -5254,6 +5345,7 @@ Reply ONLY with valid JSON (no markdown):
     return(
       <div className="x-wrap">
         {renderFuel(m)}
+        {renderRestOfDay()}
         {renderWaterCard(TODAY)}
         {flags.length>0&&<div className="x-chips">{flags.map(([c,t])=><span key={t} className={`x-chip ${c}`}>{t}</span>)}</div>}
         {MEAL_TYPES.map((t,i)=>{

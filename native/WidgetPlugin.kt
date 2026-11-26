@@ -134,6 +134,8 @@ class StepsWidget : LmWidget("steps")
 class BurnWidget : LmWidget("burn")
 class FoodWidget : LmWidget("food")
 class InOutWidget : LmWidget("io")
+class InTodayWidget : LmWidget("today")
+class EatWidget : LmWidget("eat")
 
 /** Every 15 minutes: today's steps from Health Connect (if allowed in the background), then redraw. */
 class WidgetWorker(c: Context, p: WorkerParameters) : CoroutineWorker(c, p) {
@@ -148,7 +150,7 @@ object Widgets {
     const val WORK = "lm_widgets"
     private const val PREFS = "lm_widgets"
     private val KINDS = linkedMapOf("steps" to StepsWidget::class.java, "burn" to BurnWidget::class.java,
-        "food" to FoodWidget::class.java, "io" to InOutWidget::class.java)
+        "food" to FoodWidget::class.java, "io" to InOutWidget::class.java, "today" to InTodayWidget::class.java, "eat" to EatWidget::class.java)
 
     fun save(c: Context, s: String) { c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("snap", s).apply() }
     private fun snap(c: Context): JSONObject? = try { c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("snap", null)?.let { JSONObject(it) } } catch (e: Exception) { null }
@@ -225,13 +227,18 @@ object Widgets {
         val logged get() = eat > 0
     }
     class Pace(val key: String, val label: String, val color: Int)
+    /** Rest of today: kcal to land mid-target (left), until the bottom of it (loLeft), over the top (over), protein to go,
+     *  meals still ahead [meal, about when], and the coach's meals when up to date [meal, by, what, kcal, protein]. */
+    class Rod(val left: Int, val loLeft: Int, val over: Int, val pro: Int, val done: Boolean, val closed: Boolean,
+              val next: List<Pair<String, String>>, val head: String, val tip: String, val meals: List<RodMeal>)
+    class RodMeal(val meal: String, val by: String, val eat: String, val kcal: Int, val pro: Int)
 
     class Model(
         val ok: Boolean, val accent: Int, val goal: String, val stepGoal: Int, val lo: Int, val hi: Int,
         val steps: Int, val hours: IntArray, val walkHours: Set<Int>, val km: Double, val walks: List<Pair<String, Double>>, val nowH: Int,
         val rest: Int, val restDay: Int, val walkKcal: Int, val walkN: Int, val everyday: Int, val workout: Int, val digest: Int,
         val eat: Int, val pro: Int, val carbs: Int, val fat: Int, val tPro: Int, val tCarbs: Int, val tFat: Int,
-        val meals: List<Triple<String, String, Int>>, val week: List<Day>, val weekTitle: String
+        val meals: List<Triple<String, String, Int>>, val week: List<Day>, val weekTitle: String, val rod: Rod?
     ) { val move get() = walkKcal + everyday + workout + digest; val out get() = rest + move }
 
     /**
@@ -275,11 +282,15 @@ object Widgets {
             else Day(lab, k, dd?.optInt("s") ?: 0, dd?.optInt("e") ?: 0, dd?.optInt("o") ?: 0, dd?.optInt("r") ?: 0, dd?.optInt("r") ?: 0, false, d.isAfter(today))
         }
         val f = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
+        val rod = t?.optJSONObject("rod")?.let { r ->
+            val nx = ArrayList<Pair<String, String>>(); r.optJSONArray("next")?.let { a -> for (i in 0 until a.length()) a.optJSONArray(i)?.let { nx.add(it.optString(0) to it.optString(1)) } }
+            val ml = ArrayList<RodMeal>(); r.optJSONArray("meals")?.let { a -> for (i in 0 until a.length()) a.optJSONArray(i)?.let { ml.add(RodMeal(it.optString(0), it.optString(1), it.optString(2), it.optInt(3), it.optInt(4))) } }
+            Rod(r.optInt("left"), r.optInt("loLeft"), r.optInt("over"), r.optInt("pro"), r.optBoolean("done"), r.optBoolean("closed"), nx, r.optString("head"), r.optString("tip"), ml) }
         return Model(s.has("at"), parse(s.optString("accent"), 0xFF00FFFF.toInt()), s.optString("goal", "lose"), s.optInt("stepGoal", 10000),
             s.optInt("lo", 1700), s.optInt("hi", 1850), steps, hours, wh, km, walks, now.hour,
             rest, restDay, walkKcal, walks.size, everyday, workout, digest,
             eat, pro, t?.optInt("carbs") ?: 0, t?.optInt("fat") ?: 0, s.optInt("tPro", 100), s.optInt("tCarbs", 200), s.optInt("tFat", 70),
-            meals, week, "${mon.format(f)} – ${mon.plusDays(6).format(f)}")
+            meals, week, "${mon.format(f)} – ${mon.plusDays(6).format(f)}", rod)
     }
 
     private fun parse(h: String, d: Int) = try { if (Regex("^#[0-9a-fA-F]{6}$").matches(h)) android.graphics.Color.parseColor(h) else d } catch (e: Exception) { d }
@@ -385,7 +396,7 @@ class Draw(private val cv: Canvas, private val m: Widgets.Model, private val W0:
         if (!m.ok) { card(); text("Open Fitness Tracker", W / 2, H / 2 - 2, 13f, C.FG, 820, Paint.Align.CENTER, W - 20)
             text("once to set up", W / 2, H / 2 + 16, 12f, C.FG2, 720, Paint.Align.CENTER, W - 20); return "Open Fitness Tracker once to set up this widget" }
         val size = when { W0 < 150 && H0 < 150 -> "1"; H0 < 130 -> "w"; W0 < 260 -> "s"; H0 < 270 -> "m"; else -> "l" }
-        return when (kind) { "steps" -> steps(size); "burn" -> burn(size); "food" -> food(size); else -> io(if (size == "1" || size == "w") "s" else size) }
+        return when (kind) { "steps" -> steps(size); "burn" -> burn(size); "food" -> food(size); "today" -> today(size); "eat" -> eat(size); else -> io(if (size == "1" || size == "w") "s" else size) }
     }
 
     // ═══ STEPS ═══
@@ -642,5 +653,140 @@ class Draw(private val cv: Canvas, private val m: Widgets.Model, private val W0:
             if (letters) text(d.label, c, y + h - 2, 10.5f, if (d.today) acc else C.FG2, 780, Paint.Align.CENTER) }
         val logged = m.week.filter { it.logged && !it.future }
         if (logged.isNotEmpty()) dash(x, x + w, yv(logged.sumOf { it.restDay }.toDouble() / logged.size), C.VIOLET)
+    }
+
+    // ═══ IN & OUT · TODAY ═══
+    /** a horizontal bar of coloured parts (value, colour), on a track, scaled to top */
+    private fun hbar(x: Float, y: Float, w: Float, h: Float, parts: List<Pair<Int, Int>>, top: Double, band: Pair<Int, Int>? = null) {
+        fill(x, y, w, h, h / 2, C.S4)
+        if (band != null) { val a = (band.first / top * w).toFloat(); val b = (band.second / top * w).toFloat(); fill(x + a, y - 2, max(2f, b - a), h + 4, 3f, C.dim(acc, 0.28)) }
+        var cx = x; val gap = 2f
+        val vis = parts.filter { it.first > 0 }
+        vis.forEachIndexed { i, (v, c) -> val pw = (v / top * w).toFloat(); if (pw < 0.5f) return@forEachIndexed
+            fill(cx, y, max(h * 0.6f, pw - (if (i < vis.size - 1) gap else 0f)), h, h / 2, c); cx += pw }
+    }
+    private val mealCols = listOf(C.AMBER, C.MINT, C.PINK, C.SKY)
+    private fun inParts(): List<Pair<Int, Int>> { val ps = m.meals.mapIndexedNotNull { i, (_, _, k) -> if (k > 0) k to mealCols[i % 4] else null }
+        val s = ps.sumOf { it.first }; return if (s > 0) ps + listOf(max(0, m.eat - s) to acc) else listOf(m.eat to acc) }
+    private fun outParts() = listOf(m.rest to C.VIOLET, m.walkKcal to C.MINT, m.everyday to C.SKY, m.workout to C.AMBER, m.digest to C.PINK)
+    private fun leftTxt(): String { val r = m.rod
+        return when { r == null -> if (m.eat < m.lo) "Eat ~${fmt((m.lo + m.hi) / 2 - m.eat)} more" else if (m.eat > m.hi) "${fmt(m.eat - m.hi)} over target" else "In range"
+            r.over > 0 -> "${fmt(r.over)} kcal over"; r.loLeft > 0 -> "Eat ~${fmt(r.left)} more"; else -> "In range" } }
+    private fun proTxt(): String { val r = m.rod ?: return ""; return if (r.pro > 0) "${r.pro} g protein to go" else "Protein done ✓" }
+    private fun today(size: String): String {
+        val net = m.out - m.eat; val netL = if (net >= 0) "deficit" else "surplus"; val netC = if (net >= 0) (if (net > 1000) C.AMBER else C.MINT) else C.PINK
+        val top = max(max(m.out, m.eat), m.hi).toDouble() * 1.06
+        val desc = "In and out today: ate ${fmt(m.eat)}, burned ${fmt(m.out)} kcal, ${fmt(abs(net))} $netL. ${leftTxt()}"
+        when (size) {
+            "1" -> { fit(120f, 120f); card(); val pad = 12f; val bw = W - 2 * pad
+                text("Today", pad, pad + 10, 11f, C.FG2, 780)
+                hbar(pad, pad + 20, bw, 9f, inParts(), top, m.lo to m.hi); hbar(pad, pad + 35, bw, 9f, outParts(), top)
+                num(short(abs(net)), pad, H - pad - 14, 26f, netC, maxW = bw); text("kcal $netL", pad, H - pad, 10.5f, C.FG2, maxW = bw) }
+            "w" -> { fit(280f, 100f); card(); val pad = 14f; val bw = W * 0.55f
+                text("In & out · today", pad, pad + 10, 12f, C.FG, 820, maxW = bw)
+                text("In ${fmt(m.eat)}", pad, pad + 30, 10.5f, C.FG2); hbar(pad, pad + 35, bw, 8f, inParts(), top, m.lo to m.hi)
+                text("Out ${fmt(m.out)}", pad, pad + 58, 10.5f, C.FG2); hbar(pad, pad + 63, bw, 8f, outParts(), top)
+                val rx = W - pad; num(fmt(abs(net)), rx, pad + 40, 24f, netC, Paint.Align.RIGHT, W - bw - 3 * pad)
+                text("kcal $netL", rx, pad + 56, 10.5f, C.FG2, align = Paint.Align.RIGHT); text(leftTxt(), rx, H - pad, 11f, acc, 800, Paint.Align.RIGHT, W - bw - 2.5f * pad) }
+            "s" -> { fit(184f, 184f); card(); val pad = 15f; val bw = W - 2 * pad
+                text("In & out · today", pad, pad + 10, 12.5f, C.FG, 820, maxW = bw)
+                text("Eaten", pad, pad + 34, 11f, C.FG2); num(fmt(m.eat), W - pad, pad + 35, 15f, acc, Paint.Align.RIGHT); hbar(pad, pad + 41, bw, 10f, inParts(), top, m.lo to m.hi)
+                text("Burned", pad, pad + 72, 11f, C.FG2); num(fmt(m.out), W - pad, pad + 73, 15f, C.AMBER, Paint.Align.RIGHT); hbar(pad, pad + 79, bw, 10f, outParts(), top)
+                val nw = num(fmt(abs(net)), pad, H - pad - 18, 24f, netC); text("kcal $netL", pad + nw + 6, H - pad - 18, 10.5f, C.FG2, maxW = bw - nw - 6)
+                text(leftTxt() + (if (m.rod != null && m.rod.pro > 0) " · ${m.rod.pro} g protein" else ""), pad, H - pad, 11.5f, acc, 800, maxW = bw) }
+            "m" -> { fit(376f, 184f); card(); val pad = 16f; val lw = W * 0.56f
+                text("In & out · today", pad, pad + 10, 12.5f, C.FG, 820)
+                text("Eaten", pad, pad + 36, 11f, C.FG2); num(fmt(m.eat), pad + lw, pad + 37, 15f, acc, Paint.Align.RIGHT); hbar(pad, pad + 43, lw, 11f, inParts(), top, m.lo to m.hi)
+                text("Burned", pad, pad + 78, 11f, C.FG2); num(fmt(m.out), pad + lw, pad + 79, 15f, C.AMBER, Paint.Align.RIGHT); hbar(pad, pad + 85, lw, 11f, outParts(), top)
+                text("target ${fmt(m.lo)}–${fmt(m.hi)} · resting ${fmt(m.restDay)}", pad, H - pad, 10.5f, C.FG3, maxW = lw)
+                val x = pad + lw + 18; val rw = W - x - pad
+                num(fmt(abs(net)), x, pad + 46, 28f, netC, maxW = rw); text("kcal $netL so far", x, pad + 62, 10.5f, C.FG2, maxW = rw)
+                text(leftTxt(), x, pad + 92, 13f, acc, 850, maxW = rw); text(proTxt(), x, pad + 110, 11f, C.FG2, maxW = rw)
+                val nx = m.rod?.meals?.firstOrNull(); if (nx != null) wrapN("${nx.meal}: ${nx.eat}", x, pad + 132, rw, 11f, C.FG, 2) }
+            else -> { fit(376f, 376f); card(); val pad = 17f; val bw = W - 2 * pad
+                text("In & out · today", pad, pad + 12, 14f, C.FG, 820); text(leftTxt(), W - pad, pad + 12, 12f, acc, 850, Paint.Align.RIGHT, bw * 0.5f)
+                text("Eaten", pad, pad + 40, 11f, C.FG2); num(fmt(m.eat), W - pad, pad + 41, 15f, acc, Paint.Align.RIGHT); hbar(pad, pad + 47, bw, 12f, inParts(), top, m.lo to m.hi)
+                text("Burned", pad, pad + 80, 11f, C.FG2); num(fmt(m.out), W - pad, pad + 81, 15f, C.AMBER, Paint.Align.RIGHT); hbar(pad, pad + 87, bw, 12f, outParts(), top)
+                var y = pad + 128; val cw = bw / 3
+                val r = m.rod; val more = r?.let { if (it.over > 0) -it.over else it.left } ?: max(0, (m.lo + m.hi) / 2 - m.eat)
+                for ((i, t) in listOf(Triple(netL.replaceFirstChar { it.uppercase() } + " so far", fmt(abs(net)), netC),
+                        Triple(if (more < 0) "Over target" else "To eat", fmt(abs(more)), if (more < 0) C.AMBER else acc),
+                        Triple("Protein to go", if (r == null) "—" else if (r.pro > 0) "${r.pro} g" else "✓", C.VIOLET)).withIndex()) {
+                    val cx = pad + cw * i + cw / 2; text(t.first, cx, y, 11f, C.FG2, align = Paint.Align.CENTER, maxW = cw - 6); num(t.second, cx, y + 24, 20f, t.third, Paint.Align.CENTER, cw - 6) }
+                y += 44; fill(pad, y, bw, H - pad - y, 20f, C.S3)
+                eatList(pad + 14, y + 22, bw - 28, H - pad - y - 30, 3) }
+        }
+        return desc
+    }
+
+    // ═══ WHAT TO EAT ═══
+    /** the coach's meals for the rest of today, or what's next when they aren't up to date */
+    private fun eatList(x: Float, y0: Float, w: Float, h: Float, maxMeals: Int): Float {
+        val r = m.rod; var y = y0
+        if (r == null) { text("Open the app for what to eat next", x, y, 12f, C.FG2, maxW = w); return y + 18 }
+        if (r.closed) { text("Kitchen’s closed for today", x, y, 13f, C.FG, 820, maxW = w); text("Water if you’re hungry, and an early night", x, y + 18, 11.5f, C.FG2, maxW = w); return y + 36 }
+        if (r.done) { text("All meals logged for today", x, y, 13f, C.FG, 820, maxW = w); return y + 18 }
+        if (r.meals.isEmpty()) { text("Next: " + r.next.joinToString(", ") { "${it.first.lowercase()} ~${it.second}" }, x, y, 12.5f, C.FG, 800, maxW = w)
+            text("Open the app for the coach’s suggestions", x, y + 18, 11f, C.FG2, maxW = w); return y + 36 }
+        val lines = if (h / max(1, min(maxMeals, r.meals.size)) > 80) 3 else 2
+        for (ml in r.meals.take(maxMeals)) { if (y > y0 + h - 14) break
+            val kw = text("${fmt(ml.kcal)} kcal · ${ml.pro} g", x + w, y, 11f, C.FG2, 760, Paint.Align.RIGHT)
+            val lw = text(ml.meal, x, y, 12.5f, acc, 850, maxW = w * 0.5f)
+            if (ml.by.isNotEmpty() && w - lw - kw - 10 > 40) text(" · by ${ml.by}", x + lw, y, 11f, C.FG2, maxW = w - lw - kw - 10)
+            y = wrapN(ml.eat, x, y + 17, w, 12f, C.FG, lines) + 24 }
+        if (r.tip.isNotEmpty() && y < y0 + h + 4) text("💡 " + r.tip, x, y - 4, 11f, C.FG2, maxW = w)
+        return y
+    }
+    /** wrap() that says where it ended */
+    private fun wrapN(s: String, x: Float, y: Float, w: Float, size: Float, color: Int, lines: Int): Float {
+        val words = s.split(" "); var line = ""; var yy = y; var n = 1
+        for (wd in words) { val t = if (line.isEmpty()) wd else "$line $wd"
+            if (width(t, size, 720) > w && line.isNotEmpty()) { if (n >= lines) { text("$line…", x, yy, size, color, maxW = w); return yy }
+                text(line, x, yy, size, color); yy += size * 1.3f; line = wd; n++ } else line = t }
+        if (line.isNotEmpty()) text(line, x, yy, size, color, maxW = w)
+        return yy
+    }
+    /** in & out today in one thin strip: eaten over burned, with the numbers */
+    private fun strip(x: Float, y: Float, w: Float) {
+        val top = max(max(m.out, m.eat), m.hi).toDouble() * 1.06
+        hbar(x, y, w, 6f, inParts(), top, m.lo to m.hi); hbar(x, y + 9, w, 6f, outParts(), top)
+        val net = m.out - m.eat
+        text("${fmt(m.eat)} in · ${fmt(m.out)} out · ${fmt(abs(net))} ${if (net >= 0) "deficit" else "surplus"}", x, y + 29, 10.5f, C.FG2, maxW = w)
+    }
+    private fun eat(size: String): String {
+        val r = m.rod; val first = r?.meals?.firstOrNull()
+        val head = when { r == null -> "Eat ~${fmt(max(0, (m.lo + m.hi) / 2 - m.eat))} more"; r.over > 0 -> "${fmt(r.over)} over"; r.loLeft > 0 -> "~${fmt(r.left)} kcal more"; else -> "In range" }
+        val desc = "What to eat: $head" + (first?.let { ". ${it.meal}: ${it.eat}" } ?: "")
+        when (size) {
+            "1" -> { val R = min(W, H) / 2 - 1; val cx = W / 2; val cy = H / 2
+                shape(cx, cy, R, 9, 0.07, C.BG); text("🍽️", cx, cy - R * 0.3f, R * 0.28f, C.FG, 700, Paint.Align.CENTER)
+                val v = if (r != null && r.over > 0) "+" + short(r.over) else short(r?.left ?: max(0, (m.lo + m.hi) / 2 - m.eat))
+                num(v, cx, cy + R * 0.2f, R * 0.42f, if (r != null && r.over > 0) C.AMBER else acc, Paint.Align.CENTER, R * 1.2f)
+                text(if (r != null && r.over > 0) "over" else "kcal to eat", cx, cy + R * 0.45f, R * 0.18f, C.FG2, 720, Paint.Align.CENTER, R * 1.3f) }
+            "w" -> { fit(280f, 100f); card(); val pad = 14f; val bw = W - 2 * pad
+                if (first != null) { val lw = text("${first.meal} · ${head}", pad, pad + 10, 12f, acc, 850, maxW = bw); wrapN(first.eat, pad, pad + 30, bw, 12f, C.FG, 2) }
+                else { text(head, pad, pad + 10, 13f, acc, 850, maxW = bw); eatList(pad, pad + 30, bw, 30f, 1) }
+                val top = max(max(m.out, m.eat), m.hi).toDouble() * 1.06
+                hbar(pad, H - pad - 13, bw, 5f, inParts(), top, m.lo to m.hi); hbar(pad, H - pad - 5, bw, 5f, outParts(), top) }
+            "s" -> { fit(184f, 184f); card(); val pad = 14f; val bw = W - 2 * pad
+                text("What to eat", pad, pad + 10, 12.5f, C.FG, 820, maxW = bw * 0.55f); text(head, W - pad, pad + 10, 11.5f, acc, 850, Paint.Align.RIGHT, bw * 0.5f)
+                strip(pad, pad + 20, bw)
+                eatList(pad, pad + 72, bw, H - pad - 72 - pad, 2) }
+            "m" -> { fit(376f, 184f); card(); val pad = 16f; val lw = W * 0.36f
+                text("What to eat", pad, pad + 12, 13f, C.FG, 820)
+                num(head.replace(" kcal more", ""), pad, pad + 48, 24f, if (r != null && r.over > 0) C.AMBER else acc, maxW = lw)
+                text(if (r != null && r.over > 0) "kcal over today" else "kcal more today", pad, pad + 64, 10.5f, C.FG2, maxW = lw)
+                text(proTxt(), pad, pad + 84, 11f, C.FG2, maxW = lw)
+                strip(pad, H - pad - 44, lw)
+                val x = pad + lw + 16; fill(x - 6, pad - 4, W - x - pad + 10, H - 2 * pad + 8, 18f, C.S3)
+                eatList(x + 8, pad + 16, W - x - pad - 12, H - 2 * pad - 16, 2) }
+            else -> { fit(376f, 376f); card(); val pad = 17f; val bw = W - 2 * pad
+                text("What to eat · rest of today", pad, pad + 12, 14f, C.FG, 820, maxW = bw * 0.62f); text(head, W - pad, pad + 12, 12.5f, acc, 850, Paint.Align.RIGHT, bw * 0.38f)
+                strip(pad, pad + 24, bw)
+                if (r != null && r.head.isNotEmpty()) text(r.head, pad, pad + 86, 12.5f, C.FG, 800, maxW = bw)
+                val y = pad + 100; fill(pad, y, bw, H - pad - y, 20f, C.S3)
+                eatList(pad + 14, y + 24, bw - 28, H - pad - y - 32, 4) }
+        }
+        return desc
     }
 }

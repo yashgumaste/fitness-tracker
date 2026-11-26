@@ -51,6 +51,8 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
       if(window.__busyModel&&String(u).includes('/models/'+window.__busyModel+':'))return{ok:false,status:503,
         text:async()=>JSON.stringify({error:{message:'This model is currently experiencing high demand.'}}),json:async()=>({}),clone(){return this;}};
       if(/Split each meal/.test(body))return reply('[]');
+      if(/Rest of today plan/.test(body)){window.__rodCalls=(window.__rodCalls||0)+1;return reply(JSON.stringify({headline:'Protein-first dinner, light and early',
+        meals:[{meal:'Dinner',by:'8:30 PM',eat:'2 chapati, 1 katori dal, 1 katori paneer bhurji, salad',kcal:620,protein:34}],tip:'Have a glass of buttermilk if hungry later'}));}
       if(/reviewing one whole day/.test(body))return reply(JSON.stringify({rating:'✅ Solid',summary:'A steady day.',food_insight:'Protein was low at lunch.',walk_insight:null,workout_insight:null,body_insight:'Slept well.',top_win:'Good sleep.',focus_next:'Add dal at dinner.',recovery_tip:'Drink water early.',tomorrow:{Breakfast:'Protein first: 2 boiled eggs with 1 chapati.',Lunch:window.__lunchTip||null,Snack:null,Dinner:'Dinner by 8 PM, half the rice.',walk_morning:'Aim for 11:30 min/km at 105 steps a minute.',walk_second:'A 20-minute brisk walk after tea.',keep:[{at:'Lunch',text:'Yesterday’s dal-and-sabji lunch was spot on. Same again?'}],water:'500 ml before 10 AM this time.',move:'Yesterday’s walk was great. Stand up and keep it rolling.'}}));
       // the free AI sometimes answers in words: first reply prose, the retry wraps JSON in a sentence
       if(/cabbage rice/.test(body)){window.__jsonMode=/responseMimeType|nutrition data API/.test(body);
@@ -413,6 +415,19 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     // the night's sleep keeps the nap when it's saved, and the nap shows in the sleep sheet
     await p.evaluate(()=>{const b=[...document.querySelectorAll('.x-stat')].find(e=>/Sleep/.test(e.textContent));b.click();});await W(400);
     await expect('Naps on');await click('.x-sheet-foot button','Save sleep');await W(600);await expect('45 mins nap');});
+  await step('Rest of today: what to eat next, from the coach, on Food and In & out, and in the widget',async()=>{
+    const t0=await p.evaluate(()=>Date.now());await p.clock.setFixedTime(new Date('2026-11-09T17:00:00+05:30'));
+    await tab(1);await W(300);await p.evaluate(()=>{window.dispatchEvent(new Event('lm-resume'));});
+    for(let i=0;i<20&&!(await has('paneer bhurji'));i++)await W(300);
+    await expect('Rest of today');await expect('paneer bhurji');await expect('From the coach');
+    const n0=await p.evaluate(()=>window.__rodCalls||0);await p.click('[aria-label="Refresh suggestions"]');await W(1500);
+    if(await p.evaluate(()=>window.__rodCalls||0)<=n0)throw new Error('refresh did not ask the coach again');
+    const snap=await p.evaluate(()=>window.__lmWidgetSnap());
+    if(!snap.today.rod||!snap.today.rod.meals.length||!/paneer/.test(snap.today.rod.meals[0][2]))throw new Error('widget snapshot has no rest-of-day meals: '+JSON.stringify(snap.today.rod));
+    // In & out → Day (today) shows it too
+    await tab(0);await W(300);await p.evaluate(()=>{const b=[...document.querySelectorAll('button')].find(e=>/Burned/.test(e.getAttribute('aria-label')||'')||/In & out/.test(e.getAttribute('aria-label')||''));b&&b.click();});await W(800);
+    await p.clock.setFixedTime(new Date('2026-11-09T22:45:00+05:30'));await tab(1);await W(1200);await expect('Kitchen’s closed');
+    await p.clock.setFixedTime(t0);await W(300);});
   await step('Walk training: plans and cues',async()=>{
     const r=await p.evaluate(()=>{const P=window.__lmTrainPlan,N=window.__lmTrainNow,base={cad:108,kmh:5.2,stride:0.75,min:30};
       const jog=P({slot:'morning',indoor:false,ateMin:null,base,prog:{reps:4,jogSec:90}});
