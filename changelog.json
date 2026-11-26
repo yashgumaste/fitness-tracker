@@ -1,37 +1,42 @@
 {
-  "unreleased": [
-    {
-      "text": "Steps no longer stay stuck at “—” during a walk. If the phone’s step sensor goes quiet, the app restarts it and meanwhile counts your steps from the phone’s motion (shown with ≈ and “Steps from motion”), so steps, cadence and stride keep working; once the sensor is back, nothing is counted twice. If step counting isn’t allowed, an “Allow step counting” button on the walk screen asks for it. Cadence no longer shows 0 when there’s no step count at all."
-    },
-    {
-      "text": "New: Walk training (Settings → Walk training). Turn it on and each recorded walk becomes a plan of blocks (warm-up, brisk walking, jogs or pushes, cool-down) with a card on the walk screen and buzzes you can feel in your pocket: pick up the pace, longer steps, start jogging, walk now, ease off. It learns from your walks when you’re usually indoors or outdoors and your usual pace for mornings, after lunch, evenings and after dinner, weekdays and weekends. Jogs only outdoors and not within 90 minutes of a meal (then it’s pace walking), and if GPS can’t find you in the first 3 minutes it switches to an indoor plan. With no race coming it aims a little above your usual and adds jogs as you manage them; with a race coming it practises race pace (and run-walk, if that’s your plan), lighter in the taper and easy around race day."
-    },
-    {
-      "text": "Log naps: tap + → Nap (or “+ Nap” in the Sleep sheet). Pick how long (20 mins to 1 hr 30 mins) or set when you fell asleep and woke up. Naps show on the Home sleep tile and in the day’s timeline, the coach sees them, and they’re saved to Health Connect with your sleep."
-    },
-    {
-      "text": "Tapping the BMI card now opens the measurements sheet with your BMI at the top (updating as you edit weight or height) instead of body fat."
-    },
-    {
-      "text": "The race’s date and start time now use the app’s own calendar and clock (the same ones as food logging), with the date written the Indian way (Sun, 6 Dec 2026) and quick picks. The reminder time windows and the “Add a walk” times use the app’s clock too, instead of the phone’s old-style picker."
-    },
-    {
-      "text": "New “Rest of today” card on Food → Today and on In & out → Today: how much more to eat to land in your calorie target and protein to go, then the coach’s pick for each meal still ahead (what and how much, by when, kcal and protein), worked out from what you’ve eaten, what you’ve burned, foods you often eat, how you’re feeling and your race. It updates by itself every time you log a meal; ↻ asks again."
-    },
-    {
-      "text": "Two new home-screen widgets. “In & out today”: eaten (by meal) against burned (resting, walks, everyday, workout, digesting), your deficit so far and how much more to eat; bigger sizes add the coach’s meals for the rest of the day. Tap it for In & out → Today. “What to eat”: the coach’s next meals with a thin in & out strip for today; tap it for Food → Today. Both resize from a small square to a large panel."
-    },
-    {
-      "text": "Walk training now follows the coach. When the coach plans tomorrow’s walks (morning, after lunch, night), it also sets numbers: minutes, speed, steps a minute, step length and jogs (how many, for how long or how many metres). On that walk the app turns them into blocks and cues you: “Start jogging for 2 minutes”, “Jog 400 metres”, “Walk now”, “Pick up the pace: 112 steps a minute”, “Longer steps”. Jogs still become brisk walking if you ate in the last 90 minutes or you’re indoors."
-    },
-    {
-      "text": "Walk training can now speak (Settings → Walk training → Voice): each block and cue is said out loud, lowering your music for a moment, even with the screen off, plus your time every kilometre and the last kilometre’s time. The race-day voice coach, trying out on your daily walks first."
-    },
-    {
-      "text": "Fixed: when a tab opened by growing out of the island, the page could cover the island for a moment so it looked like it went behind the cards. The island now stays on top."
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.56",
+      "date": "2026-11-27",
+      "items": [
+        {
+          "text": "Steps no longer stay stuck at “—” during a walk. If the phone’s step sensor goes quiet, the app restarts it and meanwhile counts your steps from the phone’s motion (shown with ≈ and “Steps from motion”), so steps, cadence and stride keep working; once the sensor is back, nothing is counted twice. If step counting isn’t allowed, an “Allow step counting” button on the walk screen asks for it. Cadence no longer shows 0 when there’s no step count at all."
+        },
+        {
+          "text": "New: Walk training (Settings → Walk training). Turn it on and each recorded walk becomes a plan of blocks (warm-up, brisk walking, jogs or pushes, cool-down) with a card on the walk screen and buzzes you can feel in your pocket: pick up the pace, longer steps, start jogging, walk now, ease off. It learns from your walks when you’re usually indoors or outdoors and your usual pace for mornings, after lunch, evenings and after dinner, weekdays and weekends. Jogs only outdoors and not within 90 minutes of a meal (then it’s pace walking), and if GPS can’t find you in the first 3 minutes it switches to an indoor plan. With no race coming it aims a little above your usual and adds jogs as you manage them; with a race coming it practises race pace (and run-walk, if that’s your plan), lighter in the taper and easy around race day."
+        },
+        {
+          "text": "Log naps: tap + → Nap (or “+ Nap” in the Sleep sheet). Pick how long (20 mins to 1 hr 30 mins) or set when you fell asleep and woke up. Naps show on the Home sleep tile and in the day’s timeline, the coach sees them, and they’re saved to Health Connect with your sleep."
+        },
+        {
+          "text": "Tapping the BMI card now opens the measurements sheet with your BMI at the top (updating as you edit weight or height) instead of body fat."
+        },
+        {
+          "text": "The race’s date and start time now use the app’s own calendar and clock (the same ones as food logging), with the date written the Indian way (Sun, 6 Dec 2026) and quick picks. The reminder time windows and the “Add a walk” times use the app’s clock too, instead of the phone’s old-style picker."
+        },
+        {
+          "text": "New “Rest of today” card on Food → Today and on In & out → Today: how much more to eat to land in your calorie target and protein to go, then the coach’s pick for each meal still ahead (what and how much, by when, kcal and protein), worked out from what you’ve eaten, what you’ve burned, foods you often eat, how you’re feeling and your race. It updates by itself every time you log a meal; ↻ asks again."
+        },
+        {
+          "text": "Two new home-screen widgets. “In & out today”: eaten (by meal) against burned (resting, walks, everyday, workout, digesting), your deficit so far and how much more to eat; bigger sizes add the coach’s meals for the rest of the day. Tap it for In & out → Today. “What to eat”: the coach’s next meals with a thin in & out strip for today; tap it for Food → Today. Both resize from a small square to a large panel."
+        },
+        {
+          "text": "Walk training now follows the coach. When the coach plans tomorrow’s walks (morning, after lunch, night), it also sets numbers: minutes, speed, steps a minute, step length and jogs (how many, for how long or how many metres). On that walk the app turns them into blocks and cues you: “Start jogging for 2 minutes”, “Jog 400 metres”, “Walk now”, “Pick up the pace: 112 steps a minute”, “Longer steps”. Jogs still become brisk walking if you ate in the last 90 minutes or you’re indoors."
+        },
+        {
+          "text": "Walk training can now speak (Settings → Walk training → Voice): each block and cue is said out loud, lowering your music for a moment, even with the screen off, plus your time every kilometre and the last kilometre’s time. The race-day voice coach, trying out on your daily walks first."
+        },
+        {
+          "text": "Fixed: when a tab opened by growing out of the island, the page could cover the island for a moment so it looked like it went behind the cards. The island now stays on top."
+        }
+      ]
+    },
     {
       "version": "1.49",
       "date": "2026-11-26",
