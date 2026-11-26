@@ -435,12 +435,21 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
       const ind=P({slot:'lunch',indoor:true,ateMin:200,base});
       const race=P({slot:'morning',indoor:false,ateMin:null,base,phase:'build',race:{name:'R',date:'2026-11-29',km:21.1,timed:true,cutoffMin:210,how:'walk'}});
       const eve=P({slot:'morning',indoor:false,base,phase:'eve',race:{date:'2026-11-10',km:21.1}});
+      const co=P({slot:'morning',indoor:false,ateMin:null,base,coach:{min:40,kmh:5.8,cadence:112,stride_cm:85,jogs:{count:3,min:2}}});
+      const coM=P({slot:'morning',indoor:false,ateMin:null,base,coach:{min:30,kmh:5.6,cadence:110,jogs:{count:2,m:400}}});
+      const coAte=P({slot:'dinner',indoor:false,ateMin:20,base,coach:{min:25,kmh:5.4,cadence:108,jogs:{count:2,min:1}}});
+      window.__co={mode:co.mode,jogs:co.blocks.filter(b=>b.jog).length,jogSay:co.blocks.find(b=>b.jog).say,brisk:co.blocks.find(b=>b.kind==='brisk'),
+        mSay:coM.blocks.find(b=>b.jog).label+' / '+coM.blocks.find(b=>b.jog).say,ateJog:coAte.blocks.some(b=>b.jog),ateWhy:coAte.why,allSay:co.blocks.every(b=>b.say)};
       const jb=jog.blocks.find(b=>b.jog);
       return{jog:jog.mode,jogN:jog.blocks.filter(b=>b.jog).length,jogLen:jog.blocks[jog.blocks.indexOf(jb)+1].from-jb.from,
         ate:ate.mode,ateJog:ate.blocks.some(b=>b.jog),ind:ind.mode,indStride:ind.blocks.some(b=>b.strideMin||b.kmhMin),
         race:race.mode,raceK:(race.blocks.find(b=>b.kind==='race')||{}).kmhMin,eve:eve.mode,
         cueJog:N(jog,jb.from+20,{cad:110,kmh:5}).cue,cueFaster:N(ind,ind.blocks.find(b=>b.kind==='push').from+30,{cad:100,kmh:4}).cue,
         cueGood:N(ind,ind.blocks.find(b=>b.kind==='push').from+30,{cad:120,kmh:5}).cue,cueEasy:N(eve,100,{cad:125,kmh:6}).cue};});
+    const co=await p.evaluate(()=>window.__co);
+    if(co.mode!=='coach'||co.jogs!==3||!/Start jogging for 2 minutes/.test(co.jogSay)||co.brisk.kmhMin!==5.8||co.brisk.cadMin!==112||co.brisk.strideMin!==0.85||!co.allSay)throw new Error('coach plan: '+JSON.stringify(co));
+    if(!/400 m/.test(co.mSay)||!/Jog 400 metres/.test(co.mSay))throw new Error('distance jogs: '+co.mSay);
+    if(co.ateJog||!/ate in the last 90 min/.test(co.ateWhy))throw new Error('after a meal the coach’s jogs become brisk walking: '+co.ateWhy);
     const want={jog:'jog',jogN:4,jogLen:90,ate:'pace',ateJog:false,ind:'pace',indStride:false,race:'race',eve:'easy',cueJog:'jog',cueFaster:'faster',cueGood:'good',cueEasy:'easy'};
     for(const[k,v]of Object.entries(want))if(r[k]!==v)throw new Error(`${k}: ${r[k]} (want ${v}) `+JSON.stringify(r));
     if(!(r.raceK>=6.4&&r.raceK<=6.6))throw new Error('race pace for a 3 h 30 min cutoff over 21.1 km (with a margin) should be ~6.5 km/h: '+r.raceK);

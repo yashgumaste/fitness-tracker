@@ -30,6 +30,12 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import android.os.VibrationEffect
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import java.util.Locale
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
@@ -168,18 +174,20 @@ object WalkState {
     private var accGapStart = 0L; private var hwAtGap = 0L
 
     // walk training (set by the app when the walk starts): the plan and its blocks
-    class Block(val from: Long, val kind: String, val label: String, val cadMin: Double, val kmhMin: Double, val strideMin: Double, val cadMax: Double, val jog: Boolean)
+    class Block(val from: Long, val kind: String, val label: String, val cadMin: Double, val kmhMin: Double, val strideMin: Double, val cadMax: Double, val jog: Boolean, val say: String)
     @Volatile var trainJson: String? = null
     @Volatile var blocks: List<Block>? = null
     @Volatile var trainVib = true
+    @Volatile var trainVoice = true
+    @Volatile var kmVoice = true
     @Synchronized fun setTrain(p: JSONObject?) {
         if (p == null) { trainJson = null; blocks = null; return }
         val a = p.optJSONArray("blocks") ?: JSONArray(); val out = ArrayList<Block>()
         for (i in 0 until a.length()) { val b = a.optJSONObject(i) ?: continue
             out.add(Block(b.optLong("from"), b.optString("kind"), b.optString("label"), b.optDouble("cadMin", 0.0).let { if (it.isNaN()) 0.0 else it },
                 b.optDouble("kmhMin", 0.0).let { if (it.isNaN()) 0.0 else it }, b.optDouble("strideMin", 0.0).let { if (it.isNaN()) 0.0 else it },
-                b.optDouble("cadMax", 0.0).let { if (it.isNaN()) 0.0 else it }, b.optBoolean("jog", false))) }
-        trainJson = p.toString(); blocks = out; trainVib = p.optBoolean("vib", true)
+                b.optDouble("cadMax", 0.0).let { if (it.isNaN()) 0.0 else it }, b.optBoolean("jog", false), b.optString("say", ""))) }
+        trainJson = p.toString(); blocks = out; trainVib = p.optBoolean("vib", true); trainVoice = p.optBoolean("voice", true); kmVoice = p.optBoolean("kmVoice", true)
     }
     /** Speed over the last ~15 s of fixes (km/h); 0 if no fix for 6 s; null before there are two. */
     @Synchronized fun recentKmh(): Double? {
@@ -466,6 +474,7 @@ class WalkService : Service(), LocationListener, SensorEventListener {
             val prevJog = trainIdx >= 0 && trainIdx < bl.size && bl[trainIdx].jog
             val first = trainIdx < 0; trainIdx = i; offTicks = 0
             if (!first || sec > 5) cue(if (b.jog) "jog" else if (prevJog) "walk" else if (b.kind == "push" || b.kind == "race") "faster" else if (b.kind == "cool" || b.kind == "easy") "easy" else "block")
+            say(b.say)
             return
         }
         val into = sec - b.from; val spm = WalkState.liveSpm(); val kmh = WalkState.recentKmh()
@@ -481,9 +490,68 @@ class WalkService : Service(), LocationListener, SensorEventListener {
             else -> null
         }
         if (c == null) { offTicks = 0; return }
-        if (++offTicks >= 3 && now - lastCue > 60_000) { cue(c); offTicks = 0 }
+        if (++offTicks >= 3 && now - lastCue > 60_000) { cue(c, b); offTicks = 0 }
     }
-    private fun cue(kind: String) { lastCue = SystemClock.elapsedRealtime(); lastKind = kind; if (WalkState.trainVib) Cues.buzz(this, kind) }
+    private fun cue(kind: String, b: WalkState.Block? = null) {
+        lastCue = SystemClock.elapsedRealtime(); lastKind = kind; if (WalkState.trainVib) Cues.buzz(this, kind)
+        if (b == null) return
+        say(when (kind) {
+            "faster" -> if (b.cadMin > 0) "Pick up the pace. ${b.cadMin.toInt()} steps a minute." else "A bit faster. ${fmt1(b.kmhMin)} kilometres an hour."
+            "longer" -> "Longer steps. Push off from your back foot."
+            "jog" -> "Jog now. Light, quick steps."
+            "walk" -> "Walk now. Back to brisk walking."
+            "easy" -> "Ease off. Keep it easy today."
+            else -> "" })
+    }
+    private fun fmt1(v: Double) = if (v % 1.0 == 0.0) v.toInt().toString() else String.format(Locale.US, "%.1f", v)
+
+    // ── the spoken cues: Android's text-to-speech, lowering any music for a moment ──
+    private var tts: TextToSpeech? = null; private var ttsReady = false; private var focus: AudioFocusRequest? = null
+    private val speechAttrs = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
+    private fun ensureTts() {
+        if (tts != null || !WalkState.trainVoice) return
+        tts = TextToSpeech(this) { st ->
+            if (st == TextToSpeech.SUCCESS) { val t = tts ?: return@TextToSpeech
+                val loc = listOf(Locale("en", "IN"), Locale.UK, Locale.US).firstOrNull { t.isLanguageAvailable(it) >= TextToSpeech.LANG_AVAILABLE }
+                if (loc != null) t.language = loc
+                t.setAudioAttributes(speechAttrs); t.setSpeechRate(1.02f)
+                t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(id: String?) {}
+                    override fun onDone(id: String?) { unduck() }
+                    @Deprecated("Deprecated in Java") override fun onError(id: String?) { unduck() } })
+                ttsReady = true }
+        }
+    }
+    @Suppress("DEPRECATION")
+    private fun duck() {
+        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (Build.VERSION.SDK_INT >= 26) { val f = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK).setAudioAttributes(speechAttrs).build(); focus = f; am.requestAudioFocus(f) }
+        else am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+    }
+    @Suppress("DEPRECATION")
+    private fun unduck() {
+        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (tts?.isSpeaking == true) return
+        if (Build.VERSION.SDK_INT >= 26) focus?.let { am.abandonAudioFocusRequest(it) } else am.abandonAudioFocus(null)
+    }
+    private fun say(text: String) {
+        if (text.isBlank() || !WalkState.trainVoice) return
+        ensureTts(); val t = tts ?: return
+        if (!ttsReady) { handler.postDelayed({ if (ttsReady) say(text) }, 1500); return }
+        duck(); t.speak(text, TextToSpeech.QUEUE_ADD, null, "lm" + SystemClock.elapsedRealtime())
+    }
+    // every kilometre: the time so far and the last kilometre's time
+    private var lastKm = 0; private var lastKmMs = 0L
+    private fun kmWatch() {
+        if (WalkState.blocks == null || !WalkState.kmVoice || !WalkState.trainVoice || WalkState.state != "recording") return
+        val k = (WalkState.distanceM / 1000).toInt(); val ms = WalkState.movingMs()
+        if (k <= lastKm) { if (k < lastKm) { lastKm = k; lastKmMs = ms }; return }
+        val split = ms - lastKmMs; lastKm = k; lastKmMs = ms
+        fun words(t: Long): String { val s = t / 1000; val h = s / 3600; val m = (s % 3600) / 60; val x = s % 60
+            return listOfNotNull(if (h > 0) "$h hour" + (if (h > 1) "s" else "") else null, if (m > 0) "$m minute" + (if (m != 1L) "s" else "") else null,
+                if (x > 0 && h == 0L) "$x second" + (if (x != 1L) "s" else "") else null).joinToString(" ") }
+        say("Kilometre $k. ${words(ms)}." + (if (k > 1) " Last kilometre ${words(split)}." else ""))
+    }
     private fun trainTitle(): String? {
         val bl = WalkState.blocks ?: return null; val (i, sec) = trainBlock() ?: return null
         val nx = if (i + 1 < bl.size) bl[i + 1].from - sec else -1L
@@ -497,6 +565,7 @@ class WalkService : Service(), LocationListener, SensorEventListener {
         if (WalkState.state == "idle") { stopSelf(); return }
         try { stepWatch() } catch (e: Exception) { }
         try { trainWatch() } catch (e: Exception) { }
+        try { kmWatch() } catch (e: Exception) { }
         try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTE_ID, note()) } catch (e: Exception) { }
     }
 
@@ -517,6 +586,7 @@ class WalkService : Service(), LocationListener, SensorEventListener {
 
     override fun onDestroy() {
         handler.removeCallbacks(tick)
+        try { tts?.stop(); tts?.shutdown(); tts = null; unduck() } catch (e: Exception) { }
         try { (getSystemService(Context.LOCATION_SERVICE) as LocationManager).removeUpdates(this) } catch (e: Exception) { }
         try { LocationServices.getFusedLocationProviderClient(this).removeLocationUpdates(fused) } catch (e: Exception) { }
         try { if (Build.VERSION.SDK_INT >= 24 && gnss != null) (getSystemService(Context.LOCATION_SERVICE) as LocationManager).unregisterGnssStatusCallback(gnss as GnssStatus.Callback) } catch (e: Exception) { }

@@ -20,6 +20,15 @@
     },
     {
       "text": "Two new home-screen widgets. “In & out today”: eaten (by meal) against burned (resting, walks, everyday, workout, digesting), your deficit so far and how much more to eat; bigger sizes add the coach’s meals for the rest of the day. Tap it for In & out → Today. “What to eat”: the coach’s next meals with a thin in & out strip for today; tap it for Food → Today. Both resize from a small square to a large panel."
+    },
+    {
+      "text": "Walk training now follows the coach. When the coach plans tomorrow’s walks (morning, after lunch, night), it also sets numbers: minutes, speed, steps a minute, step length and jogs (how many, for how long or how many metres). On that walk the app turns them into blocks and cues you: “Start jogging for 2 minutes”, “Jog 400 metres”, “Walk now”, “Pick up the pace: 112 steps a minute”, “Longer steps”. Jogs still become brisk walking if you ate in the last 90 minutes or you’re indoors."
+    },
+    {
+      "text": "Walk training can now speak (Settings → Walk training → Voice): each block and cue is said out loud, lowering your music for a moment, even with the screen off, plus your time every kilometre and the last kilometre’s time. The race-day voice coach, trying out on your daily walks first."
+    },
+    {
+      "text": "Fixed: when a tab opened by growing out of the island, the page could cover the island for a moment so it looked like it went behind the cards. The island now stays on top."
     }
   ],
   "releases": [
