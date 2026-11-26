@@ -35,7 +35,6 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import java.util.Locale
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
