@@ -5765,9 +5765,9 @@ Reply ONLY with valid JSON (no markdown):
       <div className="x-card" style={{display:'flex',flexDirection:'column',gap:12}}>
         <Seg items={[['off','Off'],['on','On']]} value={c.on?'on':'off'} onChange={v=>setW({on:v==='on'})}/>
         {c.on&&<>
-          <div className="x-grid2">
-            <label className="x-lab">From<input type="time" className="x-field" value={c.start} onChange={e=>e.target.value&&setW({start:e.target.value})}/></label>
-            <label className="x-lab">Until<input type="time" className="x-field" value={c.end} onChange={e=>e.target.value&&setW({end:e.target.value})}/></label>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <PickTime label="From" value={c.start} onChange={v=>setW({start:v})} quick={[['6 AM','06:00'],['7 AM','07:00'],['8 AM','08:00'],['9 AM','09:00']]}/>
+            <PickTime label="Until" value={c.end} onChange={v=>setW({end:v})} quick={[['8 PM','20:00'],['9 PM','21:00'],['10 PM','22:00'],['11 PM','23:00']]}/>
           </div>
           <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Every</div>
           <div className="x-chips">{[[60,'1 h'],[90,'1 h 30'],[120,'2 h'],[150,'2 h 30'],[180,'3 h']].map(([m,l])=><button key={m} className={`x-chip${+c.every===m?' on':''}`} onClick={()=>setW({every:m})}>{l}</button>)}</div>
@@ -5858,10 +5858,10 @@ Reply ONLY with valid JSON (no markdown):
         <Seg items={[['off','Off'],['on','On']]} value={c.on?'on':'off'} onChange={v=>setM({on:v==='on'})}/>
         {c.on&&<>
           <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Remind me after sitting for</div>
-          <div className="x-chips">{[[30,'30 min'],[45,'45 min'],[60,'1 h'],[90,'1 h 30'],[120,'2 h']].map(([m,l])=><button key={m} className={`x-chip${+c.mins===m?' on':''}`} onClick={()=>setM({mins:m})}>{l}</button>)}</div>
-          <div className="x-grid2">
-            <label className="x-lab">From<input type="time" className="x-field" value={c.start} onChange={e=>e.target.value&&setM({start:e.target.value})}/></label>
-            <label className="x-lab">Until<input type="time" className="x-field" value={c.end} onChange={e=>e.target.value&&setM({end:e.target.value})}/></label>
+          <div className="x-chips">{[[30,'30 mins'],[45,'45 mins'],[60,'1 hr'],[90,'1 hr 30 mins'],[120,'2 hrs']].map(([m,l])=><button key={m} className={`x-chip${+c.mins===m?' on':''}`} onClick={()=>setM({mins:m})}>{l}</button>)}</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <PickTime label="From" value={c.start} onChange={v=>setM({start:v})} quick={[['9 AM','09:00'],['10 AM','10:00'],['11 AM','11:00']]}/>
+            <PickTime label="Until" value={c.end} onChange={v=>setM({end:v})} quick={[['6 PM','18:00'],['7 PM','19:00'],['8 PM','20:00'],['9 PM','21:00']]}/>
           </div>
           <div className="x-sub">“Barely moved” means fewer than 60 steps. The nudge comes when you’ve most likely been sitting <i>with</i> your phone: using it, or holding it or carrying it in a pocket. A phone lying flat and still with the screen off might mean you’re away from it, so that counts much less. Getting up and walking a few steps, even carrying the phone to another room, starts the sitting time again. You get at most one nudge per sitting, and Android may delay a check by a few minutes to save battery.
             {!native?' Works in the Android app.':''}</div>
@@ -6412,9 +6412,9 @@ Reply ONLY with valid JSON (no markdown):
             <div className="x-chips" style={{justifyContent:'center'}}>{[15,20,30,45,60,75,90,120].map(n=><button key={n} className={`x-chip${durN===n?' on':''}`} onClick={()=>set({dur:String(n)})}>{n<60?n+' min':Math.floor(n/60)+' h'+(n%60?' '+n%60+' min':'')}</button>)}</div>
             {d.from&&durN>0&&<div style={{textAlign:'center',fontWeight:750,color:'var(--fg2)'}}>Ends at <b style={{color:'var(--fg)'}}>{fmt12(to)}</b></div>}
           </div>
-        </>:<div className="x-grid2" style={{marginTop:10}}>
-          <label className="x-lab">From<input type="time" className="x-field" value={d.from} onChange={e=>set({from:e.target.value})}/></label>
-          <label className="x-lab">To<input type="time" className="x-field" value={d.to} onChange={e=>set({to:e.target.value})}/></label>
+        </>:<div style={{display:'flex',flexDirection:'column',gap:8,marginTop:10}}>
+          <PickTime label="From" value={d.from} onChange={v=>set({from:v})}/>
+          <PickTime label="To" value={d.to} onChange={v=>set({to:v})}/>
         </div>}
         <div className="x-eyebrow" style={{margin:'16px 2px 8px'}}>Steps & distance</div>
         <div className="x-grid2">
@@ -7220,10 +7220,24 @@ Only facts you actually found; use null when unsure; never guess times, cutoffs 
         <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Distance</div>
         <Seg items={RACE_KM} value={kmOn?kmOn[0]:''} onChange={v=>set({km:v})}/>
         <label className="x-lab">Or in km<input className="x-field" inputMode="decimal" value={d.km} placeholder="21.1" onChange={e=>set({km:e.target.value.replace(/[^0-9.]/g,'').slice(0,5)})}/></label>
-        <div style={{display:'flex',gap:10}}>
-          <label className="x-lab" style={{flex:1}}>Date<input type="date" className="x-field" value={d.date} min={TODAY} onChange={e=>set({date:e.target.value})}/></label>
-          <label className="x-lab" style={{flex:1}}>Start<input type="time" className="x-field" value={d.start} onChange={e=>e.target.value&&set({start:e.target.value})}/></label>
-        </div>
+        {/* the app's own date and time pickers, as in food logging */}
+        <button className="x-item" aria-label="Race date" onClick={()=>set({open:d.open==='date'?null:'date'})} style={{borderRadius:24,background:d.open==='date'?'var(--s3)':'var(--s2)'}}>
+          <Shape kind="cookie12" size={44} fill="var(--pri-c)" color="var(--on-pri-c)" font={20}>📅</Shape>
+          <span style={{flex:1,minWidth:0}}><span className="s" style={{display:'block',margin:0}}>Date</span>
+            <span style={{fontFamily:'var(--font-ui)',fontStretch:'120%',fontWeight:850,fontSize:21}}>{d.date?(x=>`${x.toLocaleDateString('en-IN',{weekday:'short'})}, ${x.getDate()} ${x.toLocaleDateString('en-IN',{month:'short'})} ${x.getFullYear()}`)(new Date(d.date+'T00:00:00')):'Pick the day'}</span>
+            {d.date&&<span className="s" style={{marginLeft:8}}>{(n=>n>1?`in ${n} days`:n===1?'tomorrow':n===0?'today':'')(daysBetween(TODAY,d.date))}</span>}</span>
+          <span className="x-chip" style={{background:'var(--s4)'}}>{d.open==='date'?'Done':'Change'}</span>
+        </button>
+        {d.open==='date'&&<DatePicker value={d.date||TODAY} min={TODAY} max={calAddDays(TODAY,730)} onChange={v=>set({date:v,open:null})}
+          quick={[['This Sunday',calAddDays(TODAY,(7-new Date(TODAY+'T12:00:00').getDay())%7||7)],['In 2 weeks',calAddDays(TODAY,14)],['In a month',calAddDays(TODAY,30)]]}/>}
+        <button className="x-item" aria-label="Start time" onClick={()=>set({open:d.open==='start'?null:'start'})} style={{borderRadius:24,background:d.open==='start'?'var(--s3)':'var(--s2)'}}>
+          <Shape kind="cookie12" size={44} fill="var(--violet-c)" color="var(--on-violet-c)" font={20}>🕐</Shape>
+          <span style={{flex:1,minWidth:0}}><span className="s" style={{display:'block',margin:0}}>Start</span>
+            <span style={{fontFamily:'var(--font-ui)',fontStretch:'120%',fontWeight:850,fontSize:22}}>{fmt12(d.start||'06:00')}</span></span>
+          <span className="x-chip" style={{background:'var(--s4)'}}>{d.open==='start'?'Done':'Change'}</span>
+        </button>
+        {d.open==='start'&&<TimePicker value={d.start||'06:00'} onChange={v=>set({start:v})}
+          quick={[['5 AM','05:00'],['5:30 AM','05:30'],['6 AM','06:00'],['6:30 AM','06:30'],['7 AM','07:00']]}/>}
         <Seg items={[['t','⏱ Timed'],['u','Untimed']]} value={d.timed?'t':'u'} onChange={v=>set({timed:v==='t'})}/>
         {d.timed&&<div style={{display:'flex',gap:10,alignItems:'flex-end'}}>
           <label className="x-lab" style={{flex:1}}>Cutoff hrs<input className="x-field" inputMode="numeric" value={d.cutH} placeholder="3" onChange={e=>set({cutH:num(e.target.value,2)})}/></label>
@@ -8057,6 +8071,19 @@ function DatePicker({value,onChange,min,max,quick=[]}){
               fontWeight:on||isT?850:700,fontSize:15,fontVariantNumeric:'tabular-nums',transition:'border-radius .3s var(--spring), background .2s'}}>{i+1}</button>);})}
       </div>
     </div>);
+}
+// A time row that opens the app's own clock picker (as in food logging) in place of the system's
+function PickTime({label,value,onChange,emoji='🕐',quick=[]}){
+  const [open,setOpen]=useState(false);
+  return(<>
+    <button className="x-item" aria-label={label} onClick={()=>setOpen(o=>!o)} style={{borderRadius:24,background:open?'var(--s3)':'var(--s2)',width:'100%'}}>
+      <Shape kind="cookie12" size={40} fill="var(--violet-c)" color="var(--on-violet-c)" font={18}>{emoji}</Shape>
+      <span style={{flex:1,minWidth:0,textAlign:'left'}}><span className="s" style={{display:'block',margin:0}}>{label}</span>
+        <span style={{fontFamily:'var(--font-ui)',fontStretch:'120%',fontWeight:850,fontSize:20}}>{value?fmt12(value):'—'}</span></span>
+      <span className="x-chip" style={{background:'var(--s4)'}}>{open?'Done':'Change'}</span>
+    </button>
+    {open&&<TimePicker value={value||'12:00'} onChange={onChange} quick={quick}/>}
+  </>);
 }
 function TimePicker({value,onChange,quick=[]}){
   const parse=v=>{const [h,m]=(v||'12:00').split(':').map(Number);return {h,m};};

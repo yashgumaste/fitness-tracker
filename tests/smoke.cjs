@@ -461,7 +461,12 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     if(!(await p.evaluate(()=>window.__raceSearch)))throw new Error('the race lookup did not search the web');
     await click('[data-race-edit] .x-chip','Half Marathon');await W(200);
     const dr=await p.evaluate(()=>[...document.querySelectorAll('[data-race-edit] input')].map(i=>i.value));
-    if(!dr.includes('2026-11-10')||!dr.includes('05:45')||!dr.includes('21.1')||!dr.includes('3')||!dr.includes('30'))throw new Error('draft not filled: '+dr.join(' | '));
+    const dt=await p.evaluate(()=>document.querySelector('[data-race-edit]').innerText);
+    if(!/10 Nov 2026/.test(dt)||!/5:45 AM/.test(dt)||!dr.includes('21.1')||!dr.includes('3')||!dr.includes('30'))throw new Error('draft not filled: '+dr.join(' | ')+' / '+dt.slice(0,300));
+    // the app's own pickers (as in food logging), not the system's
+    if(await p.$('[data-race-edit] input[type=date],[data-race-edit] input[type=time]'))throw new Error('race form still uses the system date/time inputs');
+    await p.click('[aria-label="Race date"]');await W(300);await expect('In 2 weeks');await p.click('[aria-label="Race date"]');await W(200);
+    await p.click('[aria-label="Start time"]');await W(300);await expect('5:30 AM');await p.click('[aria-label="Start time"]');await W(200);
     if(!(await p.$('[data-race-edit] [aria-label="Route map"]')))throw new Error('no course map');
     await click('[data-race-edit] button','Save race');await W(500);
     await expect('Half marathon');await expect('Cutoff 3 hrs 30 mins');await expect('Tomorrow');await expect('Race tomorrow: rest');
