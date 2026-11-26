@@ -270,6 +270,9 @@
     },
     pause:()=>WT.pause(),resume:()=>WT.resume(),
     allowSteps:()=>WT?WT.allowSteps().catch(()=>({granted:false})):Promise.resolve({granted:false}),
+    // walk training: the plan of blocks (null to stop), and a test buzz
+    train:plan=>WT?WT.train({plan:plan||null}):Promise.resolve(),
+    buzz:kind=>WT?WT.buzz({kind}).catch(()=>{}):Promise.resolve(),
     status:from=>WT?WT.status({from:from||0}):Promise.resolve({state:'idle'}),
     stop:()=>WT.stop(),discard:()=>WT.discard()
   };

@@ -2125,7 +2125,8 @@ function App(){
 
   const [dl,setDl]=useState(null);
   const [raceDraft,setRaceDraft]=useState(null);   // the race being added or edited (Settings → Profile)
-  const [raceBusy,setRaceBusy]=useState(null);     // what the race lookup is doing right now   // in-app download: {state:'downloading'|'done'|'failed', pct}
+  const [raceBusy,setRaceBusy]=useState(null);     // what the race lookup is doing right now
+  const trainReplan=useRef(0);                     // when the walk-training plan was last redone (went indoors)
   const dlTimer=useRef(null);
   const [setupStep,setSetupStep]=useState(0);
   const [setupDraft,setSetupDraft]=useState({});
@@ -3375,6 +3376,98 @@ Reply ONLY with valid JSON (no markdown):
   const recRef=useRef(null);recRef.current=rec;
   const openAct=(date,id)=>{setActPage({date,id});window.scrollTo(0,0);};
   // Ready, set, go: 3 · 2 · 1 · Go with race-start beeps before a recording starts, and Cancel for a mis-tap
+  // ── Walk training: what your recorded walks say about each kind of walk (last 4 weeks) ──
+  const trainCfg={on:false,vib:true,log:[],...(prefs.train||{})};
+  function trainHistory(){
+    const med=a=>{const x=a.filter(v=>v!=null&&isFinite(v)).sort((p,q)=>p-q);return x.length?x[Math.floor(x.length/2)]:null;};
+    const rows={};
+    for(let i=0;i<28;i++){const d=calAddDays(TODAY,-i),we=isWeekend(d);
+      for(const w of moveDay(d).walks){if(w.src!=='gps'||w.kind==='hike'||w.min<8)continue;
+        const sl=walkSlot(w.start);for(const k of [sl+'|'+(we?'we':'wd'),sl,'all']){const r=rows[k]||(rows[k]={n:0,indoor:0,jog:0,cad:[],kmh:[],stride:[],min:[]});
+          r.n++;if(w.gpsWeak)r.indoor++;if(w.stats&&w.stats.jogSec>30)r.jog++;r.cad.push(w.cadence);r.min.push(w.min);
+          if(!w.gpsWeak){r.kmh.push(w.kmh);if(w.steps>100)r.stride.push(w.km*1000/w.steps);}}}}
+    const out={};for(const[k,r]of Object.entries(rows))out[k]={n:r.n,indoor:r.indoor/r.n,jogShare:r.jog/r.n,cad:med(r.cad),kmh:med(r.kmh),stride:med(r.stride),min:med(r.min)};
+    return out;
+  }
+  // jogs grow as you manage them: one more each time you finish them all, then longer jogs
+  function trainProg(){let reps=3,jogSec=60;
+    for(const x of (trainCfg.log||[]).filter(x=>x.mode==='jog'))if(x.done){reps++;if(reps>6&&jogSec<180){jogSec+=30;reps=4;}}
+    return{reps:Math.min(8,reps),jogSec};}
+  function trainCtx(indoorNow){
+    const nowD=new Date(),min=nowD.getHours()*60+nowD.getMinutes(),slot=walkSlot(min),we=isWeekend(TODAY),H=trainHistory();
+    const row=H[slot+'|'+(we?'we':'wd')]||H[slot]||H.all||{};
+    const meals=(dietGrouped[TODAY]||[]).map(e=>mealTime(e)).filter(x=>!x.approx&&x.ts<=Date.now()).map(x=>x.ts);
+    const ate=meals.length?Math.round((Date.now()-Math.max(...meals))/60000):null;
+    const base={...H.all,...Object.fromEntries(Object.entries(row).filter(([,v])=>v!=null))};
+    if(!base.stride)base.stride=kmPerStep()*1000;
+    return{today:TODAY,slot,we,indoor:indoorNow!=null?indoorNow:(row.n>=2&&row.indoor>=0.5),ateMin:ate,phase:racePhase(TODAY),race:RACE,base,prog:trainProg(),learned:row.n||0};
+  }
+  // the training card on the walk screen: this block, time left, what's next, and the cue for right now
+  function renderTrainCard(r,now,running,sec){
+    const pl=r.train;if(!pl||!pl.blocks||!pl.blocks.length||r.kind==='hike')return null;
+    // planned for outdoors but no GPS after 3 minutes: you're indoors, so re-plan (no jogs, no stride targets)
+    if(!pl.indoor&&running&&sec>=180&&r.gps!=='ok'&&Date.now()-trainReplan.current>60000){trainReplan.current=Date.now();
+      const np={...makeTrain(true)};const W=window.LMNative?.walk;if(W&&W.train)W.train(np).then(()=>setRec(x=>x&&{...x,train:np})).catch(()=>{});}
+    const T=trainNow(pl,sec,running?now:null);if(!T)return null;
+    const warn=T.cue!=='good',col=warn?'var(--amber)':'var(--mint)',on=warn?'#2B1D00':'#00391f';
+    const tgt=[T.b.cadMin&&`${T.b.cadMin}+ steps/min`,T.b.kmhMin&&`${T.b.kmhMin}+ km/h`,T.b.strideMin&&`${Math.round(T.b.strideMin*100)}+ cm steps`,T.b.cadMax&&`under ${T.b.cadMax} steps/min`].filter(Boolean).join(' · ');
+    return(<div className="x-card" data-train="" style={{display:'flex',flexDirection:'column',gap:10,padding:16}}>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <span className="x-tag" style={{background:'var(--pri-c)',color:'var(--on-pri-c)'}}>🏋️ Training · {{jog:'jogs',pace:'pace walk',race:'race practice',easy:'easy'}[pl.mode]}</span>
+        <span style={{flex:1}}/>
+        <button className="x-btn tonal sm" aria-label="Stop training cues" onClick={()=>{const W=window.LMNative?.walk;if(W&&W.train)W.train(null).catch(()=>{});setRec(x=>x&&{...x,train:null});showToast('Training cues off for this walk');}}>Off</button>
+      </div>
+      <div style={{display:'flex',alignItems:'baseline',gap:10,flexWrap:'wrap'}}>
+        <b style={{fontSize:24,lineHeight:1.15,flex:1,minWidth:170}}>{T.b.label}</b>
+        {T.left!=null&&<span className="x-sub" style={{fontWeight:750}}>{fmtDur(Math.max(0,T.left))} left</span>}
+      </div>
+      {tgt&&<div className="x-sub">Aim: {tgt}</div>}
+      <div role="status" style={{background:col,color:on,borderRadius:18,padding:'10px 14px',fontWeight:850,fontSize:17,transition:'background .3s'}}>{T.msg}</div>
+      {T.next&&<div className="x-sub">Then: {T.next.label}</div>}
+      {sec<60&&pl.why&&<div className="x-sub" style={{fontSize:12.5}}>{pl.why}</div>}
+    </div>);
+  }
+  function renderTrainSettings(){
+    const c=trainCfg,setT=f=>setPrefs(p=>({...p,train:{...c,...(p.train||{}),...f}})),H=trainHistory(),pr=trainProg();
+    const rowTxt=k=>{const r=H[k];if(!r||!r.n)return null;
+      return `${r.indoor>=0.5?'usually indoors':'outdoors'}${r.jogShare>0.2?', with jogs':''} · ${r.cad?Math.round(r.cad)+' steps/min':''}${r.kmh&&r.indoor<0.5?` · ${r.kmh.toFixed(1)} km/h`:''} (${r.n} walk${r.n>1?'s':''})`;};
+    const lastJ=(c.log||[]).filter(x=>x.mode==='jog').slice(-1)[0];
+    const rp=RACE?racePhase(TODAY):null,rdl=RACE?daysBetween(TODAY,RACE.date):null;
+    return(<div style={{display:'flex',flexDirection:'column',gap:12}}>
+      <div className="x-card" style={{display:'flex',flexDirection:'column',gap:12}}>
+        <div className="x-sub">While you record a walk, the app splits it into blocks (warm-up, brisk, jogs or pushes, cool-down) and tells you, with a buzz and on screen, when to pick up the pace, take longer steps, start or stop jogging, or ease off. Works with the screen off.</div>
+        <Seg items={[['off','Off'],['on','On']]} value={c.on?'on':'off'} onChange={v=>setT({on:v==='on'})}/>
+        {c.on&&<>
+          <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Buzz</div>
+          <Seg items={[['on','Buzz + screen'],['off','Screen only']]} value={c.vib!==false?'on':'off'} onChange={v=>setT({vib:v==='on'})}/>
+        </>}
+      </div>
+      {c.on&&<>
+        <div className="x-eyebrow" style={{margin:'6px 2px 0'}}>What it’s aiming for</div>
+        <div className="x-card" style={{display:'flex',flexDirection:'column',gap:8}}>
+          {RACE&&rdl>=0&&rdl<=70?<div className="x-sub"><b style={{color:'var(--fg)'}}>🏁 {RACE.name||'Your race'}, {rdl} days away.</b> {rp==='taper'?'Taper: shorter race-pace practice.':rp==='build'?`Race-pace practice${RACE.goalMin||RACE.cutoffMin?` at ${fmtPace(RACE.goalMin?RACE.goalMin/RACE.km:RACE.cutoffMin/RACE.km*0.93)} min/km`:''}${RACE.how!=='walk'?', and its run-walk rhythm when you can jog':''}.`:'Easy walks only around race day.'}</div>
+            :<div className="x-sub"><b style={{color:'var(--fg)'}}>Getting better, a step at a time.</b> Pushes and brisk blocks aim a little above your usual for that walk; jogs grow as you manage them.</div>}
+          <div className="x-sub">Jogs next time: {pr.reps} × {fmtDur(pr.jogSec)}{lastJ?` (last time ${lastJ.done?'you did them all ✓':'not all, so the same again'})`:''}.</div>
+        </div>
+        <div className="x-eyebrow" style={{margin:'6px 2px 0'}}>Learned from your walks</div>
+        <div className="x-card" style={{display:'flex',flexDirection:'column',gap:8}}>
+          {['morning','lunch','evening','dinner'].map(sl=>{const wd=rowTxt(sl+'|wd'),we=rowTxt(sl+'|we');if(!wd&&!we)return null;
+            return <div key={sl} className="x-sub"><b style={{color:'var(--fg)'}}>{TRAIN_SLOT_L[sl][0].toUpperCase()+TRAIN_SLOT_L[sl].slice(1)}</b>{wd?<><br/>Weekdays: {wd}</>:null}{we?<><br/>Weekends: {we}</>:null}</div>;})}
+          {!H.all&&<div className="x-sub">Nothing yet: record a few walks and it learns when you walk indoors or outdoors, and your usual pace.</div>}
+          <div className="x-sub">Jogs only outdoors and not within 90 minutes of a meal; after eating it’s pace walking. If GPS can’t find you in the first 3 minutes, it switches to an indoor plan.</div>
+        </div>
+        <div className="x-eyebrow" style={{margin:'6px 2px 0'}}>The buzzes</div>
+        <div className="x-card" style={{display:'flex',flexDirection:'column',gap:6}}>
+          {[['🏃','Start jogging','jog'],['🚶','Walk now (jog over)','walk'],['⏩','Pick up the pace','faster'],['📏','Longer steps','longer'],['🐢','Ease off','easy']].map(([e,t,k])=>
+            <div key={k} style={{display:'flex',gap:10,alignItems:'center'}}><span style={{fontSize:20}}>{e}</span><b style={{flex:1,fontSize:14.5}}>{t}</b><span className="x-sub">{TRAIN_VIB[k]}</span></div>)}
+          <button className="x-btn tonal sm" style={{alignSelf:'flex-start',marginTop:4}} onClick={()=>{const W=window.LMNative?.walk;if(W&&W.buzz){['jog','walk','faster','longer','easy'].forEach((k,i)=>setTimeout(()=>W.buzz(k),i*2200));}else showToast('Buzzing works in the Android app','var(--warn)');}}>Feel them</button>
+        </div>
+      </>}
+    </div>);
+  }
+  function makeTrain(indoorNow){const c=trainCtx(indoorNow),pl=trainPlan(c);
+    return{...pl,indoor:c.indoor,slot:c.slot,vib:trainCfg.vib!==false,ctx:{ateMin:c.ateMin,learned:c.learned,reps:c.prog.reps,jogSec:c.prog.jogSec}};}
+
   function startRecording(kind){
     kind=kind==='hike'?'hike':'walk';
     const W=window.LMNative?.walk;
@@ -3405,6 +3498,7 @@ Reply ONLY with valid JSON (no markdown):
     const W=window.LMNative?.walk;
     // the Go! screen covers the switch, so no page transition: the recording is simply there when it fades
     try{const st=await W.start(kind);vtBack.current.push({y:window.scrollY,key:null});
+      if(trainCfg.on&&kind==='walk'&&W.train){const pl=makeTrain();try{await W.train(pl);st.train=pl;}catch(_){}}
       setRec({...st,pts:st.points||[]});setRecOpen_(true);setActPage_(null);window.scrollTo(0,0);}
     catch(e){const m=String(e&&(e.message||e.code)||e);
       showToast(/location/i.test(m)?'Allow precise location so the app can draw your route':'Couldn’t start recording: '+m,'var(--warn)');}
@@ -3423,6 +3517,11 @@ Reply ONLY with valid JSON (no markdown):
     const id=String(start);
     setTracks(p=>({...p,[id]:{id,start,end,kind:st.kind==='hike'?'hike':'walk',altSrc:useBaro?'baro':'gps',movingMs:st.movingMs||0,steps:st.steps||0,distGps:Math.round(st.distanceM||0),
       distSteps:Math.round(((raw[0]&&raw[0][6]!=null?+raw[0][6]:raw.length?0:st.steps)||0)*kmPerStep()*1000),pts}}));
+    if(st.train&&st.train.blocks){const pl=st.train,js=trackStats(pts).jogSec||0,jb=pl.blocks.filter(b=>b.jog),plannedJog=jb.reduce((a,b,i)=>{const nx=pl.blocks[pl.blocks.indexOf(b)+1];return a+(nx?nx.from-b.from:0);},0);
+      const reached=jb.filter(b=>b.from<(st.movingMs||0)/1000).length;
+      const entry={date:localDate(new Date(start)),slot:pl.slot,mode:pl.mode,min:Math.round((st.movingMs||0)/60000),reps:jb.length,jogSec:jb.length?Math.round(plannedJog/jb.length):0,
+        jogDone:Math.round(js),done:pl.mode==='jog'&&reached===jb.length&&js>=plannedJog*0.8};
+      setPrefs(p=>({...p,train:{...trainCfg,...(p.train||{}),log:[...((p.train&&p.train.log)||[]),entry].slice(-60)}}));}
     setRec(null);setRecOpen(false);setStepsPage(null);openAct(localDate(new Date(start)),'gps-'+id);
     showToast(what+' saved 🎉','var(--ok)');
   }
@@ -4638,6 +4737,7 @@ Reply ONLY with valid JSON (no markdown):
             onClick={async()=>{const q=await W.allowSteps();showToast(q&&q.granted?'Steps allowed: counting from the step sensor':'Steps stay counted from motion. Allow Physical activity in the app’s settings for the step sensor','var(--ok)');}}>👟 Allow step counting</button>}
           {r.stepIssue!=='permission'&&r.stepSrc==='motion'&&<span className="x-tag" style={{background:'var(--amber-c)',color:'var(--on-amber-c)'}}>👟 Steps from motion</span>}
         </div>
+        {renderTrainCard(r,now,running,sec)}
         <Presence show={!!jog}>{jog&&<div role="status" aria-label={`Jogging for ${fmtDur((Date.now()-jog.t)/1000)}, ${jogM<1000?Math.round(jogM)+' metres':(jogM/1000).toFixed(2)+' kilometres'}`}
           style={{background:'var(--amber)',color:'#2B1D00',borderRadius:999,padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'center',gap:7,
             flexWrap:'wrap',rowGap:2,fontWeight:850,fontSize:18.5,lineHeight:1.1}}>
@@ -5834,6 +5934,7 @@ Reply ONLY with valid JSON (no markdown):
         RACE&&daysBetween(TODAY,RACE.date)>=0&&`🏁 ${RACE.name||raceKmLabel(RACE.km)} in ${daysBetween(TODAY,RACE.date)} days`].filter(Boolean).join(' · '),'violet'],
       ['body','📏','Body',currentBF?`${currentBF}% body fat`:'Height, weight, measurements','pink'],
       ['goals','🎯','Goals',`${fmtN(G.calMin)}–${fmtN(G.calMax)} kcal · ${G.protein} g protein · ${G.steps/1000}k steps`,'amber'],
+      ['train','🏋️','Walk training',trainCfg.on?`On · ${RACE&&daysBetween(TODAY,RACE.date)>=0?'for '+(RACE.name||'your race'):'aiming a little above your usual'}`:'Off · cues to pace up, jog and ease off','mint'],
       ['ai','✨','AI',prov==='claude'?'Claude (your key)':'Free (Gemini)','pri'],
       ['reminders','🔔','Reminders',[logCfg.on&&'Logging',logCfg.on&&(logCfg.coach||logCfg.walk)&&'Coach',moveCfg.on&&'Movement',waterCfg.on&&'Water'].filter(Boolean).join(' · ')||'All off','violet'],
       ['health','❤️','Health Connect',window.LMNative?.isNative?(hcOn?'Connected':'Not connected'):'Android app only','pink'],
@@ -5858,6 +5959,7 @@ Reply ONLY with valid JSON (no markdown):
     const pg=PAGES.find(x=>x[0]===settingsPage)||PAGES[0];
     let content=null;
     if(settingsPage==='profile')content=renderProfileSettings();
+    if(settingsPage==='train')content=renderTrainSettings();
     if(settingsPage==='body')content=<div className="x-wrap" style={{paddingTop:0}}>
       {!bodySaved&&pagePill({id:'measure',tone:'setup',icon:'📏',text:'Add your measurements',tap:openBody})}
           <button className="x-card sa" onClick={openBody} style={{display:'flex',flexDirection:'column',gap:12}}>
@@ -7412,6 +7514,68 @@ function raceBeep(n){
     if(go){tone(880,'triangle',0.5);tone(1760,'sine',0.12);}else{tone(1318.5,'sine',0.45);tone(2637,'sine',0.08);}
   }catch(_){}
 }
+/* ── Walk training: a plan of blocks for this walk (warm-up, brisk, jogs, pushes, race pace, cool-down) and the
+   cue for right now. Pure functions; the phone's walk service gets the same blocks and buzzes the cues. ──
+   Block: {from (s of moving time), kind, label, cadMin, kmhMin, strideMin (m), cadMax, jog} */
+const TRAIN_SLOT_L={morning:'morning',lunch:'after-lunch',evening:'evening',dinner:'after-dinner'};
+const walkSlot=min=>min<11*60?'morning':min<16*60?'lunch':min<19*60+30?'evening':'dinner';
+const TRAIN_VIB={jog:'3 long buzzes',walk:'1 very long buzz',faster:'3 quick buzzes',longer:'short + long buzz',easy:'2 medium buzzes'};
+/** ctx: {slot, we, indoor, ateMin (min since last meal or null), phase (race phase or null), race, base:{cad,kmh,stride,min,jogShare}, prog:{reps,jogSec}} */
+function trainPlan(ctx){
+  const today=ctx.today||localDate(new Date());
+  const b=ctx.base||{},cad=Math.round(b.cad||105),kmh=b.kmh||5,stride=b.stride||0.7,len=Math.max(20,Math.min(60,Math.round(b.min||30)));
+  const out=[];let t=0;const add=(sec,kind,label,o={})=>{out.push({from:t,kind,label,...o});t+=sec;};
+  const outdoor=!ctx.indoor,ate=ctx.ateMin!=null&&ctx.ateMin<90,ph=ctx.phase,r=ctx.race;
+  const tg=(c,k,s)=>({cadMin:c?Math.round(c):null,kmhMin:outdoor&&k?+k.toFixed(1):null,strideMin:outdoor&&s?+s.toFixed(2):null});
+  const canJog=outdoor&&!ate&&(ctx.slot==='morning'||(b.jogShare||0)>0.2||(r&&r.how!=='walk'));
+  // the days around a race: easy, nothing to push
+  if(ph==='load'||ph==='eve'||ph==='race'||ph==='recover'){
+    add(len*60,'easy',ph==='recover'?'Easy recovery walk':'Easy walk: save it for the race',{cadMax:cad+4});
+    return{mode:'easy',why:ph==='recover'?'You’re recovering from the race: an easy walk, nothing more.':'Race days: keep it easy, no pushing.',blocks:out,canJog:false};}
+  const warm=()=>add(ctx.slot==='morning'?300:180,'warm','Warm up: easy pace',{});
+  const cool=()=>add(180,'cool','Cool down: easy pace',{});
+  // race coming (within 10 weeks): practise its pace (and its run-walk rhythm)
+  if(r&&(ph==='build'||ph==='taper')&&daysBetween(today,r.date)<=70){
+    const P=r.goalMin?r.goalMin/r.km:r.timed&&r.cutoffMin?r.cutoffMin/r.km*0.93:null;   // min/km, with a margin on the cutoff
+    const rk=P?60/P:kmh*1.06,rcad=Math.round(Math.max(cad*1.03,(rk*1000/60)/stride));   // the steps a minute that speed takes at your stride
+    const tap=ph==='taper';warm();
+    if(canJog&&r.how!=='walk'){const run=r.how==='run'?240:180,walk=r.how==='run'?60:120,n=tap?3:5;
+      for(let i=0;i<n;i++){add(run,'jog',`Run ${i+1} of ${n}: race rhythm`,{jog:true,cadMin:140});add(walk,'brisk','Walk: race rhythm',tg(cad*1.02,kmh*1.02));}}
+    else{const n=tap?2:3,on=tap?300:480,off=tap?180:120;
+      for(let i=0;i<n;i++){add(on,'race',`Race pace ${i+1} of ${n}${P?': '+fmtPace(P)+' min/km':''}`,tg(rcad,rk));add(off,'steady','Steady: catch your breath',tg(cad));}}
+    cool();add(0,'steady','Steady brisk walk',tg(cad,kmh));
+    return{mode:'race',why:`${r.name||'Your race'} is in ${daysBetween(today,r.date)} days: practising ${r.how==='walk'||!canJog?'race pace':'its run-walk rhythm'}${tap?', lighter for the taper':''}.`+(ate&&r.how!=='walk'?' Just ate, so walking only.':''),blocks:out,canJog};
+  }
+  // otherwise: a little better than your usual for this walk
+  if(canJog){const reps=Math.max(2,Math.min(8,ctx.prog?.reps||3)),js=ctx.prog?.jogSec||60;warm();
+    add(180,'brisk','Brisk walk',tg(cad*1.03,kmh*1.03));
+    for(let i=0;i<reps;i++){add(js,'jog',`Jog ${i+1} of ${reps}`,{jog:true,cadMin:140});add(120,'brisk','Brisk walk: recover',tg(cad*1.02));}
+    cool();add(0,'steady','Steady brisk walk',tg(cad,kmh));
+    return{mode:'jog',why:`Outdoors and not just after a meal: ${reps} jogs of ${fmtDur(js)} between brisk walking.`,blocks:out,canJog};}
+  warm();const n=Math.max(3,Math.round((len-6)/4));
+  for(let i=0;i<n;i++){add(120,'push',`Push ${i+1} of ${n}: quicker${outdoor?', longer steps':''}`,tg(cad*1.06,kmh*1.07,stride*1.04));add(120,'steady','Steady',tg(cad));}
+  cool();add(0,'steady','Steady brisk walk',tg(cad));
+  return{mode:'pace',why:ate?'You ate in the last 90 min: pace walking only, no jogs.':ctx.indoor?'Indoors: quicker steps (no jogs, stride doesn’t count in a small space).':'Pace walking: pushes a little above your usual.',blocks:out,canJog};
+}
+/** Where you are in the plan at `sec` of moving time, and what to do: {i, b, next, left, cue, msg}. */
+function trainNow(plan,sec,now){
+  if(!plan||!plan.blocks.length)return null;
+  let i=0;for(let k=0;k<plan.blocks.length;k++)if(plan.blocks[k].from<=sec)i=k;
+  const b=plan.blocks[i],next=plan.blocks[i+1]||null,left=next?next.from-sec:null,into=sec-b.from;
+  const cad=now&&now.cad,kmh=now&&now.kmh,stride=cad>=40&&kmh>0.5?kmh/3.6*60/cad:null;
+  let cue='good',msg='On target';
+  if(b.jog){if(into>=12&&!(cad>=135||now&&now.jogging)){cue='jog';msg='Jog now: light, quick steps';}else msg='Jogging: nice and easy';}
+  else if(i>0&&plan.blocks[i-1].jog&&into<40&&(cad>=140||now&&now.jogging)){cue='walk';msg='Walk now: back to brisk walking';}
+  else if(b.cadMax&&cad>b.cadMax+4){cue='easy';msg='Ease off: keep it easy today';}
+  else if(into<10)msg=b.kind==='warm'||b.kind==='cool'?'Easy pace':'Settle in';
+  else if(b.cadMin&&cad!=null&&cad<b.cadMin-3){cue='faster';msg=`Pick up the pace: ${b.cadMin}+ steps a minute`;}
+  else if(b.strideMin&&stride!=null&&stride<b.strideMin*0.97){cue='longer';msg='Longer steps: push off from your back foot';}
+  else if(b.kmhMin&&kmh!=null&&kmh>0.5&&kmh<b.kmhMin*0.97){cue='faster';msg=`A bit faster: ${b.kmhMin}+ km/h`;}
+  else if(b.kind==='warm'||b.kind==='cool')msg='Easy pace';
+  return{i,b,next,left,cue,msg};
+}
+
+if(typeof window!=='undefined'){window.__lmTrainPlan=c=>trainPlan(c);window.__lmTrainNow=(p,s,n)=>trainNow(p,s,n);}   // for the tests
 function recNow(pts,spm){
   let cad=spm!=null?Math.round(spm):null,kmh=null;
   if(pts&&pts.length>=2){

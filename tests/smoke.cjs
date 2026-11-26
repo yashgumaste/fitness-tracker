@@ -126,8 +126,9 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
       async start(){this._st='recording';this._t0=Date.now()-25*60000;const c=[18.5204,73.8567];
         this._pts=Array.from({length:120},(_,i)=>{const a=i/120*2*Math.PI;return[this._t0+i*12500,c[0]+0.004*Math.sin(a),c[1]+0.006*Math.cos(a)+i*0.00003,560+10*Math.sin(a*2),5,null,i*27];});return this.status(0);},
       async status(from){if(this._noGps)return{state:this._st,start:this._t0,movingMs:5*60000,distanceM:0,steps:600,spm:120,gps:'searching',accuracy:0,count:0,sats:[3,11],from:from||0,points:[]};
-        return{state:this._st,start:this._t0,movingMs:25*60000,distanceM:2600,steps:3300,spm:this._spm,stepSrc:this._src||'counter',stepIssue:this._issue||null,gps:'ok',accuracy:5,count:this._pts.length,from:from||0,points:this._pts.slice(from||0)};},
+        return{state:this._st,start:this._t0,movingMs:25*60000,distanceM:2600,steps:3300,spm:this._spm,stepSrc:this._src||'counter',stepIssue:this._issue||null,train:this._train||null,gps:'ok',accuracy:5,count:this._pts.length,from:from||0,points:this._pts.slice(from||0)};},
         allowSteps:async function(){this._issue=null;window.__allowSteps=true;return{granted:true};},
+        train:async function(pl){this._train=pl;window.__trainPlan=pl;},buzz:async function(k){(window.__buzz=window.__buzz||[]).push(k);},
       async pause(){this._st='paused';return this.status(1e9);},async resume(){this._st='recording';return this.status(1e9);},
       async stop(){const s=await this.status(0);s.end=this._t0+26*60000;this._st='idle';return s;},async discard(){this._st='idle';}};});
     await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);
@@ -400,6 +401,34 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
   await step('Tabs grow out of what you tapped',async()=>{await tab(0);await W(300);await p.click('.x-card.pri.sa');await W(900);await expect('Today');
     if(await p.evaluate(()=>[...document.querySelectorAll('*')].some(e=>e.style&&e.style.viewTransitionName==='lm-hero')))throw new Error('a hero name was left behind');
     await tab(0);await W(600);});
+  await step('Walk training: plans and cues',async()=>{
+    const r=await p.evaluate(()=>{const P=window.__lmTrainPlan,N=window.__lmTrainNow,base={cad:108,kmh:5.2,stride:0.75,min:30};
+      const jog=P({slot:'morning',indoor:false,ateMin:null,base,prog:{reps:4,jogSec:90}});
+      const ate=P({slot:'dinner',indoor:false,ateMin:30,base,prog:{reps:4,jogSec:90}});
+      const ind=P({slot:'lunch',indoor:true,ateMin:200,base});
+      const race=P({slot:'morning',indoor:false,ateMin:null,base,phase:'build',race:{name:'R',date:'2026-11-29',km:21.1,timed:true,cutoffMin:210,how:'walk'}});
+      const eve=P({slot:'morning',indoor:false,base,phase:'eve',race:{date:'2026-11-10',km:21.1}});
+      const jb=jog.blocks.find(b=>b.jog);
+      return{jog:jog.mode,jogN:jog.blocks.filter(b=>b.jog).length,jogLen:jog.blocks[jog.blocks.indexOf(jb)+1].from-jb.from,
+        ate:ate.mode,ateJog:ate.blocks.some(b=>b.jog),ind:ind.mode,indStride:ind.blocks.some(b=>b.strideMin||b.kmhMin),
+        race:race.mode,raceK:(race.blocks.find(b=>b.kind==='race')||{}).kmhMin,eve:eve.mode,
+        cueJog:N(jog,jb.from+20,{cad:110,kmh:5}).cue,cueFaster:N(ind,ind.blocks.find(b=>b.kind==='push').from+30,{cad:100,kmh:4}).cue,
+        cueGood:N(ind,ind.blocks.find(b=>b.kind==='push').from+30,{cad:120,kmh:5}).cue,cueEasy:N(eve,100,{cad:125,kmh:6}).cue};});
+    const want={jog:'jog',jogN:4,jogLen:90,ate:'pace',ateJog:false,ind:'pace',indStride:false,race:'race',eve:'easy',cueJog:'jog',cueFaster:'faster',cueGood:'good',cueEasy:'easy'};
+    for(const[k,v]of Object.entries(want))if(r[k]!==v)throw new Error(`${k}: ${r[k]} (want ${v}) `+JSON.stringify(r));
+    if(!(r.raceK>=6.4&&r.raceK<=6.6))throw new Error('race pace for a 3 h 30 min cutoff over 21.1 km (with a margin) should be ~6.5 km/h: '+r.raceK);
+    // switch it on, start a walk: the plan goes to the recorder and the card shows the block and the cue
+    await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Walk training');await W(300);
+    await click('.x-seg button','On');await W(300);await expect('The buzzes');await expect('Jogs next time: 3 ×');
+    await p.click('[aria-label="Back to settings"]');await W();
+    await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);await click('.x-btn','Start a walk');await W(4800);
+    const pl=await p.evaluate(()=>window.__trainPlan);if(!pl||!pl.blocks||pl.blocks.length<4)throw new Error('no training plan sent to the recorder');
+    if(!(await p.$('[data-train]')))throw new Error('no training card on the walk screen');await expect('Training ·');
+    await p.click('[aria-label="Stop training cues"]');await W(1500);if(await p.$('[data-train]'))throw new Error('training card should go when switched off');
+    await click('button','Finish');await expect('Finish this walk');await click('button','Discard');await click('button','Tap again to discard');await W(800);
+    await p.click('[aria-label="Back"]').catch(()=>{});await W(600);
+    await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Walk training');await W(300);
+    await click('.x-seg button','Off');await p.click('[aria-label="Back to settings"]');await W();});
   await step('Race: look it up, save it, and the app plans around it',async()=>{
     await p.evaluate(()=>{const f0=window.fetch;window.__geoN=0;
       window.fetch=async(u,o)=>{u=String(u);const body=o&&o.body?String(o.body):'';

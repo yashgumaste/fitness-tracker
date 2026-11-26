@@ -29,6 +29,9 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -93,6 +96,14 @@ class WalkTrackerPlugin : Plugin() {
         call.resolve(WalkState.status(0))
     }
 
+    /** Walk training: the plan of blocks for this walk (or null to stop the cues). */
+    @PluginMethod fun train(call: PluginCall) {
+        val p = call.getObject("plan"); WalkState.setTrain(if (p == null || p.length() == 0) null else p)
+        call.resolve()
+    }
+    /** One of the training buzzes, to feel what it means. */
+    @PluginMethod fun buzz(call: PluginCall) { Cues.buzz(context, call.getString("kind", "block") ?: "block"); call.resolve() }
+
     /** Ask for the Physical activity permission during a walk (steps), then start the step sensors. */
     @PluginMethod fun allowSteps(call: PluginCall) {
         if (Build.VERSION.SDK_INT < 29 || getPermissionState("activity") == PermissionState.GRANTED) { afterAllowSteps(call); return }
@@ -156,12 +167,37 @@ object WalkState {
     @Volatile var accOn = false
     private var accGapStart = 0L; private var hwAtGap = 0L
 
+    // walk training (set by the app when the walk starts): the plan and its blocks
+    class Block(val from: Long, val kind: String, val label: String, val cadMin: Double, val kmhMin: Double, val strideMin: Double, val cadMax: Double, val jog: Boolean)
+    @Volatile var trainJson: String? = null
+    @Volatile var blocks: List<Block>? = null
+    @Volatile var trainVib = true
+    @Synchronized fun setTrain(p: JSONObject?) {
+        if (p == null) { trainJson = null; blocks = null; return }
+        val a = p.optJSONArray("blocks") ?: JSONArray(); val out = ArrayList<Block>()
+        for (i in 0 until a.length()) { val b = a.optJSONObject(i) ?: continue
+            out.add(Block(b.optLong("from"), b.optString("kind"), b.optString("label"), b.optDouble("cadMin", 0.0).let { if (it.isNaN()) 0.0 else it },
+                b.optDouble("kmhMin", 0.0).let { if (it.isNaN()) 0.0 else it }, b.optDouble("strideMin", 0.0).let { if (it.isNaN()) 0.0 else it },
+                b.optDouble("cadMax", 0.0).let { if (it.isNaN()) 0.0 else it }, b.optBoolean("jog", false))) }
+        trainJson = p.toString(); blocks = out; trainVib = p.optBoolean("vib", true)
+    }
+    /** Speed over the last ~15 s of fixes (km/h); 0 if no fix for 6 s; null before there are two. */
+    @Synchronized fun recentKmh(): Double? {
+        if (points.size < 2) return null
+        val L = points[points.size - 1]; if (System.currentTimeMillis() - L[0] > 6000) return 0.0
+        var i = points.size - 1; while (i > 0 && L[0] - points[i - 1][0] <= 15000) i--
+        val dt = (L[0] - points[i][0]) / 1000.0; if (dt < 5) return null
+        var d = 0.0; val r = FloatArray(1)
+        for (k in i + 1 until points.size) { Location.distanceBetween(points[k - 1][1], points[k - 1][2], points[k][1], points[k][2], r); d += r[0] }
+        return d / dt * 3.6
+    }
+
     @Synchronized fun reset(k: String) {
         kind = k; state = "recording"; start = System.currentTimeMillis()
         movingBase = SystemClock.elapsedRealtime(); movingAcc = 0
         distanceM = 0.0; stepsBase = -1; stepsNow = -1; stepsPaused = 0
         points.clear(); last = null; lastFix = 0; gainM = 0.0; refAlt = Double.NaN; det.clear(); cnt.clear(); cntRise = 0L; satsUsed = 0; satsSeen = 0
-        lastHw = SystemClock.elapsedRealtime(); detTotal = 0; accTotal = 0; accOn = false; accRhythm = false; accPend.clear(); accLast = 0L
+        trainJson = null; blocks = null; lastHw = SystemClock.elapsedRealtime(); detTotal = 0; accTotal = 0; accOn = false; accRhythm = false; accPend.clear(); accLast = 0L
     }
 
     fun onPressure(hPa: Float) {
@@ -297,6 +333,7 @@ object WalkState {
         o.put("baro", !baro.isNaN())
         o.put("spm", liveSpm() ?: JSONObject.NULL)
         o.put("stepSrc", stepSrc())
+        o.put("train", trainJson?.let { try { JSObject(it) } catch (e: Exception) { null } } ?: JSONObject.NULL)
         o.put("stepIssue", if (!stepPerm) "permission" else if (!hasCounter && !hasDetector) "nosensor" else JSONObject.NULL)
         o.put("sats", JSArray().put(satsUsed).put(satsSeen))
         val a = JSArray()
@@ -379,7 +416,7 @@ class WalkService : Service(), LocationListener, SensorEventListener {
             .setSmallIcon(Water.smallIcon(this)).setColor(0xFF5CF2A6.toInt())
             .setLargeIcon(Water.largeIcon(this, "ic_large_walk"))
             .setContentTitle(run { val w = if (WalkState.kind == "hike") "hike" else "walk"
-                if (WalkState.state == "paused") w.replaceFirstChar { it.uppercase() } + " paused" else "Recording your $w" })
+                if (WalkState.state == "paused") w.replaceFirstChar { it.uppercase() } + " paused" else (trainTitle() ?: "Recording your $w") })
             .setContentText(WalkState.line())
             .setOngoing(true).setOnlyAlertOnce(true).setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_WORKOUT)
@@ -412,9 +449,54 @@ class WalkService : Service(), LocationListener, SensorEventListener {
         }
     }
 
+    // walk training: a buzz when a block starts, and when you're off its target for 15 s (once a minute at most)
+    private var trainIdx = -1; private var offTicks = 0; private var lastCue = 0L; private var lastKind = ""
+    private fun trainBlock(): Pair<Int, Long>? {
+        val bl = WalkState.blocks ?: return null; if (bl.isEmpty()) return null
+        val sec = WalkState.movingMs() / 1000; var i = 0
+        for (k in bl.indices) if (bl[k].from <= sec) i = k
+        return Pair(i, sec)
+    }
+    private fun trainWatch() {
+        val bl = WalkState.blocks ?: run { trainIdx = -1; return }
+        if (WalkState.state != "recording") return
+        val (i, sec) = trainBlock() ?: return
+        val b = bl[i]; val now = SystemClock.elapsedRealtime()
+        if (i != trainIdx) {
+            val prevJog = trainIdx >= 0 && trainIdx < bl.size && bl[trainIdx].jog
+            val first = trainIdx < 0; trainIdx = i; offTicks = 0
+            if (!first || sec > 5) cue(if (b.jog) "jog" else if (prevJog) "walk" else if (b.kind == "push" || b.kind == "race") "faster" else if (b.kind == "cool" || b.kind == "easy") "easy" else "block")
+            return
+        }
+        val into = sec - b.from; val spm = WalkState.liveSpm(); val kmh = WalkState.recentKmh()
+        val stride = if (spm != null && spm >= 40 && kmh != null && kmh > 0.5) kmh / 3.6 * 60 / spm else null
+        val c: String? = when {
+            b.jog -> if (into >= 15 && (spm == null || spm < 135)) "jog" else null
+            i > 0 && bl[i - 1].jog && into in 15L..45L && spm != null && spm >= 140 -> "walk"
+            b.cadMax > 0 && spm != null && spm > b.cadMax + 4 -> "easy"
+            into < 20 -> null
+            b.cadMin > 0 && spm != null && spm < b.cadMin - 3 -> "faster"
+            b.strideMin > 0 && stride != null && stride < b.strideMin * 0.97 -> "longer"
+            b.kmhMin > 0 && kmh != null && kmh > 0.5 && kmh < b.kmhMin * 0.97 -> "faster"
+            else -> null
+        }
+        if (c == null) { offTicks = 0; return }
+        if (++offTicks >= 3 && now - lastCue > 60_000) { cue(c); offTicks = 0 }
+    }
+    private fun cue(kind: String) { lastCue = SystemClock.elapsedRealtime(); lastKind = kind; if (WalkState.trainVib) Cues.buzz(this, kind) }
+    private fun trainTitle(): String? {
+        val bl = WalkState.blocks ?: return null; val (i, sec) = trainBlock() ?: return null
+        val nx = if (i + 1 < bl.size) bl[i + 1].from - sec else -1L
+        if (nx <= 0) return bl[i].label
+        val m = nx / 60; val sc = nx % 60
+        val left = (if (m > 0) "$m min" + (if (m > 1) "s" else "") else "") + (if (sc > 0) (if (m > 0) " " else "") + "$sc sec" + (if (sc > 1) "s" else "") else "")
+        return bl[i].label + " · " + left + " left"
+    }
+
     private fun update() {
         if (WalkState.state == "idle") { stopSelf(); return }
         try { stepWatch() } catch (e: Exception) { }
+        try { trainWatch() } catch (e: Exception) { }
         try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTE_ID, note()) } catch (e: Exception) { }
     }
 
@@ -440,5 +522,26 @@ class WalkService : Service(), LocationListener, SensorEventListener {
         try { if (Build.VERSION.SDK_INT >= 24 && gnss != null) (getSystemService(Context.LOCATION_SERVICE) as LocationManager).unregisterGnssStatusCallback(gnss as GnssStatus.Callback) } catch (e: Exception) { }
         try { (getSystemService(Context.SENSOR_SERVICE) as SensorManager).unregisterListener(this) } catch (e: Exception) { }
         super.onDestroy()
+    }
+}
+
+/** The walk-training buzzes: each one a different rhythm, so you can tell them apart in a pocket. */
+object Cues {
+    private val PAT = mapOf(
+        "jog" to longArrayOf(0, 400, 150, 400, 150, 400),      // 3 long: start jogging
+        "walk" to longArrayOf(0, 900),                         // 1 very long: walk now
+        "faster" to longArrayOf(0, 120, 100, 120, 100, 120),   // 3 quick: pick up the pace
+        "longer" to longArrayOf(0, 120, 150, 500),             // short + long: longer steps
+        "easy" to longArrayOf(0, 500, 300, 500),               // 2 medium: ease off
+        "block" to longArrayOf(0, 200))                        // a new block starts
+    @Suppress("DEPRECATION")
+    fun buzz(c: Context, kind: String) {
+        val p = PAT[kind] ?: PAT["block"]!!
+        try {
+            val v: Vibrator? = if (Build.VERSION.SDK_INT >= 31) (c.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+                else c.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            if (v == null || !v.hasVibrator()) return
+            if (Build.VERSION.SDK_INT >= 26) v.vibrate(VibrationEffect.createWaveform(p, -1)) else v.vibrate(p, -1)
+        } catch (e: Exception) { }
     }
 }

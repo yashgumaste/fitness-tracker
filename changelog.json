@@ -2,6 +2,9 @@
   "unreleased": [
     {
       "text": "Steps no longer stay stuck at “—” during a walk. If the phone’s step sensor goes quiet, the app restarts it and meanwhile counts your steps from the phone’s motion (shown with ≈ and “Steps from motion”), so steps, cadence and stride keep working; once the sensor is back, nothing is counted twice. If step counting isn’t allowed, an “Allow step counting” button on the walk screen asks for it. Cadence no longer shows 0 when there’s no step count at all."
+    },
+    {
+      "text": "New: Walk training (Settings → Walk training). Turn it on and each recorded walk becomes a plan of blocks (warm-up, brisk walking, jogs or pushes, cool-down) with a card on the walk screen and buzzes you can feel in your pocket: pick up the pace, longer steps, start jogging, walk now, ease off. It learns from your walks when you’re usually indoors or outdoors and your usual pace for mornings, after lunch, evenings and after dinner, weekdays and weekends. Jogs only outdoors and not within 90 minutes of a meal (then it’s pace walking), and if GPS can’t find you in the first 3 minutes it switches to an indoor plan. With no race coming it aims a little above your usual and adds jogs as you manage them; with a race coming it practises race pace (and run-walk, if that’s your plan), lighter in the taper and easy around race day."
     }
   ],
   "releases": [
