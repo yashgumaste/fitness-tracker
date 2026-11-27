@@ -549,7 +549,7 @@ class WalkService : Service(), LocationListener, SensorEventListener {
                 val loc = listOf(Locale("en", "IN"), Locale.UK, Locale.US).firstOrNull { t.isLanguageAvailable(it) >= TextToSpeech.LANG_AVAILABLE }
                 if (loc != null) t.language = loc
                 // the voice chosen in Settings → Walk training (an accent), if the phone has it
-                if (WalkState.voiceName.isNotEmpty()) try { t.voices?.firstOrNull { it.name == WalkState.voiceName }?.let { t.voice = it } } catch (e: Exception) { }
+                if (WalkState.voiceName.isNotEmpty()) try { t.voices?.firstOrNull { it.name == WalkState.voiceName && !it.isNetworkConnectionRequired }?.let { t.voice = it } } catch (e: Exception) { }
                 t.setAudioAttributes(speechAttrs); t.setSpeechRate(1.02f)
                 t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(id: String?) {}

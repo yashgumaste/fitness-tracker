@@ -3447,9 +3447,9 @@ Reply ONLY with valid JSON (no markdown):
   function renderVoicePick(c,setT){
     const W=window.LMNative&&window.LMNative.walk,SAMPLE='Start jogging for 2 minutes. Kilometre 2, 21 minutes.';
     if(!ttsVoices)return <button className="x-btn tonal sm" style={{alignSelf:'flex-start'}} onClick={()=>{if(!W){showToast('Voices work in the Android app','var(--warn)');return;}
-      W.voices().then(r=>{const v=(r&&r.voices)||[];setTtsVoices(v);const cur=v.find(x=>x.name===c.voiceName);setTtsCountry(cur?cur.country:(v.find(x=>/India/.test(x.country))||v[0]||{}).country||null);})
+      W.voices().then(r=>{const v=((r&&r.voices)||[]).filter(x=>!x.network);/* offline voices only: they work on hikes with no signal */setTtsVoices(v);const cur=v.find(x=>x.name===c.voiceName);setTtsCountry(cur?cur.country:(v.find(x=>/India/.test(x.country))||v[0]||{}).country||null);})
         .catch(e=>showToast(e.message||'Couldn’t list the voices','var(--warn)'));}}>🗣️ Accent: {c.voiceName?c.voiceLabel||'chosen':'Indian English (default)'} · Change</button>;
-    if(!ttsVoices.length)return <div className="x-sub">This phone has no English voices for speech. Install “Speech Services by Google” from the Play Store for many accents.</div>;
+    if(!ttsVoices.length)return <div className="x-sub">This phone has no offline English voices for speech. Install “Speech Services by Google” from the Play Store for many accents.</div>;
     const byC={};ttsVoices.forEach(v=>{(byC[v.country||'Other']=byC[v.country||'Other']||[]).push(v);});
     const countries=Object.keys(byC).sort((a,b)=>(b==='India')-(a==='India')||a.localeCompare(b));
     const list=byC[ttsCountry]||[];
@@ -3460,10 +3460,10 @@ Reply ONLY with valid JSON (no markdown):
         <div key={v.name} className="x-item" style={{minHeight:52,background:on?'var(--pri-c)':undefined,color:on?'var(--on-pri-c)':undefined}}>
           <button className="x-ibtn tonal sm" aria-label={'Hear '+lab} onClick={()=>W.sayTest(v.name,SAMPLE)}>▶</button>
           <span style={{flex:1,minWidth:0}}><span className="t" style={{display:'block'}}>Voice {i+1}{on?' ✓':''}</span>
-            <span className="s">{v.network?'Needs internet':'Works offline'}{v.installed===false?' · downloads when first used':''}</span></span>
+            <span className="s">{v.installed===false?'Offline once downloaded: tap ▶ once on Wi-Fi':'Works offline'}</span></span>
           <button className="x-btn sm" style={on?{background:'var(--s3)',color:'var(--fg)'}:{}} onClick={()=>setT({voiceName:on?'':v.name,voiceLabel:on?'':lab})}>{on?'Default':'Use'}</button>
         </div>);})}</div>
-      <div className="x-sub" style={{fontSize:12}}>Tap ▶ to hear one. “Works offline” voices are best for walks without data. More accents: Settings on your phone → Text-to-speech → Speech Services by Google → install voice data.</div>
+      <div className="x-sub" style={{fontSize:12}}>Only voices that work offline are listed, so the cues keep talking on hikes with no signal. Each ▶ says the same line, to compare accents. More accents: your phone’s Settings → Text-to-speech → Speech Services by Google → install voice data.</div>
     </div>);
   }
   function renderTrainSettings(){
