@@ -254,8 +254,9 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     if(await p.$('[aria-label="Brisk walk: 2 h before your usual walk"]'))throw new Error('walk chips should be their own');
     await p.click('[aria-label="Back to settings"]');await W();});
   await step('Burned card and In & out page',async()=>{await tab(0);await expect('Burned');await expect('Resting');await expect('Digesting');
-    await p.click('[aria-label^="Calories burned"]');await W(600);await expect('In & out');await expect('Eating target');
-    await click('.x-seg button','Day');await expect('Mifflin');await expect(' kg (');await expect('Most calories');await expect('Breakfast');await expect('From');
+    // the Burned card opens In & out on that day
+    await p.click('[aria-label^="Calories burned"]');await W(600);await expect('In & out');await expect('Mifflin');await expect('Rest of today');
+    await click('.x-seg button','Week');await expect('Eating target');await click('.x-seg button','Day');await expect('Mifflin');await expect(' kg (');await expect('Most calories');await expect('Breakfast');await expect('From');
     for(const v of ['Month','Qtr','Year','Day','Week'])await click('.x-seg button',v);
     await expect('a day');await expect('Resting burn');await expect('healthy deficit');
     const pairs=await p.evaluate(()=>document.querySelectorAll('svg[aria-label="Calories eaten and burned"] g').length);if(pairs!==7)throw new Error('week should have 7 pairs, got '+pairs);
@@ -277,10 +278,10 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await tab(0);await p.click('[aria-label^="Calories burned"]');await W(600);
     if(await p.$('nav.dock-pill'))throw new Error('tabs should give way to the page’s own buttons');
     const acts=await p.evaluate(()=>[...document.querySelectorAll('.dock-pill.bar button')].map(b=>b.getAttribute('aria-label')).join('|'));
-    if(acts!=='Back|Earlier|This week|Later')throw new Error('In & out island: '+acts);
-    if(!(await p.evaluate(()=>document.querySelector('.dock-pill.bar [aria-label=Later]').disabled)))throw new Error('Later should be off on this week');
-    await p.click('.dock-pill.bar [aria-label=Earlier]');await W();await expect('2 Nov');
-    await p.click('.dock-pill.bar [aria-label="This week"]');await W();await expect('9 Nov');
+    if(acts!=='Back|Earlier|Today|Later')throw new Error('In & out island: '+acts);
+    if(!(await p.evaluate(()=>document.querySelector('.dock-pill.bar [aria-label=Later]').disabled)))throw new Error('Later should be off on today');
+    await p.click('.dock-pill.bar [aria-label=Earlier]');await W();await expect('8 Nov');
+    await p.click('.dock-pill.bar [aria-label="Today"]');await W();await expect('Rest of today');
     await p.click('.dock-pill.bar [aria-label=Back]');await W();await expect('Fuel');
     if(!(await p.$('nav.dock-pill')))throw new Error('tabs should be back on Home');});
   await step('Coach plans tomorrow’s reminders',async()=>{
@@ -344,7 +345,14 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await p.evaluate(()=>localStorage.setItem('lm-ai-provider','gemini'));await tab(1);await expect('2 bowls cabbage rice');
     if(!(await p.evaluate(()=>window.__jsonMode)))throw new Error('Claude was not told to reply in JSON');});
   await step('Water',async()=>{await tab(0);await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Water');
-    await click('.x-sheet button','Glass');await expect('250 ml');
+    // pick the drink, set the time, then one Log button (picking doesn't log on its own)
+    const nDr=async()=>p.evaluate(()=>document.querySelectorAll('.x-sheet [aria-label^="Edit "]').length);const n0=await nDr();
+    await click('.x-sheet button','Glass');await W(200);if(await nDr()!==n0)throw new Error('picking a drink should not log it yet');
+    await click('.x-sheet button','Drank at');await click('.x-sheet button','30 min ago');await W(200);
+    const ft=await p.evaluate(()=>document.querySelector('.x-sheet-foot').innerText);if(!/Log 250 ml · 8:00\s*PM/i.test(ft))throw new Error('foot should be "Log 250 ml · 8:00 PM", got '+ft);
+    await click('.x-sheet-foot button','Log 250 ml');await W(600);if(await p.$('.x-sheet'))throw new Error('water sheet should close after logging');
+    await p.evaluate(()=>document.querySelector('.dock-add').click());await W();await click('.x-sheet button','Water');await W(300);
+    {const r=await p.evaluate(()=>[...document.querySelectorAll('.x-sheet [aria-label^="Edit 250 ml"]')].map(e=>e.getAttribute('aria-label')));if(!r.some(t=>/8:00\s*PM/i.test(t)))throw new Error('logged drink should be at 8:00 PM: '+r.join(', '));}
     // edit it: one step more and an hour earlier
     await p.click('.x-sheet [aria-label^="Edit 250 ml"]');await W();await expect('Edit this drink');
     await p.click('.x-sheet [aria-label="Edited drink: 50 ml more"]');await click('.x-sheet button','1 h ago');await click('.x-sheet button','Save');await W();

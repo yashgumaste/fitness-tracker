@@ -4591,7 +4591,7 @@ Reply with ONLY this JSON:
     const b=burnDay(day),inK=Math.round(macrosOf(day).cal),net=inK-b.total;
     const tag=!inK?null:net>0?[`${fmtN(net)} more in than out`,'var(--amber)']:[`${fmtN(-net)} kcal deficit`,'var(--mint)'];
     return(
-      <button className="x-card sc" onClick={onClick} aria-label="Calories burned: see in and out by day, week, month" style={{padding:'18px 18px 16px',background:'var(--amber-c)',color:'var(--on-amber-c)',textAlign:'left'}}>
+      <button className="x-card sc" onClick={onClick} aria-label="Calories burned: see in and out for the day" style={{padding:'18px 18px 16px',background:'var(--amber-c)',color:'var(--on-amber-c)',textAlign:'left'}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <span className="x-eyebrow" style={{color:'var(--on-amber-c)'}}>Burned</span>
           {tag&&<span className="x-tag" style={{marginLeft:'auto',background:'var(--bg)',color:tag[1]}}>{tag[0]}</span>}
@@ -5306,7 +5306,7 @@ Reply with ONLY this JSON:
         <div className="x-wrap" style={{marginTop:14}}>
           {isT&&!prefs.goalsSet&&pagePill({id:'goals',tone:'setup',icon:'🎯',text:'Set your own calorie & protein goals',tap:()=>goSettings('goals')})}
           {renderFuel(m,()=>{setTab('diet');setDietView(isT?'today':'history');})}
-          {renderBurn(day,()=>{setEnergyPage({view:'week',date:day});window.scrollTo(0,0);})}
+          {renderBurn(day,()=>{setEnergyPage({view:'day',date:day,sel:null});window.scrollTo(0,0);})}
           <div className="x-grid2">
             <button className="x-card mint sb" onClick={()=>openStepsPage(day)} aria-label="Steps and walks" style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8,padding:'16px 10px'}}>
               <span className="x-eyebrow" style={{color:'var(--on-mint-c)',alignSelf:'flex-start',paddingLeft:6}}>Move</span>
@@ -6543,17 +6543,42 @@ Reply with ONLY this JSON:
       const amt=d.amt||300;
       const hm=d.time||null;  // null = now (today) / 1 PM (past day)
       const shown=hm||(date===TODAY?hmOf(Date.now()):'13:00');
-      const add=ml=>addWater(date,ml,hm);
+      // like adding food: pick the drink (or an amount), check the time, then one Log button
+      const opts=natWater?favFirst(NAT_DRINKS):favFirst(DRINKS),otherMl=natWater?(d.gulps||5)*gulpMl:amt;
+      const sel=d.other?otherMl:(d.pick!=null?d.pick:opts[0][2]);
+      const selWord=natWater?waterWord(sel):fmtL(sel);
       body=<>
         <div className="x-card sa" style={{background:'var(--sky-c)',color:'var(--on-sky-c)',display:'flex',gap:16,alignItems:'center'}}>
           <WaterGlass pct={tot/goal} size={110}/>
           <div style={{flex:1,minWidth:0}}>
             <div className="x-num" style={{fontSize:40,color:'var(--fg)'}}>{fmtL(tot)}</div>
             <div style={{fontWeight:750}}>of {fmtL(goal)} · {Math.round(tot/goal*100)}%</div>
-            <span className="x-tag" style={{marginTop:8,display:'inline-block',background:'var(--bg)',color:tot>=goal?'var(--mint)':'var(--sky)'}}>{tot>=goal?'Goal reached ✓':`${fmtL(goal-tot)} to go`}</span>
+            <span className="x-tag" style={{marginTop:8,display:'inline-block',background:'var(--bg)',color:tot+sel>=goal?'var(--mint)':'var(--sky)'}}>+{fmtL(sel)} → {fmtL(tot+sel)}{tot+sel>=goal?' · goal ✓':` · ${fmtL(goal-tot-sel)} to go`}</span>
           </div>
         </div>
-        <button className="x-item" onClick={()=>set({timeOpen:!d.timeOpen})} style={{marginTop:12,borderRadius:24,background:d.timeOpen?'var(--s3)':'var(--s2)'}}>
+        <div className="x-eyebrow" style={{margin:'16px 2px 8px'}}>What did you drink?</div>
+        {natWater?<div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:6}}>
+          {opts.map(([em,lab,ml])=>{const on=!d.other&&sel===ml;return(
+            <button key={lab} aria-pressed={on} onClick={()=>set({pick:ml,other:false})} style={{border:on?'2px solid var(--sky)':'2px solid transparent',background:on?'var(--sky-c)':'var(--s2)',color:on?'var(--on-sky-c)':'var(--fg)',borderRadius:20,padding:'10px 2px',display:'flex',flexDirection:'column',alignItems:'center',gap:3,transition:'background .2s'}}>
+              <span style={{fontSize:24,lineHeight:1}}>{em}</span><b style={{fontSize:14}}>{lab}</b></button>);})}
+        </div>
+        :<div style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(0,1fr))',gap:6}}>
+          {opts.map(([em,lab,ml])=>{const on=!d.other&&sel===ml;return(
+            <button key={ml} aria-pressed={on} onClick={()=>set({pick:ml,other:false})} style={{border:on?'2px solid var(--sky)':'2px solid transparent',background:on?'var(--sky-c)':'var(--s2)',color:on?'var(--on-sky-c)':'var(--fg)',borderRadius:20,padding:'8px 2px',display:'flex',flexDirection:'column',alignItems:'center',gap:3,transition:'background .2s'}}>
+              <span style={{fontSize:24,lineHeight:1}}>{em}</span><b style={{fontSize:13}}>{fmtL(ml)}</b><span style={{fontSize:10.5,fontWeight:700,opacity:.7}}>{lab}</span></button>);})}
+        </div>}
+        <div className="x-item" style={{marginTop:8,borderRadius:24,background:d.other?'var(--sky-c)':'var(--s2)',border:d.other?'2px solid var(--sky)':'2px solid transparent'}}>
+          <span style={{flex:1,minWidth:0}}><span className="t" style={{display:'block',whiteSpace:'nowrap'}}>{natWater?'Other':'Other amount'}</span></span>
+          {natWater?<>
+          <button className="x-ibtn" aria-label="1 gulp less" onClick={()=>set({gulps:Math.max(1,(d.gulps||5)-1),other:true})} style={{width:44,height:44,borderRadius:16,background:'var(--s4)',fontSize:22,fontWeight:800}}>−</button>
+          <b className="x-num" style={{fontSize:18,minWidth:80,textAlign:'center'}}>{d.gulps||5} gulps</b>
+          <button className="x-ibtn tonal" aria-label="1 gulp more" onClick={()=>set({gulps:Math.min(60,(d.gulps||5)+1),other:true})} style={{width:44,height:44,borderRadius:16,fontSize:22,fontWeight:800}}>+</button></>
+          :<>
+          <button className="x-ibtn" aria-label="50 ml less" onClick={()=>set({amt:Math.max(50,amt-50),other:true})} style={{width:44,height:44,borderRadius:16,background:'var(--s4)',fontSize:22,fontWeight:800}}>−</button>
+          <b className="x-num" style={{fontSize:20,minWidth:72,textAlign:'center'}}>{amt} ml</b>
+          <button className="x-ibtn tonal" aria-label="50 ml more" onClick={()=>set({amt:Math.min(2000,amt+50),other:true})} style={{width:44,height:44,borderRadius:16,fontSize:22,fontWeight:800}}>+</button></>}
+        </div>
+        <button className="x-item" onClick={()=>set({timeOpen:!d.timeOpen})} style={{marginTop:10,borderRadius:24,background:d.timeOpen?'var(--s3)':'var(--s2)'}}>
           <Shape kind="cookie12" size={40} fill="var(--sky-c)" color="var(--on-sky-c)" font={18}>🕐</Shape>
           <span style={{flex:1,minWidth:0}}><span className="s" style={{display:'block',margin:0}}>Drank at</span>
             <span style={{fontFamily:'var(--font-ui)',fontStretch:'120%',fontWeight:850,fontSize:20}}>{fmt12(shown)}</span>
@@ -6562,30 +6587,7 @@ Reply with ONLY this JSON:
         </button>
         {d.timeOpen&&<TimePicker value={shown} onChange={v=>set({time:v})}
           quick={date===TODAY?[['Now',hmOf(Date.now())],['30 min ago',hmOf(Date.now()-1800000)],['1 h ago',hmOf(Date.now()-3600000)],['2 h ago',hmOf(Date.now()-7200000)]]:[['Morning','08:00'],['Noon','12:00'],['Evening','18:00']]}/>}
-        <div className="x-eyebrow" style={{margin:'16px 2px 8px'}}>Add a drink</div>
-        {natWater?<div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:6}}>
-          {favFirst(NAT_DRINKS).map(([em,lab,ml])=>(
-            <button key={lab} onClick={()=>add(ml)} style={{border:'none',background:'var(--s2)',color:'var(--fg)',borderRadius:20,padding:'12px 2px',display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
-              <span style={{fontSize:24,lineHeight:1}}>{em}</span><b style={{fontSize:14}}>{lab}</b></button>))}
-        </div>
-        :<div style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(0,1fr))',gap:6}}>
-          {favFirst(DRINKS).map(([em,lab,ml])=>(
-            <button key={ml} onClick={()=>add(ml)} style={{border:'none',background:'var(--s2)',color:'var(--fg)',borderRadius:20,padding:'10px 2px',display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
-              <span style={{fontSize:24,lineHeight:1}}>{em}</span><b style={{fontSize:13}}>{fmtL(ml)}</b><span style={{fontSize:10.5,fontWeight:700,color:'var(--fg3)'}}>{lab}</span></button>))}
-        </div>}
-        <div className="x-item" style={{marginTop:10,borderRadius:24,background:'var(--s2)'}}>
-          <span style={{flex:1,minWidth:0}}><span className="t" style={{display:'block',whiteSpace:'nowrap'}}>{natWater?'Other':'Other amount'}</span></span>
-          {natWater?<>
-          <button className="x-ibtn" aria-label="1 gulp less" onClick={()=>set({gulps:Math.max(1,(d.gulps||5)-1)})} style={{width:44,height:44,borderRadius:16,background:'var(--s4)',fontSize:22,fontWeight:800}}>−</button>
-          <b className="x-num" style={{fontSize:18,minWidth:80,textAlign:'center'}}>{d.gulps||5} gulps</b>
-          <button className="x-ibtn tonal" aria-label="1 gulp more" onClick={()=>set({gulps:Math.min(60,(d.gulps||5)+1)})} style={{width:44,height:44,borderRadius:16,fontSize:22,fontWeight:800}}>+</button>
-          <button className="x-btn sm" onClick={()=>add((d.gulps||5)*gulpMl)} style={{background:'var(--sky)',color:'var(--bg)'}}>Add</button></>
-          :<>
-          <button className="x-ibtn" aria-label="50 ml less" onClick={()=>set({amt:Math.max(50,amt-50)})} style={{width:44,height:44,borderRadius:16,background:'var(--s4)',fontSize:22,fontWeight:800}}>−</button>
-          <b className="x-num" style={{fontSize:20,minWidth:72,textAlign:'center'}}>{amt} ml</b>
-          <button className="x-ibtn tonal" aria-label="50 ml more" onClick={()=>set({amt:Math.min(2000,amt+50)})} style={{width:44,height:44,borderRadius:16,fontSize:22,fontWeight:800}}>+</button>
-          <button className="x-btn sm" onClick={()=>add(amt)} style={{background:'var(--sky)',color:'var(--bg)'}}>Add</button></>}
-        </div>
+
         {list.length>0&&<><div className="x-eyebrow" style={{margin:'16px 2px 8px'}}>{date===TODAY?'Today':'That day'} · {list.length} drink{list.length===1?'':'s'}</div>
           <div className="x-list">{list.slice().reverse().map(x=>{const ed=d.edit&&d.edit.ts===x.ts?d.edit:null;
             return(<React.Fragment key={x.ts}>
@@ -6619,7 +6621,7 @@ Reply with ONLY this JSON:
               </div>);})()}
             </React.Fragment>);})}</div></>}
       </>;
-      foot=<button className="x-btn" onClick={close}>Done</button>;
+      foot=<button className="x-btn" style={{background:'var(--sky)',color:'var(--bg)'}} onClick={()=>{addWater(date,sel,hm);close();}}>Log {selWord} · {fmt12(shown)}</button>;
     }
     else if(s.type==='sleep'){
       const date=s.date;const has=sleepMin(sleepLog[date]);
