@@ -1,5 +1,9 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    {
+      "text": "Walk training: when your steps a minute are on target but your speed isn’t, it now says “Good rhythm: now longer steps” instead of “A bit faster”, because quick short steps were the problem, not slow ones."
+    }
+  ],
   "releases": [
     {
       "version": "1.56",

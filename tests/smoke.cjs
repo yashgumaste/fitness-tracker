@@ -445,12 +445,13 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
         ate:ate.mode,ateJog:ate.blocks.some(b=>b.jog),ind:ind.mode,indStride:ind.blocks.some(b=>b.strideMin||b.kmhMin),
         race:race.mode,raceK:(race.blocks.find(b=>b.kind==='race')||{}).kmhMin,eve:eve.mode,
         cueJog:N(jog,jb.from+20,{cad:110,kmh:5}).cue,cueFaster:N(ind,ind.blocks.find(b=>b.kind==='push').from+30,{cad:100,kmh:4}).cue,
-        cueGood:N(ind,ind.blocks.find(b=>b.kind==='push').from+30,{cad:120,kmh:5}).cue,cueEasy:N(eve,100,{cad:125,kmh:6}).cue};});
+        cueGood:N(ind,ind.blocks.find(b=>b.kind==='push').from+30,{cad:120,kmh:5}).cue,
+        cueLonger:N({blocks:[{from:0,kind:'brisk',label:'Walk: race rhythm',cadMin:116,kmhMin:5.5}]},60,{cad:121,kmh:4.3}).cue,cueEasy:N(eve,100,{cad:125,kmh:6}).cue};});
     const co=await p.evaluate(()=>window.__co);
     if(co.mode!=='coach'||co.jogs!==3||!/Start jogging for 2 minutes/.test(co.jogSay)||co.brisk.kmhMin!==5.8||co.brisk.cadMin!==112||co.brisk.strideMin!==0.85||!co.allSay)throw new Error('coach plan: '+JSON.stringify(co));
     if(!/400 m/.test(co.mSay)||!/Jog 400 metres/.test(co.mSay))throw new Error('distance jogs: '+co.mSay);
     if(co.ateJog||!/ate in the last 90 min/.test(co.ateWhy))throw new Error('after a meal the coach’s jogs become brisk walking: '+co.ateWhy);
-    const want={jog:'jog',jogN:4,jogLen:90,ate:'pace',ateJog:false,ind:'pace',indStride:false,race:'race',eve:'easy',cueJog:'jog',cueFaster:'faster',cueGood:'good',cueEasy:'easy'};
+    const want={jog:'jog',jogN:4,jogLen:90,ate:'pace',ateJog:false,ind:'pace',indStride:false,race:'race',eve:'easy',cueJog:'jog',cueFaster:'faster',cueGood:'good',cueLonger:'longer',cueEasy:'easy'};
     for(const[k,v]of Object.entries(want))if(r[k]!==v)throw new Error(`${k}: ${r[k]} (want ${v}) `+JSON.stringify(r));
     if(!(r.raceK>=6.4&&r.raceK<=6.6))throw new Error('race pace for a 3 h 30 min cutoff over 21.1 km (with a margin) should be ~6.5 km/h: '+r.raceK);
     // switch it on, start a walk: the plan goes to the recorder and the card shows the block and the cue

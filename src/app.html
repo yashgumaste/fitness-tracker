@@ -7777,7 +7777,8 @@ function trainNow(plan,sec,now){
   else if(into<10)msg=b.kind==='warm'||b.kind==='cool'?'Easy pace':'Settle in';
   else if(b.cadMin&&cad!=null&&cad<b.cadMin-3){cue='faster';msg=`Pick up the pace: ${b.cadMin}+ steps a minute`;}
   else if(b.strideMin&&stride!=null&&stride<b.strideMin*0.97){cue='longer';msg='Longer steps: push off from your back foot';}
-  else if(b.kmhMin&&kmh!=null&&kmh>0.5&&kmh<b.kmhMin*0.97){cue='faster';msg=`A bit faster: ${b.kmhMin}+ km/h`;}
+  // quick enough steps but not enough speed: the steps are short, so lengthen them rather than "go faster"
+  else if(b.kmhMin&&kmh!=null&&kmh>0.5&&kmh<b.kmhMin*0.97){if(b.cadMin&&cad!=null&&cad>=b.cadMin-3){cue='longer';msg=`Good rhythm: now longer steps for ${b.kmhMin}+ km/h`;}else{cue='faster';msg=`A bit faster: ${b.kmhMin}+ km/h`;}}
   else if(b.kind==='warm'||b.kind==='cool')msg='Easy pace';
   return{i,b,next,left,cue,msg};
 }

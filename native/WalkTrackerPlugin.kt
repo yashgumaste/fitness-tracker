@@ -485,7 +485,8 @@ class WalkService : Service(), LocationListener, SensorEventListener {
             into < 20 -> null
             b.cadMin > 0 && spm != null && spm < b.cadMin - 3 -> "faster"
             b.strideMin > 0 && stride != null && stride < b.strideMin * 0.97 -> "longer"
-            b.kmhMin > 0 && kmh != null && kmh > 0.5 && kmh < b.kmhMin * 0.97 -> "faster"
+            // steps quick enough but speed low: the steps are short, so it's "longer steps", not "faster"
+            b.kmhMin > 0 && kmh != null && kmh > 0.5 && kmh < b.kmhMin * 0.97 -> if (b.cadMin > 0 && spm != null && spm >= b.cadMin - 3) "longer" else "faster"
             else -> null
         }
         if (c == null) { offTicks = 0; return }
@@ -496,7 +497,7 @@ class WalkService : Service(), LocationListener, SensorEventListener {
         if (b == null) return
         say(when (kind) {
             "faster" -> if (b.cadMin > 0) "Pick up the pace. ${b.cadMin.toInt()} steps a minute." else "A bit faster. ${fmt1(b.kmhMin)} kilometres an hour."
-            "longer" -> "Longer steps. Push off from your back foot."
+            "longer" -> if (b.kmhMin > 0) "Good rhythm. Now longer steps, for ${fmt1(b.kmhMin)} kilometres an hour." else "Longer steps. Push off from your back foot."
             "jog" -> "Jog now. Light, quick steps."
             "walk" -> "Walk now. Back to brisk walking."
             "easy" -> "Ease off. Keep it easy today."
