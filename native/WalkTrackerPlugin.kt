@@ -109,6 +109,39 @@ class WalkTrackerPlugin : Plugin() {
     /** One of the training buzzes, to feel what it means. */
     @PluginMethod fun buzz(call: PluginCall) { Cues.buzz(context, call.getString("kind", "block") ?: "block"); call.resolve() }
 
+    // ── voices for the spoken cues: the English voices the phone's text-to-speech has (Google's has many accents) ──
+    private var tts: android.speech.tts.TextToSpeech? = null; private var ttsOk = false
+    private fun withTts(fn: (android.speech.tts.TextToSpeech?) -> Unit) {
+        val t = tts; if (t != null && ttsOk) { fn(t); return }
+        tts = android.speech.tts.TextToSpeech(context) { st -> ttsOk = st == android.speech.tts.TextToSpeech.SUCCESS; fn(if (ttsOk) tts else null) }
+    }
+    @PluginMethod fun voices(call: PluginCall) {
+        withTts { t ->
+            if (t == null) { call.reject("Text-to-speech isn't available on this phone"); return@withTts }
+            val arr = com.getcapacitor.JSArray()
+            try {
+                for (v in (t.voices ?: emptySet()).sortedBy { it.name }) {
+                    if (v.locale.language != "en") continue
+                    val feats = v.features ?: emptySet()
+                    arr.put(JSObject().put("name", v.name).put("lang", v.locale.toLanguageTag()).put("country", v.locale.getDisplayCountry(java.util.Locale.ENGLISH))
+                        .put("quality", v.quality).put("network", v.isNetworkConnectionRequired)
+                        .put("installed", !feats.contains(android.speech.tts.TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)))
+                }
+            } catch (e: Exception) { }
+            call.resolve(JSObject().put("voices", arr).put("current", t.voice?.name ?: ""))
+        }
+    }
+    /** Say a line in a voice, to hear it before choosing it. */
+    @PluginMethod fun sayTest(call: PluginCall) {
+        val text = call.getString("text", "Start jogging for 2 minutes.") ?: ""; val name = call.getString("voice", "") ?: ""
+        withTts { t ->
+            if (t == null) { call.reject("Text-to-speech isn't available on this phone"); return@withTts }
+            try { val v = t.voices?.firstOrNull { it.name == name }; if (v != null) t.voice = v else t.language = java.util.Locale("en", "IN")
+                t.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "test") } catch (e: Exception) { }
+            call.resolve()
+        }
+    }
+
     /** Ask for the Physical activity permission during a walk (steps), then start the step sensors. */
     @PluginMethod fun allowSteps(call: PluginCall) {
         if (Build.VERSION.SDK_INT < 29 || getPermissionState("activity") == PermissionState.GRANTED) { afterAllowSteps(call); return }
@@ -179,6 +212,7 @@ object WalkState {
     @Volatile var trainVib = true
     @Volatile var trainVoice = true
     @Volatile var kmVoice = true
+    @Volatile var voiceName = ""
     @Synchronized fun setTrain(p: JSONObject?) {
         if (p == null) { trainJson = null; blocks = null; return }
         val a = p.optJSONArray("blocks") ?: JSONArray(); val out = ArrayList<Block>()
@@ -186,7 +220,7 @@ object WalkState {
             out.add(Block(b.optLong("from"), b.optString("kind"), b.optString("label"), b.optDouble("cadMin", 0.0).let { if (it.isNaN()) 0.0 else it },
                 b.optDouble("kmhMin", 0.0).let { if (it.isNaN()) 0.0 else it }, b.optDouble("strideMin", 0.0).let { if (it.isNaN()) 0.0 else it },
                 b.optDouble("cadMax", 0.0).let { if (it.isNaN()) 0.0 else it }, b.optBoolean("jog", false), b.optString("say", ""))) }
-        trainJson = p.toString(); blocks = out; trainVib = p.optBoolean("vib", true); trainVoice = p.optBoolean("voice", true); kmVoice = p.optBoolean("kmVoice", true)
+        trainJson = p.toString(); blocks = out; trainVib = p.optBoolean("vib", true); trainVoice = p.optBoolean("voice", true); kmVoice = p.optBoolean("kmVoice", true); voiceName = p.optString("voiceName", "")
     }
     /** Speed over the last ~15 s of fixes (km/h); 0 if no fix for 6 s; null before there are two. */
     @Synchronized fun recentKmh(): Double? {
@@ -514,6 +548,8 @@ class WalkService : Service(), LocationListener, SensorEventListener {
             if (st == TextToSpeech.SUCCESS) { val t = tts ?: return@TextToSpeech
                 val loc = listOf(Locale("en", "IN"), Locale.UK, Locale.US).firstOrNull { t.isLanguageAvailable(it) >= TextToSpeech.LANG_AVAILABLE }
                 if (loc != null) t.language = loc
+                // the voice chosen in Settings → Walk training (an accent), if the phone has it
+                if (WalkState.voiceName.isNotEmpty()) try { t.voices?.firstOrNull { it.name == WalkState.voiceName }?.let { t.voice = it } } catch (e: Exception) { }
                 t.setAudioAttributes(speechAttrs); t.setSpeechRate(1.02f)
                 t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(id: String?) {}

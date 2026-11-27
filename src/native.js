@@ -273,6 +273,9 @@
     // walk training: the plan of blocks (null to stop), and a test buzz
     train:plan=>WT?WT.train({plan:plan||null}):Promise.resolve(),
     buzz:kind=>WT?WT.buzz({kind}).catch(()=>{}):Promise.resolve(),
+    // the phone's English text-to-speech voices (accents), and saying a line in one
+    voices:()=>WT&&WT.voices?WT.voices():Promise.reject(new Error('Voices work in the Android app')),
+    sayTest:(voice,text)=>WT&&WT.sayTest?WT.sayTest({voice:voice||'',text:text||''}).catch(()=>{}):Promise.resolve(),
     status:from=>WT?WT.status({from:from||0}):Promise.resolve({state:'idle'}),
     stop:()=>WT.stop(),discard:()=>WT.discard()
   };

@@ -2135,7 +2135,9 @@ function App(){
   const [dl,setDl]=useState(null);
   const [raceDraft,setRaceDraft]=useState(null);   // the race being added or edited (Settings → Profile)
   const [raceBusy,setRaceBusy]=useState(null);     // what the race lookup is doing right now
-  const trainReplan=useRef(0);                     // when the walk-training plan was last redone (went indoors)
+  const trainReplan=useRef(0);
+  const [ttsVoices,setTtsVoices]=useState(null);   // the phone's English voices, once asked for (Walk training → Voice)
+  const [ttsCountry,setTtsCountry]=useState(null);                     // when the walk-training plan was last redone (went indoors)
   const dlTimer=useRef(null);
   const [setupStep,setSetupStep]=useState(0);
   const [setupDraft,setSetupDraft]=useState({});
@@ -3441,6 +3443,29 @@ Reply ONLY with valid JSON (no markdown):
       {sec<60&&pl.why&&<div className="x-sub" style={{fontSize:12.5}}>{pl.why}</div>}
     </div>);
   }
+  // the accent and voice the cues are spoken in: the phone's own text-to-speech voices, grouped by country
+  function renderVoicePick(c,setT){
+    const W=window.LMNative&&window.LMNative.walk,SAMPLE='Start jogging for 2 minutes. Kilometre 2, 21 minutes.';
+    if(!ttsVoices)return <button className="x-btn tonal sm" style={{alignSelf:'flex-start'}} onClick={()=>{if(!W){showToast('Voices work in the Android app','var(--warn)');return;}
+      W.voices().then(r=>{const v=(r&&r.voices)||[];setTtsVoices(v);const cur=v.find(x=>x.name===c.voiceName);setTtsCountry(cur?cur.country:(v.find(x=>/India/.test(x.country))||v[0]||{}).country||null);})
+        .catch(e=>showToast(e.message||'Couldn’t list the voices','var(--warn)'));}}>🗣️ Accent: {c.voiceName?c.voiceLabel||'chosen':'Indian English (default)'} · Change</button>;
+    if(!ttsVoices.length)return <div className="x-sub">This phone has no English voices for speech. Install “Speech Services by Google” from the Play Store for many accents.</div>;
+    const byC={};ttsVoices.forEach(v=>{(byC[v.country||'Other']=byC[v.country||'Other']||[]).push(v);});
+    const countries=Object.keys(byC).sort((a,b)=>(b==='India')-(a==='India')||a.localeCompare(b));
+    const list=byC[ttsCountry]||[];
+    return(<div style={{display:'flex',flexDirection:'column',gap:8}}>
+      <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Accent</div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:6}}>{countries.map(k=><button key={k} className={'x-chip'+(k===ttsCountry?' on':'')} onClick={()=>setTtsCountry(k)}>{k||'Other'} <span style={{opacity:.6}}>{byC[k].length}</span></button>)}</div>
+      <div className="x-list">{list.map((v,i)=>{const on=c.voiceName===v.name,lab=`${ttsCountry} ${i+1}`;return(
+        <div key={v.name} className="x-item" style={{minHeight:52,background:on?'var(--pri-c)':undefined,color:on?'var(--on-pri-c)':undefined}}>
+          <button className="x-ibtn tonal sm" aria-label={'Hear '+lab} onClick={()=>W.sayTest(v.name,SAMPLE)}>▶</button>
+          <span style={{flex:1,minWidth:0}}><span className="t" style={{display:'block'}}>Voice {i+1}{on?' ✓':''}</span>
+            <span className="s">{v.network?'Needs internet':'Works offline'}{v.installed===false?' · downloads when first used':''}</span></span>
+          <button className="x-btn sm" style={on?{background:'var(--s3)',color:'var(--fg)'}:{}} onClick={()=>setT({voiceName:on?'':v.name,voiceLabel:on?'':lab})}>{on?'Default':'Use'}</button>
+        </div>);})}</div>
+      <div className="x-sub" style={{fontSize:12}}>Tap ▶ to hear one. “Works offline” voices are best for walks without data. More accents: Settings on your phone → Text-to-speech → Speech Services by Google → install voice data.</div>
+    </div>);
+  }
   function renderTrainSettings(){
     const c=trainCfg,setT=f=>setPrefs(p=>({...p,train:{...c,...(p.train||{}),...f}})),H=trainHistory(),pr=trainProg();
     const rowTxt=k=>{const r=H[k];if(!r||!r.n)return null;
@@ -3457,6 +3482,7 @@ Reply ONLY with valid JSON (no markdown):
           <div className="x-eyebrow" style={{margin:'2px 2px 0'}}>Voice</div>
           <Seg items={[['on','Speak the cues'],['off','No voice']]} value={c.voice!==false?'on':'off'} onChange={v=>setT({voice:v==='on'})}/>
           {c.voice!==false&&<Seg items={[['on','Every km: time & pace'],['off','No km updates']]} value={c.km!==false?'on':'off'} onChange={v=>setT({km:v==='on'})}/>}
+          {c.voice!==false&&renderVoicePick(c,setT)}
           <div className="x-sub" style={{fontSize:12.5}}>The voice speaks over your music for a moment (it lowers it), even with the screen off: “Start jogging for 2 minutes”, “Pick up the pace: 112 steps a minute”, “Kilometre 2, 21 minutes 5 seconds”.</div>
         </>}
       </div>
@@ -3486,7 +3512,7 @@ Reply ONLY with valid JSON (no markdown):
     </div>);
   }
   function makeTrain(indoorNow){const c=trainCtx(indoorNow),pl=trainPlan(c);
-    return{...pl,indoor:c.indoor,slot:c.slot,vib:trainCfg.vib!==false,voice:trainCfg.voice!==false,kmVoice:trainCfg.km!==false,ctx:{ateMin:c.ateMin,learned:c.learned,reps:c.prog.reps,jogSec:c.prog.jogSec}};}
+    return{...pl,indoor:c.indoor,slot:c.slot,vib:trainCfg.vib!==false,voice:trainCfg.voice!==false,kmVoice:trainCfg.km!==false,voiceName:trainCfg.voiceName||'',ctx:{ateMin:c.ateMin,learned:c.learned,reps:c.prog.reps,jogSec:c.prog.jogSec}};}
 
   function startRecording(kind){
     kind=kind==='hike'?'hike':'walk';

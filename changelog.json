@@ -17,6 +17,9 @@
     },
     {
       "text": "Light mode: the walk-training cue (“On target”, “Pick up the pace”), the jogging pill and the recording mark in the day’s timeline now use light text on their deep green or amber, instead of dark text that was hard to read."
+    },
+    {
+      "text": "Pick the voice for walk-training cues: Settings → Walk training → Voice → Accent lists every English voice your phone has, grouped by country (Indian, British, American, Australian and more with Google’s speech engine). Tap ▶ to hear one, then Use. Voices marked “Works offline” keep talking on walks without data."
     }
   ],
   "releases": [

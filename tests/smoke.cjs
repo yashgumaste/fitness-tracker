@@ -465,9 +465,16 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     // switch it on, start a walk: the plan goes to the recorder and the card shows the block and the cue
     await tab(4);await p.click('[aria-label="Back to settings"]').catch(()=>{});await W();await click('.x-item','Walk training');await W(300);
     await click('.x-seg button','On');await W(300);await expect('The buzzes');await expect('Jogs next time: 3 ×');
+    // choose the voice's accent from the phone's voices, hear one, use it: the plan carries it to the recorder
+    await p.evaluate(()=>{const w=window.LMNative.walk;w.voices=async()=>({voices:[{name:'en-in-x-ena-local',country:'India',network:false},{name:'en-in-x-enb-network',country:'India',network:true},{name:'en-gb-x-gba-local',country:'United Kingdom',network:false}]});
+      w.sayTest=async(v)=>{window.__said=v;};});
+    await click('.x-sheet button, button','Accent:');await W(300);await expect('United Kingdom');await expect('Needs internet');
+    await p.click('[aria-label="Hear India 2"]');await W(200);if(await p.evaluate(()=>window.__said)!=='en-in-x-enb-network')throw new Error('Hear should speak in that voice');
+    await p.evaluate(()=>{const b=[...document.querySelectorAll('.x-item')].filter(e=>/Voice 2/.test(e.innerText))[0];[...b.querySelectorAll('button')].find(x=>x.innerText==='Use').click();});await W(300);await expect('Voice 2 ✓');
     await p.click('[aria-label="Back to settings"]');await W();
     await tab(0);await p.click('[aria-label="Steps and walks"]');await W(400);await click('.x-btn','Start a walk');await W(4800);
     const pl=await p.evaluate(()=>window.__trainPlan);if(!pl||!pl.blocks||pl.blocks.length<4)throw new Error('no training plan sent to the recorder');
+    if(pl.voiceName!=='en-in-x-enb-network')throw new Error('the chosen voice should go to the recorder: '+pl.voiceName);
     if(!(await p.$('[data-train]')))throw new Error('no training card on the walk screen');await expect('Training ·');
     await p.click('[aria-label="Stop training cues"]');await W(1500);if(await p.$('[data-train]'))throw new Error('training card should go when switched off');
     await click('button','Finish');await expect('Finish this walk');await click('button','Discard');await click('button','Tap again to discard');await W(800);
