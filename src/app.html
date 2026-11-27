@@ -3314,7 +3314,7 @@ Reply ONLY with valid JSON (no markdown):
   };
   const fmtN=n=>Math.round(n||0).toLocaleString('en-IN');
   const dayLabel=k=>k===TODAY?'Today':k===calAddDays(TODAY,-1)?'Yesterday':new Date(k+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
-  const KIND={meal:['var(--amber-c)','var(--amber)'],walk:['var(--mint-c)','var(--mint)'],rec:['var(--mint)','#00391f'],workout:['var(--pri-c)','var(--pri)'],weight:['var(--violet-c)','var(--violet)'],feel:['var(--pink-c)','var(--pink)'],sleep:['var(--night-c)','var(--night)'],nap:['var(--night-c)','var(--night)'],water:['var(--sky-c)','var(--sky)']};
+  const KIND={meal:['var(--amber-c)','var(--amber)'],walk:['var(--mint-c)','var(--mint)'],rec:['var(--mint)','var(--bg)'],workout:['var(--pri-c)','var(--pri)'],weight:['var(--violet-c)','var(--violet)'],feel:['var(--pink-c)','var(--pink)'],sleep:['var(--night-c)','var(--night)'],nap:['var(--night-c)','var(--night)'],water:['var(--sky-c)','var(--sky)']};
 
   // Everything about a day's movement: walks found in the phone's steps + walks you added, all steps, distance and calories
   const moveCache=useRef({});
@@ -3423,7 +3423,7 @@ Reply ONLY with valid JSON (no markdown):
     if(!pl.indoor&&running&&sec>=180&&r.gps!=='ok'&&Date.now()-trainReplan.current>60000){trainReplan.current=Date.now();
       const np={...makeTrain(true)};const W=window.LMNative?.walk;if(W&&W.train)W.train(np).then(()=>setRec(x=>x&&{...x,train:np})).catch(()=>{});}
     const T=trainNow(pl,sec,running?now:null);if(!T)return null;
-    const warn=T.cue!=='good',col=warn?'var(--amber)':'var(--mint)',on=warn?'#2B1D00':'#00391f';
+    const warn=T.cue!=='good',col=warn?'var(--amber)':'var(--mint)',on='var(--bg)';   // readable in light and dark
     const tgt=[T.b.cadMin&&`${T.b.cadMin}+ steps/min`,T.b.kmhMin&&`${T.b.kmhMin}+ km/h`,T.b.strideMin&&`${Math.round(T.b.strideMin*100)}+ cm steps`,T.b.cadMax&&`under ${T.b.cadMax} steps/min`].filter(Boolean).join(' · ');
     return(<div className="x-card" data-train="" style={{display:'flex',flexDirection:'column',gap:10,padding:16}}>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -4072,7 +4072,7 @@ Reply ONLY with valid JSON (no markdown):
     const last=sleepTotal(sleepLog[night]),mv=moveDay(night),fl=fitLogs[night];   // a nap pays back some of a short night
     const debt=last&&last<360?30:0;
     const hike=mv.walks.find(w=>w.kind==='hike'),hard=!!(hike||mv.steps>=WALK_GOAL.day*1.2||(fl&&fl._dayComplete));
-    return {base,need:Math.min(570,base+debt+(hard?15:0)),debt,last,hard,hike,steps:mv.steps,gym:!!(fl&&fl._dayComplete)};
+    return {base,need:Math.min(570,base+debt+(hard?15:0)),debt,last,nightM:sleepMin(sleepLog[night]),napM:napMin(sleepLog[night]),hard,hike,steps:mv.steps,gym:!!(fl&&fl._dayComplete)};
   }
   // Tomorrow's wake-up time: same weekday last week → this morning (if tomorrow is the same kind of day) → usual → default
   function wakePlan(night){
@@ -4120,7 +4120,7 @@ Reply ONLY with valid JSON (no markdown):
         :(wdw===6||wdw===0)&&!isWeekend(day)?'Weekend tomorrow 🎉'
         :b.gym?'Muscles grow in bed, not the gym 💪'
         :pick([`Wind-down time, ${n} 🌙`,'Lights out in 30 min 🌙','Your bed called. It misses you 🛏️',`Phone down soon, ${n} 📵`]);
-      const ctx=b.debt?`Last night was only ${fmtHM(b.last)}. `
+      const ctx=b.debt?(b.napM?`Last night (${fmtHM(b.nightM)}) plus today’s ${fmtHM(b.napM)} nap only add up to ${fmtHM(b.last)}. `:`Last night was only ${fmtHM(b.last)}. `)
         :b.hike?`After today’s ${b.hike.name.toLowerCase()}, sleep is how your legs get paid. `
         :coffee?'Caffeine lasts 5–6 hours, so give yourself extra wind-down time. '
         :wdw===1?'Meet the week rested, not wrecked. '
@@ -4850,7 +4850,7 @@ Reply with ONLY this JSON:
         </div>
         {renderTrainCard(r,now,running,sec)}
         <Presence show={!!jog}>{jog&&<div role="status" aria-label={`Jogging for ${fmtDur((Date.now()-jog.t)/1000)}, ${jogM<1000?Math.round(jogM)+' metres':(jogM/1000).toFixed(2)+' kilometres'}`}
-          style={{background:'var(--amber)',color:'#2B1D00',borderRadius:999,padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'center',gap:7,
+          style={{background:'var(--amber)',color:'var(--bg)',borderRadius:999,padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'center',gap:7,
             flexWrap:'wrap',rowGap:2,fontWeight:850,fontSize:18.5,lineHeight:1.1}}>
           <span aria-hidden="true">🏃</span><span>Jogged</span><JogClock since={jog.t}/><span aria-hidden="true" style={{opacity:.8}}>·</span>
           <span className="x-num">{jogM<1000?`${Math.round(jogM)} m`:`${(jogM/1000).toFixed(2)} km`}</span></div>}</Presence>
