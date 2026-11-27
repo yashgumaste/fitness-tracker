@@ -972,6 +972,8 @@ const sleepMin=s=>s&&s.bed&&s.wake?walkMinutes(s.bed,s.wake):0;
 // naps that day: sleepLog[date].naps = [{from:'HH:MM',to:'HH:MM'}] (the day's entry also holds the night before it)
 const napsOf=s=>s&&Array.isArray(s.naps)?s.naps.filter(n=>n&&n.from&&n.to):[];
 const napMin=s=>napsOf(s).reduce((a,n)=>a+walkMinutes(n.from,n.to),0);
+// all the sleep that day counts: the night before it plus that day's naps (a nap makes up for a short night)
+const sleepTotal=s=>sleepMin(s)+napMin(s);
 // a length of time in minutes, in words: "7 hrs 30 mins", "45 mins", "1 hr"
 const fmtHM=m=>{m=Math.max(0,Math.round(m));const h=Math.floor(m/60),mi=m%60;
   return [h?`${h} ${h===1?'hr':'hrs'}`:null,mi||!h?`${mi} ${mi===1?'min':'mins'}`:null].filter(Boolean).join(' ');};
@@ -4067,7 +4069,7 @@ Reply ONLY with valid JSON (no markdown):
   // Plus 30 min if last night was under 6 h (sleep debt), plus 15 min after a hard day (hike, big walk, full workout).
   function sleepNeed(night){
     const age=+(profile.age||bodyMeasure?.age||30),base=age<18?540:age<26?480:450;
-    const last=sleepMin(sleepLog[night]),mv=moveDay(night),fl=fitLogs[night];
+    const last=sleepTotal(sleepLog[night]),mv=moveDay(night),fl=fitLogs[night];   // a nap pays back some of a short night
     const debt=last&&last<360?30:0;
     const hike=mv.walks.find(w=>w.kind==='hike'),hard=!!(hike||mv.steps>=WALK_GOAL.day*1.2||(fl&&fl._dayComplete));
     return {base,need:Math.min(570,base+debt+(hard?15:0)),debt,last,hard,hike,steps:mv.steps,gym:!!(fl&&fl._dayComplete)};
@@ -5328,9 +5330,9 @@ Reply with ONLY this JSON:
           </div>
           {renderWaterCard(day)}
           <div className="x-grid2">
-            {(()=>{const sl=sleepLog[day];const m=sleepMin(sl);const q=SLEEP_Q.find(x=>x[0]===sl?.q);return(
+            {(()=>{const sl=sleepLog[day];const m=sleepTotal(sl),night=sleepMin(sl);const q=SLEEP_Q.find(x=>x[0]===sl?.q);return(
             <button className="x-stat" onClick={()=>openSleep(day)} style={{border:'none',textAlign:'left',color:'var(--fg)'}}>
-              <small>Sleep</small><b style={{color:m&&(m<420||m>570)?'var(--amber)':'var(--night)'}}>{m?(m/60).toFixed(1)+' h':'—'}</b><i>{[m?`${q?q[1]+' '+q[2]:fmt12(sl.bed)+' → '+fmt12(sl.wake)}`:napMin(sl)?null:'tap to log',napMin(sl)?`💤 ${fmtHM(napMin(sl))} nap${napsOf(sl).length>1?'s':''}`:null].filter(Boolean).join(' · ')}</i></button>);})()}
+              <small>Sleep</small><b style={{color:m&&(m<420||m>570)?'var(--amber)':'var(--night)'}}>{m?(m/60).toFixed(1)+' h':'—'}</b><i>{[night?`${q?q[1]+' ':''}${napMin(sl)?(night/60).toFixed(1)+' h night':q?q[2]:fmt12(sl.bed)+' → '+fmt12(sl.wake)}`:napMin(sl)?null:'tap to log',napMin(sl)?`💤 ${fmtHM(napMin(sl))} nap${napsOf(sl).length>1?'s':''}`:null].filter(Boolean).join(' + ')}</i></button>);})()}
             <button className="x-stat" onClick={()=>openWeight(day)} style={{border:'none',textAlign:'left',color:'var(--fg)'}}>
               <small>Weight</small><b style={{color:'var(--violet)'}}>{weightLog[day]||'—'}</b><i>{weightLog[day]?'kg'+(bmiH?` · BMI ${bmiOf(parseFloat(weightLog[day]),bmiH)}`:''):'tap to log'}</i></button>
             <button className="x-stat" onClick={()=>setTab('progress')} style={{border:'none',textAlign:'left',color:'var(--fg)'}}>
@@ -5705,7 +5707,7 @@ Reply with ONLY this JSON:
     const wS=ser(d=>weightLog[d]?parseFloat(weightLog[d]):null);
     const stS=ser(d=>moveDay(d).steps||null);
     const waS=ser(d=>waterMl(d)?+(waterMl(d)/1000).toFixed(2):null);
-    const slS=ser(d=>sleepMin(sleepLog[d])?+(sleepMin(sleepLog[d])/60).toFixed(2):null);
+    const slS=ser(d=>sleepTotal(sleepLog[d])?+(sleepTotal(sleepLog[d])/60).toFixed(2):null);   // naps count
     const bf=currentBF;
     const gx=v=>Math.max(0,Math.min(100,(v-10)/30*100)); // gauge 10–40 %
     const a=aiAnalysis;
@@ -6628,7 +6630,7 @@ Reply with ONLY this JSON:
       const m=walkMinutes(d.bed,d.wake);
       title='Sleep';sub=`Night before ${dateLong(date)}`;
       lead=<Shape kind="clover" size={52} fill="var(--night-c)" color="var(--on-sky-c)" font={24}>😴</Shape>;
-      const ok=m>=420&&m<=540;
+      const nm=napMin(sleepLog[date]),tot=m+nm,ok=tot>=420&&tot<=540;
       const row=(k,lab,emoji)=>(
         <button className="x-item" onClick={()=>set({open:d.open===k?null:k})} style={{borderRadius:24,background:d.open===k?'var(--s3)':'var(--s2)'}}>
           <Shape kind="cookie12" size={44} fill="var(--night-c)" color="var(--on-sky-c)" font={20}>{emoji}</Shape>
@@ -6642,9 +6644,10 @@ Reply with ONLY this JSON:
         <div className="x-card sa" style={{background:'var(--night-c)',color:'var(--on-sky-c)',display:'flex',flexDirection:'column',gap:12,marginBottom:12}}>
           <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap'}}>
             <span className="x-num" style={{fontSize:46,color:'var(--fg)'}}>{Math.floor(m/60)}<span style={{fontSize:22}}> {Math.floor(m/60)===1?'hr':'hrs'} </span>{m%60}<span style={{fontSize:22}}> {m%60===1?'min':'mins'}</span></span>
-            <span className="x-tag" style={{marginLeft:'auto',background:'var(--bg)',color:ok?'var(--mint)':'var(--amber)'}}>{m<420?`${fmtHM(420-m)} short of 7 hrs`:m>540?'Over 9 hrs':'In the 7–9 hrs range ✓'}</span>
+            <span className="x-tag" style={{marginLeft:'auto',background:'var(--bg)',color:ok?'var(--mint)':'var(--amber)'}}>{tot<420?`${fmtHM(420-tot)} short of 7 hrs`:tot>540?'Over 9 hrs':'In the 7–9 hrs range ✓'}{nm?' with naps':''}</span>
           </div>
-          <WavyBar value={m} max={540} color="var(--night)" track="rgba(0,0,0,.3)" h={14}/>
+          {nm>0&&<div style={{fontWeight:780,marginTop:-4}}>+ {fmtHM(nm)} nap{napsOf(sleepLog[date]).length>1?'s':''} = {fmtHM(tot)} in all</div>}
+          <WavyBar value={tot} max={540} color="var(--night)" track="rgba(0,0,0,.3)" h={14}/>
         </div>
         <div style={{display:'flex',flexDirection:'column',gap:8}}>
           {row('bed','Went to bed','🌙')}

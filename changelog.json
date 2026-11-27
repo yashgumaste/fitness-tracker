@@ -8,6 +8,9 @@
     },
     {
       "text": "Tapping the Burned card on Home now opens In & out for that day (with Rest of today), instead of the week."
+    },
+    {
+      "text": "Naps now count towards the day’s sleep. The Sleep sheet shows the night plus naps (“+ 1 hr nap = 6 hrs 40 mins in all”) and judges the 7–9 hrs against that; the Home sleep tile shows the total (night + nap), and the sleep chart and tonight’s bedtime advice use it too."
     }
   ],
   "releases": [

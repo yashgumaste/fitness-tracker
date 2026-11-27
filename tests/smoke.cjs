@@ -422,7 +422,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await expect('45 mins nap');
     // the night's sleep keeps the nap when it's saved, and the nap shows in the sleep sheet
     await p.evaluate(()=>{const b=[...document.querySelectorAll('.x-stat')].find(e=>/Sleep/.test(e.textContent));b.click();});await W(400);
-    await expect('Naps on');await click('.x-sheet-foot button','Save sleep');await W(600);await expect('45 mins nap');});
+    await expect('Naps on');await expect('+ 45 mins nap =');await expect('in all');await expect('with naps');await click('.x-sheet-foot button','Save sleep');await W(600);await expect('45 mins nap');});
   await step('Rest of today: what to eat next, from the coach, on Food and In & out, and in the widget',async()=>{
     const t0=await p.evaluate(()=>Date.now());await p.clock.setFixedTime(new Date('2026-11-09T17:00:00+05:30'));
     await tab(1);await W(300);await p.evaluate(()=>{window.dispatchEvent(new Event('lm-resume'));});
