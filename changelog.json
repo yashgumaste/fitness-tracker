@@ -1,28 +1,33 @@
 {
-  "unreleased": [
-    {
-      "text": "Walk training: when your steps a minute are on target but your speed isn’t, it now says “Good rhythm: now longer steps” instead of “A bit faster”, because quick short steps were the problem, not slow ones."
-    },
-    {
-      "text": "Logging water now works like adding food: pick the drink (or set your own amount), check the time, then one “Log” button that says exactly what it’ll add (e.g. “Log 250 ml · 8:00 PM”). Tapping a drink no longer logs it straight away, so changing the time afterwards counts."
-    },
-    {
-      "text": "Tapping the Burned card on Home now opens In & out for that day (with Rest of today), instead of the week."
-    },
-    {
-      "text": "Naps now count towards the day’s sleep. The Sleep sheet shows the night plus naps (“+ 1 hr nap = 6 hrs 40 mins in all”) and judges the 7–9 hrs against that; the Home sleep tile shows the total (night + nap), and the sleep chart and tonight’s bedtime advice use it too."
-    },
-    {
-      "text": "The bedtime “sleep debt” reminder counts your naps too: a nap that makes up a short night means no extra 30 minutes tonight, and when a short nap isn’t enough it says so (“Last night plus today’s nap only add up to…”)."
-    },
-    {
-      "text": "Light mode: the walk-training cue (“On target”, “Pick up the pace”), the jogging pill and the recording mark in the day’s timeline now use light text on their deep green or amber, instead of dark text that was hard to read."
-    },
-    {
-      "text": "Pick the voice for walk-training cues: Settings → Walk training → Voice → Accent lists the English voices on your phone that work offline, grouped by country, so the cues keep talking on hikes with no signal. Every ▶ says the same line, so you can compare accents, then tap Use."
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.62",
+      "date": "2026-11-28",
+      "items": [
+        {
+          "text": "Walk training: when your steps a minute are on target but your speed isn’t, it now says “Good rhythm: now longer steps” instead of “A bit faster”, because quick short steps were the problem, not slow ones."
+        },
+        {
+          "text": "Logging water now works like adding food: pick the drink (or set your own amount), check the time, then one “Log” button that says exactly what it’ll add (e.g. “Log 250 ml · 8:00 PM”). Tapping a drink no longer logs it straight away, so changing the time afterwards counts."
+        },
+        {
+          "text": "Tapping the Burned card on Home now opens In & out for that day (with Rest of today), instead of the week."
+        },
+        {
+          "text": "Naps now count towards the day’s sleep. The Sleep sheet shows the night plus naps (“+ 1 hr nap = 6 hrs 40 mins in all”) and judges the 7–9 hrs against that; the Home sleep tile shows the total (night + nap), and the sleep chart and tonight’s bedtime advice use it too."
+        },
+        {
+          "text": "The bedtime “sleep debt” reminder counts your naps too: a nap that makes up a short night means no extra 30 minutes tonight, and when a short nap isn’t enough it says so (“Last night plus today’s nap only add up to…”)."
+        },
+        {
+          "text": "Light mode: the walk-training cue (“On target”, “Pick up the pace”), the jogging pill and the recording mark in the day’s timeline now use light text on their deep green or amber, instead of dark text that was hard to read."
+        },
+        {
+          "text": "Pick the voice for walk-training cues: Settings → Walk training → Voice → Accent lists the English voices on your phone that work offline, grouped by country, so the cues keep talking on hikes with no signal. Every ▶ says the same line, so you can compare accents, then tap Use."
+        }
+      ]
+    },
     {
       "version": "1.56",
       "date": "2026-11-27",
