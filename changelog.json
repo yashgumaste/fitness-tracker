@@ -8,6 +8,9 @@
     },
     {
       "text": "No more “Keep it going” / “Your streak is calling” reminders and pills. They only repeated yesterday’s walk and could arrive mid-walk. The coach’s review still shows what to keep up."
+    },
+    {
+      "text": "The wavy line on the opening screen keeps moving while the app loads, even after a phone restart when loading takes longer. Before, it could stop still."
     }
   ],
   "releases": [

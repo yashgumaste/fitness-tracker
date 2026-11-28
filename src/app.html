@@ -849,17 +849,21 @@ button.x-item:active{border-radius:14px}
      Colours come from the last run (localStorage 'lm-boot'), since the app's settings aren't loaded yet. -->
 <div id="splash" style="position:fixed;inset:0;z-index:9999;transition:opacity .3s ease">
   <svg id="splash-logo" viewBox="0 0 24 24" aria-label="Fitness Tracker"><path fill-rule="evenodd" d="__LOGO_BODY__"/><path d="__LOGO_LEAF__"/></svg>
-  <svg id="splash-wave" viewBox="0 0 120 12" aria-hidden="true"><path class="tr" d="M0 6H120"/><path class="wv" d="M-48 6q6-5 12 0t12 0t12 0t12 0t12 0t12 0t12 0t12 0t12 0t12 0t12 0t12 0t12 0t12 0"/></svg>
+  <div id="splash-wave" aria-hidden="true"><div class="seg"><svg viewBox="0 0 96 12" width="96" height="12"><path d="M2 6q3-5 6 0t6 0t6 0t6 0t6 0t6 0t6 0t6 0t6 0t6 0t6 0t6 0t6 0t6 0t6 0t6 0"/></svg></div></div>
   <style>
     #splash{background:#000;--logo:#00FFFF}
     @media (prefers-color-scheme:light){#splash{background:#fff;--logo:#00A6A6}}
     #splash-logo{position:absolute;left:50%;top:50%;width:160px;height:160px;transform:translate(-50%,-50%);fill:var(--logo)}
-    #splash-wave{position:absolute;left:50%;top:calc(50% + 128px);width:120px;height:12px;transform:translateX(-50%);overflow:hidden;opacity:0;animation:splashIn .4s ease .7s forwards}
-    #splash-wave path{fill:none;stroke-width:4;stroke-linecap:round}
-    #splash-wave .tr{stroke:var(--logo);opacity:.22}
-    #splash-wave .wv{stroke:var(--logo);stroke-dasharray:70 400;animation:splashRun 1.4s cubic-bezier(.4,0,.2,1) infinite}
+    /* Only transform and opacity animate, so the GPU keeps the wave moving even while the app's code is still
+       loading and the page itself can't draw (an animated SVG path froze there) */
+    #splash-wave{position:absolute;left:50%;top:calc(50% + 128px);width:128px;height:12px;margin-left:-64px;overflow:hidden;opacity:0;animation:splashIn .4s ease .7s forwards}
+    #splash-wave::before{content:'';position:absolute;left:0;right:0;top:4px;height:4px;border-radius:2px;background:var(--logo);opacity:.22}
+    #splash-wave .seg{position:absolute;left:0;top:0;width:56px;height:12px;overflow:hidden;border-radius:6px;will-change:transform;animation:splashRun 1.6s cubic-bezier(.45,.05,.35,1) infinite}
+    #splash-wave svg{display:block;will-change:transform;animation:splashFlow .6s linear infinite}
+    #splash-wave path{fill:none;stroke:var(--logo);stroke-width:4;stroke-linecap:round}
     @keyframes splashIn{to{opacity:1}}
-    @keyframes splashRun{from{stroke-dashoffset:-10;transform:translateX(0)}to{stroke-dashoffset:-236;transform:translateX(12px)}}
+    @keyframes splashRun{from{transform:translateX(-56px)}to{transform:translateX(128px)}}
+    @keyframes splashFlow{from{transform:translateX(-12px)}to{transform:translateX(0)}}
   </style>
   <script>(function(){try{var b=JSON.parse(localStorage.getItem('lm-boot')||'null');if(!b)return;
     var s=document.getElementById('splash').style,l=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches;
