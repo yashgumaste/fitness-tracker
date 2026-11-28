@@ -1,22 +1,27 @@
 {
-  "unreleased": [
-    {
-      "text": "Walk training: speed, pace, cadence and stride turn amber once they reach the aim of the block you’re in (for example 122+ steps/min or 5.7+ km/h). Numbers the block doesn’t aim for stay green."
-    },
-    {
-      "text": "Steps a minute while walking now keep up with you: the app reads the rhythm of your steps from the motion sensor straight away, instead of waiting for the step sensor, which some phones deliver late."
-    },
-    {
-      "text": "No more “Keep it going” / “Your streak is calling” reminders and pills. They only repeated yesterday’s walk and could arrive mid-walk. The coach’s review still shows what to keep up."
-    },
-    {
-      "text": "The wavy line on the opening screen keeps moving while the app loads, even after a phone restart when loading takes longer. Before, it could stop still."
-    },
-    {
-      "text": "Every time picker now matches the Material 3 Expressive design: scroll the hour and minute boxes (only the number above and below peeks in), with AM and PM beside them. It takes about a third less room than the clock face. Prefer the clock? Tap the clock button under AM/PM; the app remembers your choice."
-    }
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "1.65",
+      "date": "2026-11-29",
+      "items": [
+        {
+          "text": "Walk training: speed, pace, cadence and stride turn amber once they reach the aim of the block you’re in (for example 122+ steps/min or 5.7+ km/h). Numbers the block doesn’t aim for stay green."
+        },
+        {
+          "text": "Steps a minute while walking now keep up with you: the app reads the rhythm of your steps from the motion sensor straight away, instead of waiting for the step sensor, which some phones deliver late."
+        },
+        {
+          "text": "No more “Keep it going” / “Your streak is calling” reminders and pills. They only repeated yesterday’s walk and could arrive mid-walk. The coach’s review still shows what to keep up."
+        },
+        {
+          "text": "The wavy line on the opening screen keeps moving while the app loads, even after a phone restart when loading takes longer. Before, it could stop still."
+        },
+        {
+          "text": "Every time picker now matches the Material 3 Expressive design: scroll the hour and minute boxes (only the number above and below peeks in), with AM and PM beside them. It takes about a third less room than the clock face. Prefer the clock? Tap the clock button under AM/PM; the app remembers your choice."
+        }
+      ]
+    },
     {
       "version": "1.62",
       "date": "2026-11-28",
