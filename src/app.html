@@ -8263,9 +8263,10 @@ function PickTime({label,value,onChange,emoji='🕐',quick=[]}){
     {open&&<TimePicker value={value||'12:00'} onChange={onChange} quick={quick}/>}
   </>);
 }
-/** One scrolling column of a time wheel: snaps to a row; `loop` lets it run round (59 → 00) */
-function Wheel({items,value,onPick,label,loop,width,fmt=String}){
-  const IH=40,n=items.length,R=loop?9:1,mid=loop?Math.floor(R/2)*n:0,ref=useRef(null),tm=useRef(null);
+/** One scrolling column of the time picker (Material 3 Expressive): a rounded box with the chosen number big in the
+ *  middle and only part of the one above and below peeking in; snaps to a number. `loop` runs round (59 → 00). */
+function Wheel({items,value,onPick,label,loop,fmt=String}){
+  const IH=60,n=items.length,R=loop?9:1,mid=loop?Math.floor(R/2)*n:0,ref=useRef(null),tm=useRef(null);
   const idx=Math.max(0,items.indexOf(value));
   const [cur,setCur]=useState(idx);
   const mod=a=>((a%n)+n)%n;
@@ -8279,21 +8280,21 @@ function Wheel({items,value,onPick,label,loop,width,fmt=String}){
       if(items[i]!==value)onPick(items[i]);},120);};
   const all=[];for(let k=0;k<R;k++)items.forEach((v,i)=>all.push([k*n+i,v,i]));
   return(
-    <div ref={ref} onScroll={onScroll} role="listbox" aria-label={label}
-      style={{position:'relative',zIndex:1,height:IH*5,width,overflowY:'auto',scrollSnapType:'y mandatory',overscrollBehavior:'contain',
-        WebkitMaskImage:'linear-gradient(transparent,#000 32%,#000 68%,transparent)',maskImage:'linear-gradient(transparent,#000 32%,#000 68%,transparent)'}}>
-      <div style={{height:IH*2}}/>
+    <div ref={ref} onScroll={onScroll} role="listbox" aria-label={label} data-row={IH}
+      style={{flex:1,minWidth:0,height:IH*2,overflowY:'auto',scrollSnapType:'y mandatory',overscrollBehavior:'contain',
+        borderRadius:28,background:'var(--bg)'}}>
+      <div style={{height:IH/2}}/>
       {all.map(([a,v,i])=>{const on=i===cur;return(
         <div key={a} role="option" aria-selected={on} onClick={()=>go(a,true)}
           style={{height:IH,scrollSnapAlign:'center',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',
-            fontFamily:'var(--font-ui)',fontVariantNumeric:'tabular-nums',fontSize:on?28:20,fontWeight:on?850:600,
-            color:on?'var(--on-pri-c)':'var(--fg2)',transition:'font-size .12s, color .12s'}}>{fmt(v)}</div>);})}
-      <div style={{height:IH*2}}/>
+            fontFamily:'var(--font-ui)',fontVariantNumeric:'tabular-nums',fontSize:52,fontWeight:600,lineHeight:1,letterSpacing:'-.01em',
+            color:on?'var(--fg)':'var(--fg2)',opacity:on?1:.55,transition:'color .12s, opacity .12s'}}>{fmt(v)}</div>);})}
+      <div style={{height:IH/2}}/>
     </div>);
 }
 
-/** Material 3 time picker. Opens as a compact scrolling wheel (hours · minutes · AM/PM); the button at the
- *  bottom left switches to the M3 clock dial and back, and the app remembers which one you like. */
+/** Material 3 Expressive time picker: hour and minute boxes you scroll, with AM/PM beside them; the button under
+ *  them switches to the M3 clock dial and back, and the app remembers which one you like. */
 function TimePicker({value,onChange,quick=[]}){
   const parse=v=>{const [h,m]=(v||'12:00').split(':').map(Number);return {h,m};};
   const [t,setT]=useState(()=>parse(value));
@@ -8317,22 +8318,27 @@ function TimePicker({value,onChange,quick=[]}){
     fontFamily:'var(--font-ui)',fontStretch:'125%',fontWeight:850,fontSize:50,fontVariantNumeric:'tabular-nums',transition:'border-radius .3s var(--spring)'}}>{txt}</button>);
   const setPM=v=>{if(v===pm)return;const n={...t,h:(t.h+12)%24};setT(n);commit(n);};
   const toggle=<button onClick={()=>setMode(mode==='wheel'?'dial':'wheel')} aria-label={mode==='wheel'?'Switch to clock dial':'Switch to scrolling wheel'}
-    style={{width:40,height:40,flex:'none',border:'none',borderRadius:20,background:'var(--s3)',color:'var(--fg)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+    style={{width:40,height:40,flex:'none',border:'none',borderRadius:20,background:mode==='wheel'?'transparent':'var(--s3)',color:'var(--fg)',display:'flex',alignItems:'center',justifyContent:'center'}}>
     <Ico size={20} d={mode==='wheel'?'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7z':'M7 4h10v3H7zm-3 6.5h16v3H4zM7 17h10v3H7z'}/></button>;
-  const chips=quick.length>0&&<div className="x-chips" style={{justifyContent:'center',flex:1}}>
+  const chips=quick.length>0&&<div className="x-chips" style={{justifyContent:'center',flex:1,margin:0}}>
     {quick.map(([l,v])=><button key={l} className={`x-chip${v===value?' on':''}`} onClick={()=>onChange(v)}>{l}</button>)}</div>;
   if(mode==='wheel'){
     const pick=(h12n,m,isPM)=>{const n={h:(h12n%12)+(isPM?12:0),m};setT(n);commit(n);};
+    const two=v=>String(v).padStart(2,'0');
     return(
-      <div style={{display:'flex',flexDirection:'column',gap:10,padding:'10px 14px 14px',borderRadius:32,background:'var(--s2)',marginTop:8}}>
-        <div style={{position:'relative',display:'flex',alignItems:'center',justifyContent:'center',gap:4}} aria-label="Time wheel">
-          <div aria-hidden="true" style={{position:'absolute',left:0,right:0,top:80,height:40,borderRadius:20,background:'var(--pri-c)'}}/>
-          <Wheel label="Hour" items={[12,1,2,3,4,5,6,7,8,9,10,11]} value={h12} loop width={76} onPick={v=>pick(v,t.m,pm)}/>
-          <b style={{position:'relative',zIndex:1,fontSize:26,color:'var(--on-pri-c)',lineHeight:1}}>:</b>
-          <Wheel label="Minute" items={Array.from({length:60},(_,i)=>i)} value={t.m} loop width={76} fmt={v=>String(v).padStart(2,'0')} onPick={v=>pick(h12,v,pm)}/>
-          <Wheel label="AM or PM" items={['AM','PM']} value={pm?'PM':'AM'} width={68} onPick={v=>pick(h12,t.m,v==='PM')}/>
+      <div style={{display:'flex',flexDirection:'column',gap:14,padding:12,borderRadius:32,background:'var(--s2)',marginTop:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:4}} aria-label="Time wheel">
+          <Wheel label="Hour" items={[12,1,2,3,4,5,6,7,8,9,10,11]} value={h12} loop fmt={two} onPick={v=>pick(v,t.m,pm)}/>
+          <b style={{fontSize:44,fontWeight:700,color:'var(--fg)',lineHeight:1}} aria-hidden="true">:</b>
+          <Wheel label="Minute" items={Array.from({length:60},(_,i)=>i)} value={t.m} loop fmt={two} onPick={v=>pick(h12,v,pm)}/>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6,marginLeft:6}}>
+            {['AM','PM'].map(l=>{const on=(l==='PM')===pm;return(
+              <button key={l} onClick={()=>setPM(l==='PM')} aria-pressed={on} style={{width:46,height:46,border:'none',borderRadius:on?14:23,fontWeight:750,fontSize:15,
+                background:on?'var(--violet-c)':'var(--bg)',color:on?'var(--on-violet-c)':'var(--fg)',transition:'border-radius .3s var(--spring)'}}>{l}</button>);})}
+            {toggle}
+          </div>
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>{toggle}{chips}</div>
+        {chips}
       </div>);
   }
   return(
