@@ -11,6 +11,9 @@
     },
     {
       "text": "The wavy line on the opening screen keeps moving while the app loads, even after a phone restart when loading takes longer. Before, it could stop still."
+    },
+    {
+      "text": "Time pickers are now a compact scrolling wheel (hour · minute · AM/PM) instead of the big clock face. Prefer the clock? Tap the clock button at the bottom left; the app remembers your choice."
     }
   ],
   "releases": [

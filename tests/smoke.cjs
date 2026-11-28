@@ -331,6 +331,19 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await p.evaluate(()=>window.__lmLogOpen('Lunch'));await W(600);
     const on=await p.evaluate(()=>[...document.querySelectorAll('.x-sheet .x-chip.on,.x-sheet [aria-pressed=true],.x-sheet .on')].map(e=>e.textContent).join('|'));
     if(!/Lunch/.test(on))throw new Error('Lunch not picked: '+on);await close();});
+  await step('Time picker: scrolling wheel, with the clock dial a tap away',async()=>{await p.evaluate(()=>window.__lmLogOpen('sleep'));await W(600);
+    await click('.x-item','Went to bed');await W(500);
+    if(!(await p.$('[role=listbox][aria-label=Minute]')))throw new Error('the time picker should open as a scrolling wheel');
+    const row=()=>p.evaluate(()=>[...document.querySelectorAll('.x-item')].find(e=>/Went to bed/.test(e.innerText)).innerText.replace(/\s+/g,' '));
+    const before=await row();
+    await p.evaluate(()=>{const w=document.querySelector('[role=listbox][aria-label=Minute]');w.scrollTop+=5*40;});await W(900);
+    const after=await row();const mm=t=>{const m=/(\d+):(\d\d) ?([AP]M)/.exec(t);return m?(+m[1]%12+(m[3]==='PM'?12:0))*60+ +m[2]:null;};
+    if(mm(before)==null||(mm(after)-mm(before)+1440)%1440!==5)throw new Error('scrolling 5 minutes on: '+before+' → '+after);
+    await p.evaluate(()=>{const w=document.querySelector('[role=listbox][aria-label=Hour]');w.scrollTop-=2*40;});await W(900);
+    const h2=await row();if((mm(after)-mm(h2)+1440)%1440!==120)throw new Error('scrolling the hour back 2: '+after+' → '+h2);
+    await p.click('[aria-label="Switch to clock dial"]');await W(400);if(!(await p.$('[aria-label="Hour dial"]')))throw new Error('no clock dial');
+    await p.click('[aria-label="Switch to scrolling wheel"]');await W(400);if(!(await p.$('[role=listbox][aria-label=Hour]')))throw new Error('back to the wheel');
+    await close();});
   await step('Log food with AI',async()=>{await tab(0);await p.evaluate(()=>document.querySelector('.dock-add').click());await W();
     // logged straight away; the macros follow when the AI answers
     await p.evaluate(()=>{window.__slowAI=true;});
