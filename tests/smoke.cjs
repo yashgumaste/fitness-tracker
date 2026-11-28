@@ -152,7 +152,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const bigs=await p.evaluate(()=>[...document.querySelectorAll('[data-rec-big]')].map(e=>e.dataset.recBig));
     for(const n of ['Time','Steps','Pace','Cadence','Calories'])if(!bigs.some(t=>t.toLowerCase()===n.toLowerCase()))throw new Error(n+' is not big: '+bigs.join(', '));
     await click('.x-btn','Done');
-    // jogging: a big amber pill with how long and how far; cadence well above average turns amber after 3 s
+    // jogging: a big amber pill with how long and how far; cadence well above average turns amber after 2 s
     await p.evaluate(()=>{window.LMNative.walk._spm=150;});await W(1500);await expect('Jogged');
     const amber=await p.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--amber').trim());
     const cadCol=()=>p.evaluate(()=>getComputedStyle(document.querySelector('[data-rec-big=cadence] .x-num')).color);
@@ -288,7 +288,8 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     await p.evaluate(()=>{window.__planned=null;window.LMNative.planLogs=async items=>{window.__planned=items;return{ok:true,count:items.length,next:items[0]||null};};});
     await tab(0);await p.evaluate(()=>window.__lmLogOpen('coach'));await W(2500);await expect('Reminders for');await expect('2 boiled eggs');
     const items=await p.evaluate(()=>window.__planned||[]);const tags=items.filter(x=>x.kind==='nudge').map(x=>x.tag);
-    for(const t of ['2026-11-10-Breakfast','2026-11-10-Dinner','2026-11-10-keep0','2026-11-10-walkPM'])if(!tags.includes(t))throw new Error('missing reminder '+t+'; got '+tags.join(', '));
+    for(const t of ['2026-11-10-Breakfast','2026-11-10-Dinner','2026-11-10-walkPM'])if(!tags.includes(t))throw new Error('missing reminder '+t+'; got '+tags.join(', '));
+    if(tags.some(t=>/keep/.test(t)))throw new Error('no "keep it going" nudges: '+tags.join(', '));
     const b=items.find(x=>x.tag==='2026-11-10-Breakfast');if(!/boiled eggs/.test(b.body)||b.open!=='home'||b.icon!=='meal')throw new Error('breakfast tip is wrong: '+JSON.stringify(b));
     const bt=await p.evaluate(at=>{const d=new Date(at);return{h:d.getHours(),m:d.getMinutes(),s:d.toTimeString()};},b.at);if(!(bt.h===7&&bt.m===10))throw new Error('breakfast tip should be 2 h (set in the reminders step) before the usual 9:10, at 7:10; got '+bt.s);
     // "Dinner by 8 PM": the tip comes 2 h before 8 PM (or earlier) and goes stale at 8:15 PM
@@ -300,7 +301,7 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const wp=items.find(x=>x.tag==='2026-11-10-walkPM');
     if(!/after lunch/.test(wp.title))throw new Error('second walk should be the after-lunch walk: '+wp.title);
     const wt=await p.evaluate(at=>new Date(at).getHours(),wp.at);if(wt<11||wt>=15)throw new Error('after-lunch walk nudge should come around lunch, got hour '+wt);
-    // a lunch tip and a lunch "keep it going" at the same time: only the tip
+    // a lunch tip, and still no habit nudge
     await p.evaluate(()=>{window.__lunchTip='Add 150 g dahi to the chapati and sabji.';window.__planned=null;});
     const tc=await p.evaluate(()=>Date.now());await p.clock.setFixedTime(tc+60000);   // a new review gets a new time, which re-plans
     await p.click('[aria-label="Get a fresh review"]');await W(2800);
@@ -476,6 +477,11 @@ const shots=path.join(__dirname,'..','test-results');fs.mkdirSync(shots,{recursi
     const pl=await p.evaluate(()=>window.__trainPlan);if(!pl||!pl.blocks||pl.blocks.length<4)throw new Error('no training plan sent to the recorder');
     if(pl.voiceName!=='en-in-x-enb-local')throw new Error('the chosen voice should go to the recorder: '+pl.voiceName);
     if(!(await p.$('[data-train]')))throw new Error('no training card on the walk screen');await expect('Training ·');
+    // with training, a number turns amber at or above the block's aim (not your average); one it doesn't aim for stays green
+    const la=await p.evaluate(()=>{const A=window.__lmLiveAbove,b={cadMin:122,kmhMin:5.7,strideMin:0.78},avg={kmh:5.4,cad:123,stride:73};
+      return{hit:A(b,{cad:117,kmh:5.7},avg),miss:A(b,{cad:125,kmh:5.5},avg),warm:A({kind:'warm'},{cad:130,kmh:6.5},avg),free:A(null,{cad:117,kmh:5.7},avg)};});
+    if(JSON.stringify(la.hit)!=='{"speed":true,"cadence":false,"stride":true}'||JSON.stringify(la.miss)!=='{"speed":false,"cadence":true,"stride":false}'
+      ||Object.values(la.warm).some(Boolean)||la.free.cadence||la.free.speed||!la.free.stride)throw new Error('amber marks: '+JSON.stringify(la));
     await p.click('[aria-label="Stop training cues"]');await W(1500);if(await p.$('[data-train]'))throw new Error('training card should go when switched off');
     await click('button','Finish');await expect('Finish this walk');await click('button','Discard');await click('button','Tap again to discard');await W(800);
     await p.click('[aria-label="Back"]').catch(()=>{});await W(600);

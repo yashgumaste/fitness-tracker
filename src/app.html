@@ -4283,10 +4283,8 @@ Reply ONLY with valid JSON (no markdown):
         // a tip that names its own time ("Eat by 8:30 PM") comes ahead of that time, not only before your usual meal
         const by=Math.min(mealMin(mt),tipMin(plan[mt])??Infinity);
         add(early(by),mt,'home','meal',`Coach’s ${mt.toLowerCase()} tip ${EM[mt]}`,plan[mt],by);});
-      (Array.isArray(plan.keep)?plan.keep:[]).slice(0,2).forEach((h,i)=>{if(!h||!h.text)return;
-        const at=MEAL_TYPES.includes(h.at)?(MEAL_TYPES.slice(MEAL_TYPES.indexOf(h.at)).some(x=>logged.has(x))?null:mealAt(h.at))
-          :h.at==='morning'?(W.am!=null?early(W.am):wake+30):h.at==='evening'?(W.pm!=null?early(W.pm):18*60):null;
-        if(at!=null)add(at,'keep'+i,'home','star',pickBy(day+i,[`Keep it going${n?', '+n:''} ⭐`,'Same again today? ⭐','Your streak is calling ⭐']),h.text);});
+      // no "keep it going" nudges: cheering yesterday's habit told you nothing to do (and came mid-walk);
+      // the coach's review still lists them under "Keep it up"
     }
     // around the race: its own reminders, and no brisk-walk nudges the day before, on the day or while recovering
     const rph=racePhase(day),rdl=RACE?daysBetween(day,RACE.date):null;
@@ -4820,13 +4818,14 @@ Reply with ONLY this JSON:
     // the jog you're on now: when it started and at what distance
     if(now.jogging&&running){if(!jogRef.current)jogRef.current={t:Date.now(),m:dist.m};}else jogRef.current=null;
     const jog=jogRef.current,jogM=jog?Math.max(0,dist.m-jog.m):0;
-    // a live number that's clearly above your average for this walk (and has been for 3 s) turns the jogging colour
-    const nowStride=running&&now.kmh>0.5&&now.cad>=40?now.kmh/3.6*60/now.cad*100:null;
-    const above={speed:running&&now.kmh>0.5&&kmh>0&&now.kmh>=kmh*1.1,cadence:running&&now.cad!=null&&cadAvg&&now.cad>=cadAvg*1.08,
-      stride:nowStride!=null&&stride&&nowStride>=stride*1.08};
+    // a live number turns amber once it has been at or above its mark for 2 s. With walk training, the mark is the
+    // current block's aim (122+ steps/min, 5.7+ km/h, 78+ cm steps; a number the block doesn't aim for stays green);
+    // without it, clearly above your average for this walk
+    const TB=(()=>{const pl=r.train;if(!pl||!pl.blocks||!pl.blocks.length||r.kind==='hike')return null;const T=trainNow(pl,sec,null);return T?T.b:null;})();
+    const above=running?liveAbove(TB,now,{kmh,cad:cadAvg,stride}):{};
     above.pace=above.speed;
     const hot={};for(const k of Object.keys(above)){const t=Date.now();
-      if(above[k]){if(!hotRef.current[k])hotRef.current[k]=t;hot[k]=t-hotRef.current[k]>=3000;}else hotRef.current[k]=0;}
+      if(above[k]){if(!hotRef.current[k])hotRef.current[k]=t;hot[k]=t-hotRef.current[k]>=2000;}else hotRef.current[k]=0;}
     const tint=k=>hot[k]?'var(--amber)':undefined;
     const toggle=async()=>{try{const st=paused?await W.resume():await W.pause();setRec(p=>({...p,state:st.state,_at:Date.now()}));}catch(_){}};
     // every number this screen can show: [label, value, unit, small line underneath]
@@ -7795,6 +7794,15 @@ function withSay(blocks,ctx){
       :!nx&&b.kind==='steady'?'Plan done. Keep a steady brisk walk.':b.kind==='steady'?`Steady${d}. Catch your breath.`:`Brisk walk${d}.${aim?' Aim for '+aim+'.':''}`;
     return{...b,say};});
 }
+/** Which live numbers are at or above their mark: the training block's aims (only the ones it has), or, with no
+ *  training, clearly above this walk's averages (avg: {kmh, cad, stride in cm}). */
+function liveAbove(b,now,avg){
+  const ns=now.kmh>0.5&&now.cad>=40?now.kmh/3.6*60/now.cad*100:null;
+  if(b)return{speed:!!b.kmhMin&&now.kmh>0.5&&now.kmh>=b.kmhMin,cadence:!!b.cadMin&&now.cad!=null&&now.cad>=b.cadMin,
+    stride:!!b.strideMin&&ns!=null&&ns>=b.strideMin*100};
+  return{speed:now.kmh>0.5&&avg.kmh>0&&now.kmh>=avg.kmh*1.1,cadence:now.cad!=null&&!!avg.cad&&now.cad>=avg.cad*1.08,
+    stride:ns!=null&&!!avg.stride&&ns>=avg.stride*1.08};
+}
 /** Where you are in the plan at `sec` of moving time, and what to do: {i, b, next, left, cue, msg}. */
 function trainNow(plan,sec,now){
   if(!plan||!plan.blocks.length)return null;
@@ -7814,7 +7822,7 @@ function trainNow(plan,sec,now){
   return{i,b,next,left,cue,msg};
 }
 
-if(typeof window!=='undefined'){window.__lmTrainPlan=c=>trainPlan(c);window.__lmTrainNow=(p,s,n)=>trainNow(p,s,n);}   // for the tests
+if(typeof window!=='undefined'){window.__lmTrainPlan=c=>trainPlan(c);window.__lmTrainNow=(p,s,n)=>trainNow(p,s,n);window.__lmLiveAbove=(b,n,a)=>liveAbove(b,n,a);}   // for the tests
 function recNow(pts,spm){
   let cad=spm!=null?Math.round(spm):null,kmh=null;
   if(pts&&pts.length>=2){

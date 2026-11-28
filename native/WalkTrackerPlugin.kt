@@ -238,7 +238,7 @@ object WalkState {
         movingBase = SystemClock.elapsedRealtime(); movingAcc = 0
         distanceM = 0.0; stepsBase = -1; stepsNow = -1; stepsPaused = 0
         points.clear(); last = null; lastFix = 0; gainM = 0.0; refAlt = Double.NaN; det.clear(); cnt.clear(); cntRise = 0L; satsUsed = 0; satsSeen = 0
-        trainJson = null; blocks = null; lastHw = SystemClock.elapsedRealtime(); detTotal = 0; accTotal = 0; accOn = false; accRhythm = false; accPend.clear(); accLast = 0L
+        trainJson = null; blocks = null; lastHw = SystemClock.elapsedRealtime(); detTotal = 0; accTotal = 0; accOn = false; accRhythm = false; accPend.clear(); accLast = 0L; beats.clear(); accS = Double.NaN; accBase = Double.NaN; accUp = false
     }
 
     fun onPressure(hPa: Float) {
@@ -253,7 +253,7 @@ object WalkState {
     fun stepSrc(): String = if (accOn && accTotal > accGapStart) "motion" else if (stepsNow >= 0) "counter" else if (detTotal > 0) "detector" else if (accTotal > 0) "motion" else "none"
 
     /** The step sensors have gone quiet: count from motion until they're back. */
-    @Synchronized fun beginMotion() { if (accOn) return; accOn = true; accGapStart = accTotal; hwAtGap = hwSteps(); accS = Double.NaN; accBase = Double.NaN; accUp = false; accRhythm = false; accPend.clear() }
+    @Synchronized fun beginMotion() { if (accOn) return; accOn = true; accGapStart = accTotal; hwAtGap = hwSteps(); accRhythm = false; accPend.clear() }
     /** They're back: if they caught up on the steps in between (a late batch), drop ours so nothing counts twice. */
     @Synchronized fun endMotion() {
         if (!accOn) return; accOn = false
@@ -265,8 +265,10 @@ object WalkState {
     private var accS = Double.NaN; private var accBase = Double.NaN; private var accUp = false
     private var accPeak = 0.0; private var accAmp = 2.0; private var accLast = 0L; private var accRhythm = false
     private val accPend = ArrayList<Long>()
+    // every motion peak (elapsed ms, last 8 s): the live rhythm of your steps, with none of the step sensors' delay
+    private val beats = ArrayDeque<Long>()
     @Synchronized fun onAccel(x: Float, y: Float, z: Float, tNs: Long) {
-        if (state != "recording" || !accOn) return
+        if (state != "recording") return
         val m = Math.sqrt((x * x + y * y + z * z).toDouble()); val t = eventMs(tNs)
         accS = if (accS.isNaN()) m else accS + 0.25 * (m - accS)
         accBase = if (accBase.isNaN()) m else accBase + 0.02 * (m - accBase)
@@ -278,6 +280,8 @@ object WalkState {
         val gap = t - accLast
         if (accLast != 0L && gap < 250) return
         accLast = t
+        beats.addLast(t); while (beats.isNotEmpty() && t - beats.first() > 8000) beats.removeFirst()
+        if (!accOn) return
         if (accRhythm && gap <= 2000) { accTotal++; onStepDetected(t, false); return }
         if (gap > 2000) { accPend.clear(); accRhythm = false }
         accPend.add(t)
@@ -304,13 +308,42 @@ object WalkState {
         val now = SystemClock.elapsedRealtime()
         while (det.isNotEmpty() && now - det.first() > 10000) det.removeFirst()
     }
-    /** Steps a minute over the last few seconds; 0 once steps stop; null if it can't tell yet. */
+    private fun median(a: List<Long>): Double { val s = a.sorted(); val n = s.size; return if (n % 2 == 1) s[n / 2].toDouble() else (s[n / 2 - 1] + s[n / 2]) / 2.0 }
+    /** Steps a minute from the motion peaks of the last ~3 s, if they keep a steady walking rhythm. */
+    private fun beatSpm(now: Long): Double? {
+        if (beats.isEmpty() || now - beats.last() > 1500) return null
+        val w = beats.filter { beats.last() - it <= 3500 }; if (w.size < 5) return null
+        val gaps = w.zipWithNext { a, b -> b - a }; val m = median(gaps)
+        if (m < 250 || m > 1600) return null
+        if (gaps.count { Math.abs(it - m) <= m * 0.25 } < gaps.size * 0.7) return null    // not a steady rhythm
+        return 60000.0 / m
+    }
+    /** Steps a minute over the last 10–20 s from the step sensors: late, but the right size. */
+    private fun sensorSpm(now: Long): Double? {
+        if (cnt.size >= 2 && now - cntRise <= 12000) {
+            val last = cnt.last(); val first = cnt.firstOrNull { last[0] - it[0] >= 8000 }
+            if (first != null && last[1] > first[1]) return (last[1] - first[1]) * 60000.0 / (last[0] - first[0])
+        }
+        val w = det.filter { now - it <= 10000 }
+        return if (w.size >= 8 && w.last() > w.first()) (w.size - 1) * 60000.0 / (w.last() - w.first()) else null
+    }
+    /** Steps a minute right now; 0 once steps stop; null if it can't tell yet. */
     @Synchronized fun liveSpm(): Double? {
         val now = SystemClock.elapsedRealtime()
-        // 1. step detector, while it's keeping up
+        // 0. the motion sensor's rhythm: no delay. The step sensors (which arrive late on some phones) only
+        //    check it's counting steps, not arm swings (a phone held in a swinging hand peaks once every 2 steps)
+        beatSpm(now)?.let { b ->
+            val ref = sensorSpm(now)
+            if (ref == null) { if (accOn) return b }
+            else { val v = if (ref / b in 1.6..2.4) b * 2 else b; if (Math.abs(v / ref - 1) <= 0.3) return v }
+        }
+        // 1. step detector, while it's keeping up: the typical gap between the last few steps (one missed step doesn't halve it)
         if (det.isNotEmpty() && now - det.last() <= 2500) {
-            val w = det.filter { det.last() - it <= 4000 }
-            if (w.size >= 4 && w.last() > w.first()) return (w.size - 1) * 60000.0 / (w.last() - w.first())
+            val w = det.filter { det.last() - it <= 3000 }
+            if (w.size >= 4 && w.last() > w.first()) {
+                val m = median(w.zipWithNext { a, b -> b - a })
+                return if (m >= 250) 60000.0 / m else (w.size - 1) * 60000.0 / (w.last() - w.first())
+            }
         }
         // 2. step counter, while it's still going up (it may come in batches every few seconds)
         if (cnt.size >= 2 && now - cntRise <= 12000) {
@@ -438,6 +471,9 @@ class WalkService : Service(), LocationListener, SensorEventListener {
             } catch (e: SecurityException) { } catch (e: IllegalArgumentException) { }
             val sm = getSystemService(Context.SENSOR_SERVICE) as SensorManager
             armSteps(sm)
+            // the motion sensor runs for the whole walk: live steps-a-minute without the step sensors' delay,
+            // and steps counted from motion if the step sensors go quiet
+            sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
             // air pressure gives a much steadier height than GPS, for climb on hikes (most phones have the sensor)
             sm.getDefaultSensor(Sensor.TYPE_PRESSURE)?.let { sm.registerListener(this, it, 1_000_000) }
             handler.removeCallbacks(tick); handler.post(tick)
@@ -483,11 +519,9 @@ class WalkService : Service(), LocationListener, SensorEventListener {
         val sm = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val now = SystemClock.elapsedRealtime(); val quiet = now - WalkState.lastHw
         if (quiet > 20_000) {
-            if (!WalkState.accOn) sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { WalkState.beginMotion(); sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+            if (!WalkState.accOn && sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null) WalkState.beginMotion()
             if (now - lastRearm > 60_000) { lastRearm = now; armSteps(sm) }
-        } else if (quiet < 6000 && WalkState.accOn) {
-            WalkState.endMotion(); sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sm.unregisterListener(this, it) }
-        }
+        } else if (quiet < 6000 && WalkState.accOn) WalkState.endMotion()
     }
 
     // walk training: a buzz when a block starts, and when you're off its target for 15 s (once a minute at most)
